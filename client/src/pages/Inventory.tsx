@@ -3,11 +3,30 @@ import {
   Typography, Box, Paper, Button, IconButton,
   Dialog, DialogTitle, DialogContent, DialogActions, TextField, Tooltip
 } from '@mui/material';
-import { DataGrid, type GridColDef, type GridRenderCellParams, GridToolbar } from '@mui/x-data-grid';
+import { DataGrid, type GridColDef, type GridRenderCellParams, GridFooterContainer, GridPagination, getGridStringOperators } from '@mui/x-data-grid';
+import CustomToolbar from '../components/CustomToolbar';
 import { ruRU } from '@mui/x-data-grid/locales';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import AddIcon from '@mui/icons-material/Add';
+
+const customStringOperators = getGridStringOperators().map((operator) => {
+  if (operator.value === 'contains') {
+    return {
+      ...operator,
+      getApplyFilterFn: (filterItem) => {
+        if (!filterItem.value) return null;
+        const normalizedSearch = filterItem.value.replace(/[- ]+/g, '').toLowerCase();
+        return (value) => {
+          if (value == null) return false;
+          const normalizedCell = String(value).replace(/[- ]+/g, '').toLowerCase();
+          return normalizedCell.includes(normalizedSearch);
+        };
+      },
+    };
+  }
+  return operator;
+});
 
 export default function Inventory() {
   const [materials, setMaterials] = useState<any[]>([]);
@@ -65,20 +84,35 @@ export default function Inventory() {
   };
 
   const columns: GridColDef[] = [
-    { field: 'id', headerName: 'ID', width: 90 },
-    { field: 'material_name', headerName: 'Название материала', flex: 2, minWidth: 350 },
-    { field: 'unit_of_measure', headerName: 'Ед. измерения', width: 120 },
+    { field: 'id', headerName: 'ID', width: 60 },
+    { 
+      field: 'material_name', 
+      headerName: 'Название материала', 
+      flex: 2, 
+      minWidth: 250,
+      filterOperators: customStringOperators,
+      getApplyQuickFilterFn: (value) => {
+        if (!value) return null;
+        const normalizedSearch = value.replace(/[- ]+/g, '').toLowerCase();
+        return (cellValue) => {
+          if (cellValue == null) return false;
+          const normalizedCell = String(cellValue).replace(/[- ]+/g, '').toLowerCase();
+          return normalizedCell.includes(normalizedSearch);
+        };
+      }
+    },
+    { field: 'unit_of_measure', headerName: 'Ед. измерения', flex: 1, minWidth: 120 },
     { 
       field: 'current_unit_cost', 
       headerName: 'Стоимость единицы (₽)', 
-      width: 170, 
+      flex: 1, minWidth: 150, 
       type: 'number',
       valueFormatter: (value) => `${value ? value.toLocaleString() : 0}`
     },
     { 
       field: 'package_cost', 
       headerName: 'Стоимость упаковки (₽)', 
-      width: 180, 
+      flex: 1, minWidth: 150, 
       type: 'number',
       valueFormatter: (value) => `${value ? value.toLocaleString() : 0}`
     },
@@ -87,7 +121,7 @@ export default function Inventory() {
       headerName: 'Действия',
       sortable: false,
       filterable: false,
-      width: 120,
+      width: 100,
       renderCell: (params: GridRenderCellParams) => (
         <Box>
           <Tooltip title="Редактировать материал" arrow>
@@ -106,8 +140,8 @@ export default function Inventory() {
   ];
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 120px)', width: '95%', margin: '0 auto' }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 3 }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', width: '100%', maxWidth: '1400px', margin: '0 auto', gap: 4, pb: 4 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2, alignItems: 'center' }}>
         <Typography variant="h4">Склад материалов</Typography>
         <Tooltip title="Добавить новый медицинский материал на склад" arrow>
           <Button variant="contained" color="primary" startIcon={<AddIcon />} onClick={() => handleOpen()} sx={{ cursor: 'pointer' }}>
@@ -116,13 +150,14 @@ export default function Inventory() {
         </Tooltip>
       </Box>
 
-      <Paper sx={{ flexGrow: 1, width: '100%', minHeight: 400 }}>
+      <Paper sx={{ width: '100%', overflow: 'hidden' }}>
         <DataGrid
+          autoHeight
           rows={materials}
           columns={columns}
           initialState={{
             pagination: {
-              paginationModel: { page: 0, pageSize: 25 },
+              paginationModel: { page: 0, pageSize: 10 },
             },
           }}
           pageSizeOptions={[10, 25, 50, 100]}
@@ -131,6 +166,8 @@ export default function Inventory() {
           columnHeaderHeight={60}
           localeText={ruRU.components.MuiDataGrid.defaultProps.localeText}
           sx={{
+            border: 0,
+            '& .MuiDataGrid-virtualScroller': { overflowX: 'hidden' },
             '& .MuiDataGrid-columnHeader': {
               alignItems: 'flex-start',
             },
@@ -144,7 +181,20 @@ export default function Inventory() {
               fontWeight: 600,
             }
           }}
-          slots={{ toolbar: GridToolbar }}
+          slots={{ 
+            toolbar: CustomToolbar,
+            footer: () => (
+              <GridFooterContainer>
+                <Box sx={{ px: 2, display: 'flex', alignItems: 'center' }}>
+                  <Typography variant="subtitle2" fontWeight="bold">
+                    Всего материалов: {materials.length}
+                  </Typography>
+                </Box>
+                <Box sx={{ flexGrow: 1 }} />
+                <GridPagination />
+              </GridFooterContainer>
+            )
+          }}
           slotProps={{
             toolbar: {
               showQuickFilter: true,

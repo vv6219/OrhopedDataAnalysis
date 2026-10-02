@@ -1,5 +1,7 @@
 const express = require('express');
 const cors = require('cors');
+const fs = require('fs');
+const path = require('path');
 const swaggerUi = require('swagger-ui-express');
 const swaggerJsdoc = require('swagger-jsdoc');
 const db = require('./database');
@@ -8,54 +10,231 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Swagger Open API definition
+// ============================================================================
+// Swagger OpenAPI 3.0 Configuration
+// ============================================================================
 const swaggerOptions = {
   definition: {
     openapi: '3.0.0',
     info: {
-      title: 'ОртоERP Backend API',
-      version: '1.0.0',
-      description: 'API для Центра Ортопедии и Травматологии Добрушкина (ЭМК, Склад, Операции)',
+      title: 'Центр Ортопедии Добрушкина — ОртоERP REST API & SQLite Studio',
+      version: '1.2.0',
+      description: `
+Интерактивная OpenAPI спецификация серверного API для автоматизации Центра Ортопедии и Травматологии Добрушкина (г. Сочи).
+
+### Основные функциональные модули:
+- **Inventory (Склад)**: учет медикаментов, имплантов, упаковочных и единичных цен;
+- **Operations (Каталог операций)**: номенклатура процедур, привязка материалов (BOM - Bill of Materials);
+- **Patients (ЭМК)**: картотека пациентов, даты визитов и анамнез;
+- **BI Dashboard**: сводные показатели выручки, загрузки клиники и количества пациентов;
+- **Calculation Parameters**: коэффициенты наценок, расходных коэффициентов и налогов;
+- **SQLite Studio & Database**: прямое администрирование таблиц SQLite, получение метаданных схемы, инспекция целостности (PRAGMA) и выполнение прямых SQL запросов через защищенную консоль.
+      `,
+      contact: {
+        name: 'Техническая поддержка клиники Добрушкина',
+        url: 'http://localhost:5173',
+      },
     },
     servers: [
       {
         url: 'http://localhost:5000',
-        description: 'Local development server',
+        description: 'Локальный сервер разработки (Express Node.js)',
       },
     ],
+    tags: [
+      { name: 'Inventory', description: 'Склад материалов, препаратов и расходников' },
+      { name: 'Operations', description: 'Каталог медицинских услуг и технологических карт' },
+      { name: 'Patients', description: 'Электронные медицинские карты (ЭМК)' },
+      { name: 'Staff', description: 'Медицинский персонал, врачи и ассистенты клиники' },
+      { name: 'BI Dashboard', description: 'Аналитические сводки и метрики эффективности' },
+      { name: 'Calculation Parameters', description: 'Параметры ценообразования и наценок' },
+      { name: 'SQLite Studio & Database', description: 'Администрирование БД SQLite и SQL Консоль' },
+    ],
+    components: {
+      schemas: {
+        Material: {
+          type: 'object',
+          properties: {
+            id: { type: 'integer', example: 1, description: 'Уникальный ID материала' },
+            material_name: { type: 'string', example: 'Титановый винт 5мм', description: 'Наименование материала' },
+            unit_of_measure: { type: 'string', example: 'шт', description: 'Единица измерения (шт, мл, амп, флак)' },
+            current_unit_cost: { type: 'number', example: 1200.5, description: 'Себестоимость за единицу (₽)' },
+            package_cost: { type: 'number', example: 6000.0, description: 'Стоимость упаковки (₽)' },
+          },
+        },
+        MaterialInput: {
+          type: 'object',
+          required: ['material_name', 'unit_of_measure', 'current_unit_cost'],
+          properties: {
+            material_name: { type: 'string', example: 'Пробирка PRP RegenLab' },
+            unit_of_measure: { type: 'string', example: 'шт' },
+            current_unit_cost: { type: 'number', example: 850.0 },
+            package_cost: { type: 'number', example: 8500.0 },
+          },
+        },
+        Patient: {
+          type: 'object',
+          properties: {
+            id: { type: 'integer', example: 1 },
+            first_name: { type: 'string', example: 'Иван' },
+            last_name: { type: 'string', example: 'Иванов' },
+            date_of_birth: { type: 'string', format: 'date', example: '1985-04-12' },
+            contact_phone: { type: 'string', example: '+7 (988) 123-45-67' },
+            medical_history_notes: { type: 'string', example: 'Артроз коленного сустава II ст.' },
+          },
+        },
+        PatientInput: {
+          type: 'object',
+          required: ['first_name', 'last_name'],
+          properties: {
+            first_name: { type: 'string', example: 'Мария' },
+            last_name: { type: 'string', example: 'Смирнова' },
+            date_of_birth: { type: 'string', format: 'date', example: '1990-07-22' },
+            contact_phone: { type: 'string', example: '+7 (999) 765-43-21' },
+            medical_history_notes: { type: 'string', example: 'Реабилитация после пластики ПКС' },
+          },
+        },
+        Operation: {
+          type: 'object',
+          properties: {
+            id: { type: 'integer', example: 1 },
+            name: { type: 'string', example: 'Внутрисуставная инъекция гиалуроновой кислоты' },
+            price: { type: 'number', example: 6500.0, description: 'Прайсовая стоимость для пациента (₽)' },
+          },
+        },
+        OperationInput: {
+          type: 'object',
+          required: ['name', 'price'],
+          properties: {
+            name: { type: 'string', example: 'PRP-терапия коленного сустава' },
+            price: { type: 'number', example: 8000.0 },
+          },
+        },
+        OperationMaterial: {
+          type: 'object',
+          properties: {
+            id: { type: 'integer', example: 10 },
+            operation_id: { type: 'integer', example: 1 },
+            material_id: { type: 'integer', example: 3 },
+            quantity: { type: 'number', example: 2.0, description: 'Количество материала на процедуру' },
+            material_name: { type: 'string', example: 'Шприц гиалуроновой кислоты' },
+            unit_of_measure: { type: 'string', example: 'шт' },
+            current_unit_cost: { type: 'number', example: 3200.0 },
+          },
+        },
+        OperationMaterialInput: {
+          type: 'object',
+          required: ['material_id', 'quantity'],
+          properties: {
+            material_id: { type: 'integer', example: 2 },
+            quantity: { type: 'number', example: 1.5 },
+          },
+        },
+        CalculationParameter: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', example: 'material_cost_factor' },
+            param_name: { type: 'string', example: 'material_cost_factor' },
+            param_value: { type: 'number', example: 1.15, description: 'Значение коэффициента' },
+          },
+        },
+        CalculationParameterInput: {
+          type: 'object',
+          required: ['param_name', 'param_value'],
+          properties: {
+            param_name: { type: 'string', example: 'doctor_commission_rate' },
+            param_value: { type: 'number', example: 0.25 },
+          },
+        },
+        DbStats: {
+          type: 'object',
+          properties: {
+            dbName: { type: 'string', example: 'orthopedic_data_center.sqlite' },
+            dbPath: { type: 'string', example: 'C:\\...\\db\\orthopedic_data_center.sqlite' },
+            fileSizeBytes: { type: 'integer', example: 536576 },
+            sqliteVersion: { type: 'string', example: '3.52.0' },
+            integrity: { type: 'string', example: 'ok' },
+            tableCount: { type: 'integer', example: 15 },
+          },
+        },
+        DbTableMeta: {
+          type: 'object',
+          properties: {
+            name: { type: 'string', example: 'operations' },
+            sql: { type: 'string', example: 'CREATE TABLE operations (id INTEGER PRIMARY KEY...)' },
+            rowCount: { type: 'integer', example: 158 },
+            columns: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  cid: { type: 'integer', example: 0 },
+                  name: { type: 'string', example: 'id' },
+                  type: { type: 'string', example: 'INTEGER' },
+                  notnull: { type: 'integer', example: 0 },
+                  dflt_value: { type: 'string', nullable: true },
+                  pk: { type: 'integer', example: 1 },
+                },
+              },
+            },
+          },
+        },
+        SqlQueryRequest: {
+          type: 'object',
+          required: ['sql'],
+          properties: {
+            sql: { type: 'string', example: 'SELECT * FROM operations WHERE price > 5000 LIMIT 10;' },
+          },
+        },
+        SqlQueryResponse: {
+          type: 'object',
+          properties: {
+            type: { type: 'string', example: 'select' },
+            rows: { type: 'array', items: { type: 'object' } },
+            columns: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  field: { type: 'string' },
+                  headerName: { type: 'string' },
+                },
+              },
+            },
+            rowCount: { type: 'integer', example: 10 },
+            executionTimeMs: { type: 'number', example: 1.5 },
+            changes: { type: 'integer', nullable: true, example: 1 },
+            lastID: { type: 'integer', nullable: true, example: 42 },
+          },
+        },
+        ErrorResponse: {
+          type: 'object',
+          properties: {
+            error: { type: 'string', example: 'Описание ошибки сервера' },
+          },
+        },
+      },
+    },
   },
-  apis: ['./index.js'], // Look for Swagger annotations in this file
+  apis: ['./index.js'],
 };
 
 const swaggerSpecs = swaggerJsdoc(swaggerOptions);
-app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpecs));
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpecs, {
+  customCss: '.swagger-ui .topbar { background-color: #0F3C64; } .swagger-ui .topbar-wrapper img { content:url("/MainLogoTransparent.png"); width: 40px; height: 40px; }',
+  customSiteTitle: 'ОртоERP API Документация — Добрушкин',
+}));
 
-/**
- * @swagger
- * components:
- *   schemas:
- *     Material:
- *       type: object
- *       properties:
- *         id:
- *           type: integer
- *           description: ID материала
- *         material_name:
- *           type: string
- *           description: Название
- *         unit_of_measure:
- *           type: string
- *           description: Единица измерения (шт, мл)
- *         current_unit_cost:
- *           type: number
- *           description: Стоимость единицы (₽)
- */
+// ============================================================================
+// 1. INVENTORY (Склад материалов и медикаментов)
+// ============================================================================
 
 /**
  * @swagger
  * /api/materials:
  *   get:
  *     summary: Получить список всех материалов на складе
+ *     description: Возвращает полный реестр расходных материалов, препаратов и медикаментов с текущей себестоимостью единицы и упаковки.
  *     tags: [Inventory]
  *     responses:
  *       200:
@@ -66,6 +245,12 @@ app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpecs));
  *               type: array
  *               items:
  *                 $ref: '#/components/schemas/Material'
+ *       500:
+ *         description: Ошибка базы данных
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  */
 app.get('/api/materials', (req, res) => {
   db.all("SELECT * FROM materials_catalog", [], (err, rows) => {
@@ -74,6 +259,29 @@ app.get('/api/materials', (req, res) => {
   });
 });
 
+/**
+ * @swagger
+ * /api/materials:
+ *   post:
+ *     summary: Создать новый материал
+ *     description: Добавляет новую номенклатурную позицию на склад.
+ *     tags: [Inventory]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/MaterialInput'
+ *     responses:
+ *       200:
+ *         description: Материал успешно создан
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Material'
+ *       500:
+ *         description: Ошибка создания материала
+ */
 app.post('/api/materials', (req, res) => {
   const { material_name, unit_of_measure, current_unit_cost, package_cost } = req.body;
   const stmt = db.prepare("INSERT INTO materials_catalog (material_name, unit_of_measure, current_unit_cost, package_cost) VALUES (?, ?, ?, ?)");
@@ -84,6 +292,32 @@ app.post('/api/materials', (req, res) => {
   stmt.finalize();
 });
 
+/**
+ * @swagger
+ * /api/materials/{id}:
+ *   put:
+ *     summary: Обновить параметры материала
+ *     description: Изменяет наименование, единицу измерения или себестоимость указанного материала.
+ *     tags: [Inventory]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Числовой ID материала
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/MaterialInput'
+ *     responses:
+ *       200:
+ *         description: Материал успешно обновлен
+ *       500:
+ *         description: Ошибка обновления
+ */
 app.put('/api/materials/:id', (req, res) => {
   const { id } = req.params;
   const { material_name, unit_of_measure, current_unit_cost, package_cost } = req.body;
@@ -95,6 +329,24 @@ app.put('/api/materials/:id', (req, res) => {
   stmt.finalize();
 });
 
+/**
+ * @swagger
+ * /api/materials/{id}:
+ *   delete:
+ *     summary: Удалить материал со склада
+ *     tags: [Inventory]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Материал удален
+ *       500:
+ *         description: Ошибка базы данных
+ */
 app.delete('/api/materials/:id', (req, res) => {
   const { id } = req.params;
   db.run("DELETE FROM materials_catalog WHERE id = ?", id, function (err) {
@@ -103,15 +355,26 @@ app.delete('/api/materials/:id', (req, res) => {
   });
 });
 
+// ============================================================================
+// 2. PATIENTS (Электронные Медицинские Карты)
+// ============================================================================
+
 /**
  * @swagger
  * /api/patients:
  *   get:
- *     summary: Получить список всех пациентов (ЭМК)
+ *     summary: Получить список пациентов (ЭМК)
+ *     description: Возвращает картотеку пациентов с контактными телефонами и анамнезом.
  *     tags: [Patients]
  *     responses:
  *       200:
  *         description: Список пациентов успешно получен
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/Patient'
  */
 app.get('/api/patients', (req, res) => {
   db.all("SELECT * FROM patients", [], (err, rows) => {
@@ -122,13 +385,139 @@ app.get('/api/patients', (req, res) => {
 
 /**
  * @swagger
- * /api/operations:
- *   get:
- *     summary: Получить каталог процедур и операций
- *     tags: [Checkout]
+ * /api/patients:
+ *   post:
+ *     summary: Зарегистрировать нового пациента
+ *     tags: [Patients]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/PatientInput'
  *     responses:
  *       200:
- *         description: Каталог процедур успешно получен
+ *         description: Пациент успешно зарегистрирован
+ */
+app.post('/api/patients', (req, res) => {
+  const { first_name, last_name, date_of_birth, contact_phone, medical_history_notes, firstName, lastName, contact, lastVisit } = req.body;
+  const fName = first_name || firstName || '';
+  const lName = last_name || lastName || '';
+  const phone = contact_phone || contact || '';
+  const dob = date_of_birth || lastVisit || '';
+  const notes = medical_history_notes || '';
+
+  db.all("PRAGMA table_info(patients)", [], (err, cols) => {
+    if (err) return res.status(500).json({ error: err.message });
+    const hasFirstName = cols.some(c => c.name === 'first_name');
+    let sql, params;
+    if (hasFirstName) {
+      sql = "INSERT INTO patients (first_name, last_name, date_of_birth, contact_phone, medical_history_notes) VALUES (?, ?, ?, ?, ?)";
+      params = [fName, lName, dob, phone, notes];
+    } else {
+      sql = "INSERT INTO patients (firstName, lastName, contact, lastVisit) VALUES (?, ?, ?, ?)";
+      params = [fName, lName, phone, dob];
+    }
+    db.run(sql, params, function(err) {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json({ id: this.lastID, first_name: fName, last_name: lName, contact_phone: phone });
+    });
+  });
+});
+
+/**
+ * @swagger
+ * /api/patients/{id}:
+ *   put:
+ *     summary: Обновить карточку пациента
+ *     tags: [Patients]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/PatientInput'
+ *     responses:
+ *       200:
+ *         description: Карточка обновлена
+ */
+app.put('/api/patients/:id', (req, res) => {
+  const { id } = req.params;
+  const { first_name, last_name, date_of_birth, contact_phone, medical_history_notes, firstName, lastName, contact, lastVisit } = req.body;
+  const fName = first_name || firstName || '';
+  const lName = last_name || lastName || '';
+  const phone = contact_phone || contact || '';
+  const dob = date_of_birth || lastVisit || '';
+  const notes = medical_history_notes || '';
+
+  db.all("PRAGMA table_info(patients)", [], (err, cols) => {
+    if (err) return res.status(500).json({ error: err.message });
+    const hasFirstName = cols.some(c => c.name === 'first_name');
+    let sql, params;
+    if (hasFirstName) {
+      sql = "UPDATE patients SET first_name = ?, last_name = ?, date_of_birth = ?, contact_phone = ?, medical_history_notes = ? WHERE id = ?";
+      params = [fName, lName, dob, phone, notes, id];
+    } else {
+      sql = "UPDATE patients SET firstName = ?, lastName = ?, contact = ?, lastVisit = ? WHERE id = ?";
+      params = [fName, lName, phone, dob, id];
+    }
+    db.run(sql, params, function(err) {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json({ id, first_name: fName, last_name: lName });
+    });
+  });
+});
+
+/**
+ * @swagger
+ * /api/patients/{id}:
+ *   delete:
+ *     summary: Удалить пациента из базы
+ *     tags: [Patients]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Пациент удален
+ */
+app.delete('/api/patients/:id', (req, res) => {
+  const { id } = req.params;
+  db.run("DELETE FROM patients WHERE id = ?", id, function(err) {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ success: true, deletedID: id });
+  });
+});
+
+// ============================================================================
+// 3. OPERATIONS & BOM (Каталог манипуляций и технологические карты)
+// ============================================================================
+
+/**
+ * @swagger
+ * /api/operations:
+ *   get:
+ *     summary: Каталог медицинских операций и процедур
+ *     description: Возвращает реестр всех манипуляций клиники с прайсовыми ценами.
+ *     tags: [Operations]
+ *     responses:
+ *       200:
+ *         description: Список операций
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/Operation'
  */
 app.get('/api/operations', (req, res) => {
   db.all("SELECT * FROM operations", [], (err, rows) => {
@@ -137,6 +526,22 @@ app.get('/api/operations', (req, res) => {
   });
 });
 
+/**
+ * @swagger
+ * /api/operations:
+ *   post:
+ *     summary: Добавить новую процедуру в каталог
+ *     tags: [Operations]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/OperationInput'
+ *     responses:
+ *       200:
+ *         description: Операция создана
+ */
 app.post('/api/operations', (req, res) => {
   const { name, price } = req.body;
   const stmt = db.prepare("INSERT INTO operations (name, price) VALUES (?, ?)");
@@ -147,6 +552,28 @@ app.post('/api/operations', (req, res) => {
   stmt.finalize();
 });
 
+/**
+ * @swagger
+ * /api/operations/{id}:
+ *   put:
+ *     summary: Изменить операцию
+ *     tags: [Operations]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/OperationInput'
+ *     responses:
+ *       200:
+ *         description: Операция обновлена
+ */
 app.put('/api/operations/:id', (req, res) => {
   const { id } = req.params;
   const { name, price } = req.body;
@@ -158,6 +585,22 @@ app.put('/api/operations/:id', (req, res) => {
   stmt.finalize();
 });
 
+/**
+ * @swagger
+ * /api/operations/{id}:
+ *   delete:
+ *     summary: Удалить операцию из каталога
+ *     tags: [Operations]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Операция удалена
+ */
 app.delete('/api/operations/:id', (req, res) => {
   const { id } = req.params;
   db.run("DELETE FROM operations WHERE id = ?", id, function (err) {
@@ -166,6 +609,68 @@ app.delete('/api/operations/:id', (req, res) => {
   });
 });
 
+/**
+ * @swagger
+ * /api/operations/materials-bulk:
+ *   get:
+ *     summary: Массовое получение материалов для набора операций
+ *     description: Возвращает технологические карты расхода материалов (BOM) сразу для нескольких ID операций (через запятую).
+ *     tags: [Operations]
+ *     parameters:
+ *       - in: query
+ *         name: ids
+ *         schema:
+ *           type: string
+ *           example: "1,2,5"
+ *         description: Идентификаторы операций через запятую
+ *     responses:
+ *       200:
+ *         description: Список связок материалов и операций
+ */
+app.get('/api/operations/materials-bulk', (req, res) => {
+  const idsParam = req.query.ids;
+  if (!idsParam) return res.json([]);
+  const ids = idsParam.split(',').map(n => parseInt(n)).filter(n => !isNaN(n));
+  if (ids.length === 0) return res.json([]);
+  
+  const placeholders = ids.map(() => '?').join(',');
+  const sql = `
+    SELECT om.id, om.operation_id, om.material_id, om.quantity, 
+           m.material_name, m.unit_of_measure, m.current_unit_cost,
+           o.name as operation_name, o.price as operation_price
+    FROM operation_materials om
+    JOIN materials_catalog m ON om.material_id = m.id
+    JOIN operations o ON om.operation_id = o.id
+    WHERE om.operation_id IN (${placeholders})
+  `;
+  db.all(sql, ids, (err, rows) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json(rows);
+  });
+});
+
+/**
+ * @swagger
+ * /api/operations/{id}/materials:
+ *   get:
+ *     summary: Получить спецификацию материалов (BOM) для конкретной операции
+ *     tags: [Operations]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Список материалов операции
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/OperationMaterial'
+ */
 app.get('/api/operations/:id/materials', (req, res) => {
   const { id } = req.params;
   const sql = `
@@ -181,6 +686,28 @@ app.get('/api/operations/:id/materials', (req, res) => {
   });
 });
 
+/**
+ * @swagger
+ * /api/operations/{id}/materials:
+ *   post:
+ *     summary: Привязать материал к операции с нормой расхода
+ *     tags: [Operations]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/OperationMaterialInput'
+ *     responses:
+ *       200:
+ *         description: Материал успешно привязан
+ */
 app.post('/api/operations/:id/materials', (req, res) => {
   const { id } = req.params;
   const { material_id, quantity } = req.body;
@@ -192,6 +719,38 @@ app.post('/api/operations/:id/materials', (req, res) => {
   stmt.finalize();
 });
 
+/**
+ * @swagger
+ * /api/operations/{id}/materials/{omId}:
+ *   put:
+ *     summary: Изменить норму расхода материала в операции
+ *     tags: [Operations]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *       - in: path
+ *         name: omId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [quantity]
+ *             properties:
+ *               quantity:
+ *                 type: number
+ *                 example: 3.5
+ *     responses:
+ *       200:
+ *         description: Норма расхода обновлена
+ */
 app.put('/api/operations/:id/materials/:omId', (req, res) => {
   const { omId } = req.params;
   const { quantity } = req.body;
@@ -203,6 +762,27 @@ app.put('/api/operations/:id/materials/:omId', (req, res) => {
   stmt.finalize();
 });
 
+/**
+ * @swagger
+ * /api/operations/{id}/materials/{omId}:
+ *   delete:
+ *     summary: Отвязать материал от операции
+ *     tags: [Operations]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *       - in: path
+ *         name: omId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Привязка удалена
+ */
 app.delete('/api/operations/:id/materials/:omId', (req, res) => {
   const { omId } = req.params;
   db.run("DELETE FROM operation_materials WHERE id = ?", omId, function (err) {
@@ -211,23 +791,776 @@ app.delete('/api/operations/:id/materials/:omId', (req, res) => {
   });
 });
 
+// ============================================================================
+// STAFF MANAGEMENT (Персонал и врачи)
+// ============================================================================
+
+/**
+ * @swagger
+ * /api/staff:
+ *   get:
+ *     summary: Получить список медицинского персонала
+ *     description: "Возвращает полный реестр врачей, ассистентов и медсестер клиники."
+ *     tags: [Staff]
+ *     responses:
+ *       200:
+ *         description: Список сотрудников успешно получен
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/Staff'
+ */
+app.get('/api/staff', (req, res) => {
+  db.all("SELECT * FROM staff ORDER BY id ASC", [], (err, rows) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json(rows);
+  });
+});
+
+/**
+ * @swagger
+ * /api/staff:
+ *   post:
+ *     summary: Добавить нового сотрудника
+ *     tags: [Staff]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/StaffInput'
+ *     responses:
+ *       200:
+ *         description: Сотрудник успешно добавлен
+ */
+app.post('/api/staff', (req, res) => {
+  const { full_name, role, specialization, contact_phone, email, status } = req.body;
+  const stmt = db.prepare(`
+    INSERT INTO staff (full_name, role, specialization, contact_phone, email, status)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `);
+  stmt.run(full_name, role, specialization || '', contact_phone || '', email || '', status || 'active', function(err) {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ id: this.lastID, full_name, role, specialization, contact_phone, email, status: status || 'active' });
+  });
+  stmt.finalize();
+});
+
+/**
+ * @swagger
+ * /api/staff/{id}:
+ *   put:
+ *     summary: Обновить данные сотрудника
+ *     tags: [Staff]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/StaffInput'
+ *     responses:
+ *       200:
+ *         description: Данные сотрудника обновлены
+ */
+app.put('/api/staff/:id', (req, res) => {
+  const { id } = req.params;
+  const { full_name, role, specialization, contact_phone, email, status } = req.body;
+  const stmt = db.prepare(`
+    UPDATE staff
+    SET full_name = ?, role = ?, specialization = ?, contact_phone = ?, email = ?, status = ?
+    WHERE id = ?
+  `);
+  stmt.run(full_name, role, specialization || '', contact_phone || '', email || '', status || 'active', id, function(err) {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ id: Number(id), full_name, role, specialization, contact_phone, email, status: status || 'active' });
+  });
+  stmt.finalize();
+});
+
+/**
+ * @swagger
+ * /api/staff/{id}:
+ *   delete:
+ *     summary: Удалить сотрудника
+ *     tags: [Staff]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Сотрудник удален
+ */
+app.delete('/api/staff/:id', (req, res) => {
+  const { id } = req.params;
+  db.run("DELETE FROM staff WHERE id = ?", id, function(err) {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ success: true, deletedID: Number(id) });
+  });
+});
+
+/**
+ * @swagger
+ * /api/transactions:
+ *   post:
+ *     summary: Оформить визит пациента и зафиксировать транзакцию
+ *     description: Сохраняет проведенную операцию, рассчитанную себестоимость материалов и маржинальную прибыль в operation_transactions и transaction_actual_materials.
+ *     tags: [Operations]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [patient_id, operation_id, billed_price]
+ *             properties:
+ *               patient_id:
+ *                 type: integer
+ *                 example: 1
+ *               operation_id:
+ *                 type: integer
+ *                 example: 1
+ *               billed_price:
+ *                 type: number
+ *                 example: 45000
+ *               calculated_cost:
+ *                 type: number
+ *                 example: 2400
+ *               net_profit:
+ *                 type: number
+ *                 example: 42600
+ *               notes:
+ *                 type: string
+ *                 example: 'Оформлено через мастер визита'
+ *     responses:
+ *       200:
+ *         description: Транзакция успешно сохранена
+ */
+app.post('/api/transactions', (req, res) => {
+  const { patient_id, operation_id, billed_price, calculated_cost, net_profit, notes, materials } = req.body;
+  const transaction_date = new Date().toISOString();
+
+  const stmt = db.prepare(`
+    INSERT INTO operation_transactions (patient_id, operation_id, transaction_date, billed_price, calculated_cost, net_profit, notes)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  stmt.run(patient_id, operation_id, transaction_date, billed_price || 0, calculated_cost || 0, net_profit || 0, notes || '', function(err) {
+    if (err) return res.status(500).json({ error: err.message });
+    const transactionId = this.lastID;
+
+    if (Array.isArray(materials) && materials.length > 0) {
+      const matStmt = db.prepare(`
+        INSERT INTO transaction_actual_materials (transaction_id, material_id, quantity_used, actual_cost_at_time)
+        VALUES (?, ?, ?, ?)
+      `);
+      materials.forEach(m => {
+        if (m.material_id && m.quantity_used) {
+          matStmt.run(transactionId, m.material_id, m.quantity_used, m.actual_cost_at_time || 0);
+        }
+      });
+      matStmt.finalize();
+    }
+
+    res.json({ success: true, transactionId, transaction_date });
+  });
+  stmt.finalize();
+});
+
+// ============================================================================
+// 4. BI DASHBOARD & ANALYTICS
+// ============================================================================
+
 /**
  * @swagger
  * /api/dashboard/kpi:
  *   get:
- *     summary: Получить ключевые показатели эффективности для дашборда (Выручка, Пациенты и т.д.)
+ *     summary: Получить ключевые показатели эффективности (KPI Дашборд)
+ *     description: "Возвращает совокупные аналитические показатели клиники: суммарную выручку, количество активных пациентов и проведенных процедур за текущий месяц."
  *     tags: [BI Dashboard]
  *     responses:
  *       200:
- *         description: KPI успешно получены
+ *         description: Метрики KPI
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 totalRevenue:
+ *                   type: number
+ *                   example: 1250000
+ *                   description: Совокупная выручка (₽)
+ *                 activePatients:
+ *                   type: integer
+ *                   example: 342
+ *                   description: Число активных пациентов
+ *                 proceduresThisMonth:
+ *                   type: integer
+ *                   example: 87
+ *                   description: Процедур за месяц
  */
 app.get('/api/dashboard/kpi', (req, res) => {
-  // In a real app, this would aggregate from transactions table. For now, mock data
   res.json({
     totalRevenue: 1250000,
     activePatients: 342,
     proceduresThisMonth: 87
   });
+});
+
+// ============================================================================
+// 5. CALCULATION PARAMETERS (Параметры расчетов и наценок)
+// ============================================================================
+
+/**
+ * @swagger
+ * /api/parameters:
+ *   get:
+ *     summary: Получить словарь параметров расчета
+ *     description: "Возвращает ключевые коэффициенты ценообразования в виде пар ключ-значение (например material_cost_factor: 1.15)."
+ *     tags: [Calculation Parameters]
+ *     responses:
+ *       200:
+ *         description: Объект параметров
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               additionalProperties:
+ *                 type: number
+ *               example:
+ *                 material_cost_factor: 1.15
+ */
+app.get('/api/parameters', (req, res) => {
+  db.all("SELECT param_name, param_value FROM calculation_parameters", [], (err, rows) => {
+    if (err) return res.status(500).json({ error: err.message });
+    const params = {};
+    rows.forEach(r => params[r.param_name] = r.param_value);
+    res.json(params);
+  });
+});
+
+/**
+ * @swagger
+ * /api/parameters-admin:
+ *   get:
+ *     summary: Список параметров для административной таблицы
+ *     tags: [Calculation Parameters]
+ *     responses:
+ *       200:
+ *         description: Список параметров в табличном формате
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/CalculationParameter'
+ */
+app.get('/api/parameters-admin', (req, res) => {
+  db.all("SELECT param_name AS id, param_name, param_value FROM calculation_parameters", [], (err, rows) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json(rows);
+  });
+});
+
+/**
+ * @swagger
+ * /api/parameters-admin:
+ *   post:
+ *     summary: Добавить новый системный параметр
+ *     tags: [Calculation Parameters]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/CalculationParameterInput'
+ *     responses:
+ *       200:
+ *         description: Параметр успешно создан
+ */
+app.post('/api/parameters-admin', (req, res) => {
+  const { param_name, param_value } = req.body;
+  const stmt = db.prepare("INSERT INTO calculation_parameters (param_name, param_value) VALUES (?, ?)");
+  stmt.run(param_name, param_value, function (err) {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ id: param_name, param_name, param_value });
+  });
+  stmt.finalize();
+});
+
+/**
+ * @swagger
+ * /api/parameters-admin/{id}:
+ *   put:
+ *     summary: Обновить значение системного параметра
+ *     tags: [Calculation Parameters]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Название параметра (ключ)
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [param_value]
+ *             properties:
+ *               param_value:
+ *                 type: number
+ *                 example: 1.25
+ *     responses:
+ *       200:
+ *         description: Значение обновлено
+ */
+app.put('/api/parameters-admin/:id', (req, res) => {
+  const { id } = req.params;
+  const { param_value } = req.body;
+  const stmt = db.prepare("UPDATE calculation_parameters SET param_value = ? WHERE param_name = ?");
+  stmt.run(param_value, id, function (err) {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ id, param_name: id, param_value });
+  });
+  stmt.finalize();
+});
+
+/**
+ * @swagger
+ * /api/parameters-admin/{id}:
+ *   delete:
+ *     summary: Удалить параметр
+ *     tags: [Calculation Parameters]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Параметр удален
+ */
+app.delete('/api/parameters-admin/:id', (req, res) => {
+  const { id } = req.params;
+  db.run("DELETE FROM calculation_parameters WHERE param_name = ?", id, function (err) {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ success: true, deletedID: id });
+  });
+});
+
+// ============================================================================
+// 6. SQLITE STUDIO & DATABASE MANAGEMENT (Администрирование и SQL консоль)
+// ============================================================================
+
+/**
+ * @swagger
+ * /api/db/stats:
+ *   get:
+ *     summary: Общая статистика базы данных SQLite
+ *     description: Возвращает физический путь к файлу БД, размер на диске, версию SQLite, статус целостности (PRAGMA integrity_check) и число пользовательских таблиц.
+ *     tags: [SQLite Studio & Database]
+ *     responses:
+ *       200:
+ *         description: Метаданные базы данных
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/DbStats'
+ */
+app.get('/api/db/stats', (req, res) => {
+  const dbPath = path.resolve(__dirname, '../db/orthopedic_data_center.sqlite');
+  let fileSizeBytes = 0;
+  try {
+    const stats = fs.statSync(dbPath);
+    fileSizeBytes = stats.size;
+  } catch (e) {
+    fileSizeBytes = 0;
+  }
+
+  db.get("SELECT sqlite_version() AS version", [], (err, verRow) => {
+    if (err) return res.status(500).json({ error: err.message });
+    
+    db.get("PRAGMA integrity_check", [], (err, integRow) => {
+      const integrity = integRow ? Object.values(integRow)[0] : 'ok';
+      
+      db.all("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'", [], (err, tables) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({
+          dbName: 'orthopedic_data_center.sqlite',
+          dbPath,
+          fileSizeBytes,
+          sqliteVersion: verRow ? verRow.version : '3.x',
+          integrity: integrity || 'ok',
+          tableCount: tables ? tables.length : 0
+        });
+      });
+    });
+  });
+});
+
+/**
+ * @swagger
+ * /api/db/tables:
+ *   get:
+ *     summary: Реестр всех таблиц базы данных со схемами
+ *     description: Возвращает полный список таблиц, их DDL (CREATE TABLE), количество строк и структуру колонок (PRAGMA table_info).
+ *     tags: [SQLite Studio & Database]
+ *     responses:
+ *       200:
+ *         description: Список таблиц и метаданных
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/DbTableMeta'
+ */
+app.get('/api/db/tables', (req, res) => {
+  db.all("SELECT name, sql FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name ASC", [], (err, tables) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (!tables || tables.length === 0) return res.json([]);
+
+    const results = [];
+    let pending = tables.length;
+
+    tables.forEach((tbl) => {
+      const tableName = tbl.name;
+      db.all(`PRAGMA table_info("${tableName.replace(/"/g, '""')}")`, [], (colErr, cols) => {
+        db.get(`SELECT COUNT(*) AS count FROM "${tableName.replace(/"/g, '""')}"`, [], (cntErr, cntRow) => {
+          results.push({
+            name: tableName,
+            sql: tbl.sql,
+            rowCount: cntRow ? cntRow.count : 0,
+            columns: cols || []
+          });
+          pending--;
+          if (pending === 0) {
+            results.sort((a, b) => a.name.localeCompare(b.name));
+            res.json(results);
+          }
+        });
+      });
+    });
+  });
+});
+
+/**
+ * @swagger
+ * /api/db/tables/{table}/data:
+ *   get:
+ *     summary: Постраничные данные конкретной таблицы
+ *     description: Возвращает строки выбранной таблицы с поддержкой постраничной пагинации, сортировки и полнотекстового поиска.
+ *     tags: [SQLite Studio & Database]
+ *     parameters:
+ *       - in: path
+ *         name: table
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Имя таблицы в SQLite
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 0
+ *         description: Номер страницы (начиная с 0)
+ *       - in: query
+ *         name: pageSize
+ *         schema:
+ *           type: integer
+ *           default: 50
+ *         description: Число записей на страницу
+ *       - in: query
+ *         name: sortField
+ *         schema:
+ *           type: string
+ *         description: Поле для сортировки
+ *       - in: query
+ *         name: sortOrder
+ *         schema:
+ *           type: string
+ *           enum: [asc, desc]
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *         description: Строка глобального поиска по значениям
+ *     responses:
+ *       200:
+ *         description: Данные таблицы
+ */
+app.get('/api/db/tables/:table/data', (req, res) => {
+  const tableName = req.params.table;
+  if (!/^[a-zA-Z0-9_]+$/.test(tableName)) {
+    return res.status(400).json({ error: 'Invalid table name' });
+  }
+
+  const page = parseInt(req.query.page, 10) || 0;
+  const pageSize = parseInt(req.query.pageSize, 10) || 50;
+  const sortField = req.query.sortField;
+  const sortOrder = req.query.sortOrder === 'desc' ? 'DESC' : 'ASC';
+  const search = req.query.search ? String(req.query.search).trim() : '';
+
+  db.all(`PRAGMA table_info("${tableName}")`, [], (err, cols) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (!cols || cols.length === 0) return res.status(404).json({ error: 'Table not found or has no columns' });
+
+    let whereClause = '';
+    const params = [];
+    if (search) {
+      const searchConditions = cols
+        .map(c => `CAST("${c.name}" AS TEXT) LIKE ?`)
+        .join(' OR ');
+      whereClause = ` WHERE ${searchConditions}`;
+      cols.forEach(() => params.push(`%${search}%`));
+    }
+
+    const countSql = `SELECT COUNT(*) AS total FROM "${tableName}"${whereClause}`;
+    db.get(countSql, params, (cntErr, countRow) => {
+      if (cntErr) return res.status(500).json({ error: cntErr.message });
+      const total = countRow ? countRow.total : 0;
+
+      let orderBy = '';
+      if (sortField && cols.some(c => c.name === sortField)) {
+        orderBy = ` ORDER BY "${sortField}" ${sortOrder}`;
+      }
+
+      const offset = page * pageSize;
+      const dataSql = `SELECT rowid AS _rowid, * FROM "${tableName}"${whereClause}${orderBy} LIMIT ${pageSize} OFFSET ${offset}`;
+      
+      db.all(dataSql, params, (dataErr, rows) => {
+        if (dataErr) return res.status(500).json({ error: dataErr.message });
+        
+        const formattedRows = rows.map((r, idx) => {
+          return {
+            ...r,
+            id: r.id !== undefined && r.id !== null ? r.id : (r._rowid !== undefined ? r._rowid : `row_${offset + idx}`)
+          };
+        });
+
+        res.json({
+          tableName,
+          columns: cols,
+          rows: formattedRows,
+          total,
+          page,
+          pageSize
+        });
+      });
+    });
+  });
+});
+
+/**
+ * @swagger
+ * /api/db/tables/{table}/row:
+ *   post:
+ *     summary: Вставить новую запись в любую таблицу через SQLite Studio
+ *     tags: [SQLite Studio & Database]
+ *     parameters:
+ *       - in: path
+ *         name: table
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *     responses:
+ *       200:
+ *         description: Запись создана
+ */
+app.post('/api/db/tables/:table/row', (req, res) => {
+  const tableName = req.params.table;
+  if (!/^[a-zA-Z0-9_]+$/.test(tableName)) return res.status(400).json({ error: 'Invalid table name' });
+  const rowData = { ...req.body };
+  delete rowData.id;
+  delete rowData._rowid;
+
+  const colNames = Object.keys(rowData);
+  if (colNames.length === 0) return res.status(400).json({ error: 'No data provided' });
+
+  const placeholders = colNames.map(() => '?').join(', ');
+  const colsEscaped = colNames.map(c => `"${c.replace(/"/g, '""')}"`).join(', ');
+  const values = colNames.map(c => rowData[c]);
+
+  const sql = `INSERT INTO "${tableName}" (${colsEscaped}) VALUES (${placeholders})`;
+  db.run(sql, values, function(err) {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ success: true, lastID: this.lastID, changes: this.changes });
+  });
+});
+
+/**
+ * @swagger
+ * /api/db/tables/{table}/row/{rowid}:
+ *   put:
+ *     summary: Обновить строку таблицы
+ *     tags: [SQLite Studio & Database]
+ *     parameters:
+ *       - in: path
+ *         name: table
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - in: path
+ *         name: rowid
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *     responses:
+ *       200:
+ *         description: Запись обновлена
+ */
+app.put('/api/db/tables/:table/row/:rowid', (req, res) => {
+  const tableName = req.params.table;
+  const rowId = req.params.rowid;
+  if (!/^[a-zA-Z0-9_]+$/.test(tableName)) return res.status(400).json({ error: 'Invalid table name' });
+
+  const rowData = { ...req.body };
+  delete rowData.id;
+  delete rowData._rowid;
+
+  const colNames = Object.keys(rowData);
+  if (colNames.length === 0) return res.status(400).json({ error: 'No data to update' });
+
+  const setClauses = colNames.map(c => `"${c.replace(/"/g, '""')}" = ?`).join(', ');
+  const values = [...colNames.map(c => rowData[c]), rowId, rowId];
+
+  const sql = `UPDATE "${tableName}" SET ${setClauses} WHERE rowid = ? OR id = ?`;
+  db.run(sql, values, function(err) {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ success: true, changes: this.changes });
+  });
+});
+
+/**
+ * @swagger
+ * /api/db/tables/{table}/row/{rowid}:
+ *   delete:
+ *     summary: Удалить строку из таблицы
+ *     tags: [SQLite Studio & Database]
+ *     parameters:
+ *       - in: path
+ *         name: table
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - in: path
+ *         name: rowid
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Запись удалена
+ */
+app.delete('/api/db/tables/:table/row/:rowid', (req, res) => {
+  const tableName = req.params.table;
+  const rowId = req.params.rowid;
+  if (!/^[a-zA-Z0-9_]+$/.test(tableName)) return res.status(400).json({ error: 'Invalid table name' });
+
+  const sql = `DELETE FROM "${tableName}" WHERE rowid = ? OR id = ?`;
+  db.run(sql, [rowId, rowId], function(err) {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ success: true, changes: this.changes });
+  });
+});
+
+/**
+ * @swagger
+ * /api/db/query:
+ *   post:
+ *     summary: Выполнить прямой SQL запрос в SQLite консоли
+ *     description: Запускает произвольный SQL запрос (SELECT, INSERT, UPDATE, DELETE, PRAGMA, EXPLAIN, CREATE, ALTER). Замеряет время выполнения и возвращает структурированный ответ с метаданными колонок.
+ *     tags: [SQLite Studio & Database]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/SqlQueryRequest'
+ *     responses:
+ *       200:
+ *         description: Результат выполнения SQL
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SqlQueryResponse'
+ *       400:
+ *         description: Синтаксическая или runtime ошибка SQLite
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
+app.post('/api/db/query', (req, res) => {
+  const { sql } = req.body;
+  if (!sql || typeof sql !== 'string' || !sql.trim()) {
+    return res.status(400).json({ error: 'SQL query string is required' });
+  }
+
+  const trimmedSql = sql.trim();
+  const startTime = Date.now();
+  const isSelectOrPragma = /^(SELECT|PRAGMA|EXPLAIN|WITH)\b/i.test(trimmedSql);
+
+  if (isSelectOrPragma) {
+    db.all(trimmedSql, [], (err, rows) => {
+      const executionTimeMs = Date.now() - startTime;
+      if (err) return res.status(400).json({ error: err.message, executionTimeMs });
+
+      let columns = [];
+      if (rows && rows.length > 0) {
+        columns = Object.keys(rows[0]).map(key => ({ field: key, headerName: key }));
+      }
+      
+      const formattedRows = (rows || []).map((r, idx) => ({
+        ...r,
+        id: r.id !== undefined && r.id !== null ? r.id : (r._rowid !== undefined ? r._rowid : `row_${idx}`)
+      }));
+
+      res.json({
+        type: 'select',
+        rows: formattedRows,
+        columns,
+        rowCount: formattedRows.length,
+        executionTimeMs
+      });
+    });
+  } else {
+    db.run(trimmedSql, [], function(err) {
+      const executionTimeMs = Date.now() - startTime;
+      if (err) return res.status(400).json({ error: err.message, executionTimeMs });
+      res.json({
+        type: 'mutation',
+        changes: this.changes,
+        lastID: this.lastID,
+        executionTimeMs
+      });
+    });
+  }
 });
 
 const PORT = process.env.PORT || 5000;

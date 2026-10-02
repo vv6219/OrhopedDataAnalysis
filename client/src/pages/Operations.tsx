@@ -2,13 +2,35 @@ import React, { useState, useEffect } from 'react';
 import { 
   Typography, Box, Paper, Button, IconButton,
   Dialog, DialogTitle, DialogContent, DialogActions, TextField, Tooltip,
-  Select, MenuItem, InputLabel, FormControl
+  Select, MenuItem, InputLabel, FormControl, Autocomplete
 } from '@mui/material';
-import { DataGrid, type GridColDef, type GridRenderCellParams, GridToolbar, GridFooterContainer, GridPagination } from '@mui/x-data-grid';
+import { useReactToPrint } from 'react-to-print';
+import { ReportTemplate } from '../components/ReportTemplate';
+import { DataGrid, type GridColDef, type GridRenderCellParams, GridFooterContainer, GridPagination, getGridStringOperators } from '@mui/x-data-grid';
+import CustomToolbar from '../components/CustomToolbar';
 import { ruRU } from '@mui/x-data-grid/locales';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import AddIcon from '@mui/icons-material/Add';
+import PrintIcon from '@mui/icons-material/Print';
+
+const customStringOperators = getGridStringOperators().map((operator) => {
+  if (operator.value === 'contains') {
+    return {
+      ...operator,
+      getApplyFilterFn: (filterItem) => {
+        if (!filterItem.value) return null;
+        const normalizedSearch = filterItem.value.replace(/[- ]+/g, '').toLowerCase();
+        return (value) => {
+          if (value == null) return false;
+          const normalizedCell = String(value).replace(/[- ]+/g, '').toLowerCase();
+          return normalizedCell.includes(normalizedSearch);
+        };
+      },
+    };
+  }
+  return operator;
+});
 
 export default function Operations() {
   const [operations, setOperations] = useState<any[]>([]);
@@ -23,6 +45,95 @@ export default function Operations() {
   // Detail Dialog state
   const [openDetail, setOpenDetail] = useState(false);
   const [editingDetailItem, setEditingDetailItem] = useState<any>(null);
+  const [parameters, setParameters] = useState<Record<string, number>>({});
+  
+  // Print state
+  const [selectedOperationIds, setSelectedOperationIds] = useState<number[]>([]);
+  const [bulkMaterials, setBulkMaterials] = useState<any[]>([]);
+  const [printOperations, setPrintOperations] = useState<any[]>([]);
+  const printRef = React.useRef<HTMLDivElement>(null);
+
+  const parseRowSelection = (model: any, allOps: any[]): number[] => {
+    if (!model) return [];
+    if (Array.isArray(model)) {
+      return model.map(id => Number(id));
+    }
+    if (model instanceof Set) {
+      return Array.from(model).map(id => Number(id));
+    }
+    if (typeof model === 'object') {
+      if ('ids' in model) {
+        let rawIds: any[] = [];
+        const idsProp = model.ids;
+        if (idsProp instanceof Set) {
+          rawIds = Array.from(idsProp);
+        } else if (Array.isArray(idsProp)) {
+          rawIds = idsProp;
+        } else if (idsProp && typeof (idsProp as any)[Symbol.iterator] === 'function') {
+          rawIds = Array.from(idsProp as any);
+        } else if (idsProp && typeof idsProp === 'object') {
+          rawIds = Object.keys(idsProp);
+        }
+
+        if (model.type === 'exclude') {
+          const excludedSet = new Set(rawIds.map(String));
+          return (allOps || [])
+            .filter(op => !excludedSet.has(String(op.id)))
+            .map(op => Number(op.id));
+        }
+        return rawIds.map(id => Number(id));
+      }
+      if (typeof (model as any)[Symbol.iterator] === 'function') {
+        return Array.from(model as any).map(id => Number(id));
+      }
+    }
+    return [];
+  };
+
+  const handlePrintTrigger = useReactToPrint({
+    contentRef: printRef,
+    documentTitle: 'Калькуляция стоимости процедур',
+    pageStyle: `
+      @page {
+        size: A4 portrait;
+        margin: 8mm 10mm;
+      }
+      @media print {
+        body {
+          -webkit-print-color-adjust: exact !important;
+          print-color-adjust: exact !important;
+        }
+      }
+    `
+  });
+
+  const operationsRef = React.useRef(operations);
+  const selectedIdsRef = React.useRef(selectedOperationIds);
+  useEffect(() => {
+    operationsRef.current = operations;
+    selectedIdsRef.current = selectedOperationIds;
+  }, [operations, selectedOperationIds]);
+
+  const handlePrint = async () => {
+    const currentSelectedIds = selectedIdsRef.current;
+    if (!Array.isArray(currentSelectedIds) || currentSelectedIds.length === 0) return;
+    try {
+      const res = await fetch(`http://localhost:5000/api/operations/materials-bulk?ids=${currentSelectedIds.join(',')}`);
+      const data = await res.json();
+      setBulkMaterials(data);
+      
+      const latestOps = operationsRef.current;
+      const filteredOps = latestOps.filter(o => currentSelectedIds.map(String).includes(String(o.id)));
+      setPrintOperations(filteredOps);
+      
+      // Wait for React to render the data in the hidden component
+      setTimeout(() => {
+        handlePrintTrigger();
+      }, 300);
+    } catch (err) {
+      console.error('Print fetch error', err);
+    }
+  };
 
   useEffect(() => {
     fetch('http://localhost:5000/api/operations')
@@ -35,6 +146,12 @@ export default function Operations() {
       .then(res => res.json())
       .then(data => setMaterials(data))
       .catch(err => console.error('Error fetching materials:', err));
+      
+    // Fetch calculation parameters
+    fetch('http://localhost:5000/api/parameters')
+      .then(res => res.json())
+      .then(data => setParameters(data))
+      .catch(err => console.error('Error fetching parameters:', err));
   }, []);
   
   // Fetch materials for selected operation
@@ -149,7 +266,22 @@ export default function Operations() {
 
   const columns: GridColDef[] = [
     { field: 'id', headerName: 'ID', width: 60 },
-    { field: 'name', headerName: 'Название процедуры / операции', flex: 1, minWidth: 200 },
+    { 
+      field: 'name', 
+      headerName: 'Название процедуры / операции', 
+      flex: 1, 
+      minWidth: 200,
+      filterOperators: customStringOperators,
+      getApplyQuickFilterFn: (value) => {
+        if (!value) return null;
+        const normalizedSearch = value.replace(/[- ]+/g, '').toLowerCase();
+        return (cellValue) => {
+          if (cellValue == null) return false;
+          const normalizedCell = String(cellValue).replace(/[- ]+/g, '').toLowerCase();
+          return normalizedCell.includes(normalizedSearch);
+        };
+      }
+    },
     { 
       field: 'price', 
       headerName: 'Стоимость (₽)', 
@@ -181,7 +313,22 @@ export default function Operations() {
   ];
   
   const detailColumns: GridColDef[] = [
-    { field: 'material_name', headerName: 'Название материала', flex: 3, minWidth: 200 },
+    { 
+      field: 'material_name', 
+      headerName: 'Название материала', 
+      flex: 3, 
+      minWidth: 200,
+      filterOperators: customStringOperators,
+      getApplyQuickFilterFn: (value) => {
+        if (!value) return null;
+        const normalizedSearch = value.replace(/[- ]+/g, '').toLowerCase();
+        return (cellValue) => {
+          if (cellValue == null) return false;
+          const normalizedCell = String(cellValue).replace(/[- ]+/g, '').toLowerCase();
+          return normalizedCell.includes(normalizedSearch);
+        };
+      }
+    },
     { field: 'unit_of_measure', headerName: 'Ед. изм.', flex: 1, minWidth: 80 },
     { field: 'quantity', headerName: 'Кол-во', flex: 1, minWidth: 80, type: 'number' },
     { 
@@ -224,7 +371,8 @@ export default function Operations() {
   
   const selectedOperation = operations.find(o => o.id === selectedOperationId);
   const detailTotalItems = operationMaterials.length;
-  const detailTotalPrice = operationMaterials.reduce((sum, mat) => sum + ((mat.quantity || 0) * (mat.current_unit_cost || 0)), 0);
+  const materialCostFactor = parameters.material_cost_factor || 1;
+  const detailTotalPrice = operationMaterials.reduce((sum, mat) => sum + ((mat.quantity || 0) * (mat.current_unit_cost || 0)), 0) * materialCostFactor;
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', width: '100%', maxWidth: '1400px', margin: '0 auto', gap: 4, pb: 4 }}>
@@ -232,27 +380,46 @@ export default function Operations() {
       <Box sx={{ display: 'flex', flexDirection: 'column' }}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2, flexShrink: 0 }}>
           <Typography variant="h4">Каталог операций</Typography>
-          <Tooltip title="Добавить новую процедуру или операцию" arrow>
-            <Button variant="contained" color="primary" startIcon={<AddIcon />} onClick={() => handleOpen()} sx={{ cursor: 'pointer' }}>
-              Добавить операцию
-            </Button>
-          </Tooltip>
+          <Box>
+            <Tooltip title="Распечатать выбранные операции" arrow>
+              <span>
+                <Button 
+                  variant="outlined" 
+                  color="secondary" 
+                  startIcon={<PrintIcon />} 
+                  onClick={handlePrint} 
+                  disabled={!Array.isArray(selectedOperationIds) || selectedOperationIds.length === 0}
+                  sx={{ cursor: 'pointer', mr: 2 }}
+                >
+                  Печать PDF ({Array.isArray(selectedOperationIds) ? selectedOperationIds.length : 0})
+                </Button>
+              </span>
+            </Tooltip>
+            <Tooltip title="Добавить новую процедуру или операцию" arrow>
+              <Button variant="contained" color="primary" startIcon={<AddIcon />} onClick={() => handleOpen()} sx={{ cursor: 'pointer' }}>
+                Добавить операцию
+              </Button>
+            </Tooltip>
+          </Box>
         </Box>
 
         <Paper sx={{ width: '100%', overflow: 'hidden' }}>
           <DataGrid
             autoHeight
-            disableColumnMenu
             rows={operations}
             columns={columns}
             onRowClick={(params) => setSelectedOperationId(params.row.id as number)}
-            disableMultipleRowSelection
+            checkboxSelection
+            onRowSelectionModelChange={(newSelection) => {
+              const ids = parseRowSelection(newSelection, operationsRef.current);
+              setSelectedOperationIds(ids);
+            }}
             initialState={{
               pagination: {
-                paginationModel: { page: 0, pageSize: 10 },
+                paginationModel: { page: 0, pageSize: 5 },
               },
             }}
-            pageSizeOptions={[10, 25, 50]}
+            pageSizeOptions={[5, 10, 25, 50]}
             columnHeaderHeight={60}
             localeText={ruRU.components.MuiDataGrid.defaultProps.localeText}
             sx={{
@@ -262,7 +429,7 @@ export default function Operations() {
               '& .MuiDataGrid-columnHeaderTitleContainer': { alignItems: 'flex-start', paddingTop: '8px' },
               '& .MuiDataGrid-columnHeaderTitle': { whiteSpace: 'normal', lineHeight: '1.2rem', fontWeight: 600 }
             }}
-            slots={{ toolbar: GridToolbar }}
+            slots={{ toolbar: CustomToolbar }}
             slotProps={{
               toolbar: { showQuickFilter: true, quickFilterProps: { debounceMs: 500 } },
             }}
@@ -286,16 +453,15 @@ export default function Operations() {
           <Paper sx={{ width: '100%', overflow: 'hidden' }}>
             <DataGrid
               autoHeight
-              disableColumnMenu
               rows={operationMaterials}
               columns={detailColumns}
               disableRowSelectionOnClick
               initialState={{
                 pagination: {
-                  paginationModel: { page: 0, pageSize: 5 },
+                  paginationModel: { page: 0, pageSize: 10 },
                 },
               }}
-              pageSizeOptions={[5, 10, 25]}
+              pageSizeOptions={[10, 25, 50]}
               columnHeaderHeight={60}
               localeText={ruRU.components.MuiDataGrid.defaultProps.localeText}
               sx={{
@@ -306,6 +472,7 @@ export default function Operations() {
                 '& .MuiDataGrid-columnHeaderTitle': { whiteSpace: 'normal', lineHeight: '1.2rem', fontWeight: 600 }
               }}
               slots={{
+                toolbar: CustomToolbar,
                 footer: () => (
                   <GridFooterContainer>
                     <Box sx={{ px: 2, display: 'flex', gap: 3, alignItems: 'center' }}>
@@ -313,13 +480,19 @@ export default function Operations() {
                         Всего позиций: {detailTotalItems}
                       </Typography>
                       <Typography variant="subtitle2" fontWeight="bold" color="primary">
-                        Итого материалов: {detailTotalPrice.toLocaleString()} ₽
+                        Итого материалов: {detailTotalPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₽
+                        <Typography component="span" variant="caption" sx={{ ml: 1, color: 'text.secondary', fontWeight: 'normal' }}>
+                          (к. {materialCostFactor})
+                        </Typography>
                       </Typography>
                     </Box>
                     <Box sx={{ flexGrow: 1 }} />
                     <GridPagination />
                   </GridFooterContainer>
                 )
+              }}
+              slotProps={{
+                toolbar: { showQuickFilter: true, quickFilterProps: { debounceMs: 500 } },
               }}
             />
           </Paper>
@@ -355,21 +528,19 @@ export default function Operations() {
       <Dialog open={openDetail} onClose={handleCloseDetail} maxWidth="sm" fullWidth>
         <DialogTitle>{editingDetailItem?.id && !editingDetailItem?.id.toString().startsWith('17') ? 'Редактировать материал' : 'Добавить материал к операции'}</DialogTitle>
         <DialogContent dividers>
-          <FormControl fullWidth margin="normal">
-            <InputLabel id="material-select-label">Материал</InputLabel>
-            <Select
-              labelId="material-select-label"
-              value={editingDetailItem?.material_id || ''}
-              label="Материал"
-              onChange={(e) => setEditingDetailItem({...editingDetailItem, material_id: e.target.value})}
-            >
-              {materials.map((mat) => (
-                <MenuItem key={mat.id} value={mat.id}>
-                  {mat.material_name} ({mat.unit_of_measure}) - {mat.current_unit_cost} ₽
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
+          <Autocomplete
+            fullWidth
+            options={materials}
+            getOptionLabel={(option) => `${option.material_name} (${option.unit_of_measure}) - ${option.current_unit_cost} ₽`}
+            value={materials.find(m => m.id === editingDetailItem?.material_id) || null}
+            onChange={(event, newValue) => {
+              setEditingDetailItem({...editingDetailItem, material_id: newValue ? newValue.id : ''});
+            }}
+            renderInput={(params) => (
+              <TextField {...params} label="Материал" margin="normal" />
+            )}
+            isOptionEqualToValue={(option, value) => option.id === value.id}
+          />
           <TextField
             fullWidth margin="normal" label="Количество" type="number"
             value={editingDetailItem?.quantity || ''}
@@ -385,6 +556,16 @@ export default function Operations() {
           </Tooltip>
         </DialogActions>
       </Dialog>
+
+      {/* Hidden Print Template */}
+      <Box sx={{ display: 'none' }}>
+        <ReportTemplate 
+          ref={printRef}
+          operations={printOperations}
+          materialsData={bulkMaterials}
+          materialCostFactor={materialCostFactor}
+        />
+      </Box>
     </Box>
   );
 }

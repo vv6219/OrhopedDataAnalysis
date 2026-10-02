@@ -1,6 +1,7 @@
 import React from 'react';
 import { Typography, Box, Button, Tooltip, Paper } from '@mui/material';
-import { DataGrid, type GridColDef, type GridRenderCellParams, GridToolbar } from '@mui/x-data-grid';
+import { DataGrid, type GridColDef, type GridRenderCellParams } from '@mui/x-data-grid';
+import CustomToolbar from '../components/CustomToolbar';
 import { ruRU } from '@mui/x-data-grid/locales';
 
 const columns: GridColDef[] = [
@@ -49,7 +50,7 @@ export default function Patients() {
           columns={columns}
           initialState={{
             pagination: {
-              paginationModel: { page: 0, pageSize: 25 },
+              paginationModel: { page: 0, pageSize: 10 },
             },
           }}
           pageSizeOptions={[10, 25, 50, 100]}
@@ -71,7 +72,7 @@ export default function Patients() {
               fontWeight: 600,
             }
           }}
-          slots={{ toolbar: GridToolbar }}
+          slots={{ toolbar: CustomToolbar }}
           slotProps={{
             toolbar: {
               showQuickFilter: true,

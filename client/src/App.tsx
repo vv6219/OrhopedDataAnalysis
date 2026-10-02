@@ -2,12 +2,15 @@ import React from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { Box, CssBaseline, ThemeProvider, createTheme } from '@mui/material';
 import Sidebar from './components/Sidebar';
+import TopStatusBar from './components/TopStatusBar';
 import Dashboard from './pages/Dashboard';
 import Patients from './pages/Patients';
 import Inventory from './pages/Inventory';
 import CheckoutWizard from './pages/CheckoutWizard';
 import Operations from './pages/Operations';
-
+import Parameters from './pages/Parameters';
+import SqliteStudio from './pages/SqliteStudio';
+import Staff from './pages/Staff';
 
 const theme = createTheme({
   palette: {
@@ -155,17 +158,40 @@ function App() {
     <ThemeProvider theme={theme}>
       <CssBaseline />
       <BrowserRouter>
-        <Box sx={{ display: 'flex' }}>
+        <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: '#F4F7FA' }}>
           <Sidebar />
-          <Box component="main" sx={{ flexGrow: 1, p: 3, mt: 8 }}>
-            <Routes>
-              <Route path="/" element={<Dashboard />} />
-              <Route path="/checkout" element={<CheckoutWizard />} />
-              <Route path="/patients" element={<Patients />} />
-              <Route path="/inventory" element={<Inventory />} />
-              <Route path="/operations" element={<Operations />} />
-              <Route path="*" element={<Dashboard />} />
-            </Routes>
+          <Box
+            component="main"
+            sx={{
+              flexGrow: 1,
+              display: 'flex',
+              flexDirection: 'column',
+              minWidth: 0,
+              overflowX: 'hidden'
+            }}
+          >
+            {/* Top Freezed Status Bar with Breadcrumbs & Back Navigation */}
+            <TopStatusBar />
+
+            {/* Main Content Area */}
+            <Box sx={{ flexGrow: 1, p: { xs: 2, sm: 3 } }}>
+              <Routes>
+                {/* Default start on BI Dashboard */}
+                <Route path="/" element={<Dashboard />} />
+                <Route path="/checkout" element={<CheckoutWizard />} />
+                <Route path="/scheduling" element={<CheckoutWizard />} />
+                <Route path="/patients" element={<Patients />} />
+                <Route path="/staff" element={<Staff />} />
+                <Route path="/operations" element={<Operations />} />
+                <Route path="/reports" element={<Operations />} />
+                <Route path="/inventory" element={<Inventory />} />
+                <Route path="/parameters" element={<Parameters />} />
+                <Route path="/sqlite-studio" element={<SqliteStudio />} />
+                <Route path="/db-studio" element={<SqliteStudio />} />
+                {/* Fallback to BI Dashboard */}
+                <Route path="*" element={<Dashboard />} />
+              </Routes>
+            </Box>
           </Box>
         </Box>
       </BrowserRouter>
