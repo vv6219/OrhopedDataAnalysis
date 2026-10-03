@@ -19,10 +19,14 @@ interface ReportTemplateProps {
 }
 
 export const ReportTemplate = React.forwardRef<HTMLDivElement, ReportTemplateProps>(
-  ({ operations, materialsData, materialCostFactor }, ref) => {
+  ({ operations = [], materialsData = [], materialCostFactor = 1.15 }, ref) => {
+    const safeMaterials = Array.isArray(materialsData) ? materialsData : [];
+    const safeOperations = Array.isArray(operations) ? operations : [];
+    const factor = typeof materialCostFactor === 'number' && !isNaN(materialCostFactor) ? materialCostFactor : 1.15;
     
     // Group materials by operation_id
-    const grouped = materialsData.reduce((acc, curr) => {
+    const grouped = safeMaterials.reduce((acc, curr) => {
+      if (!curr) return acc;
       if (!acc[curr.operation_id]) acc[curr.operation_id] = [];
       acc[curr.operation_id].push(curr);
       return acc;
@@ -31,10 +35,10 @@ export const ReportTemplate = React.forwardRef<HTMLDivElement, ReportTemplatePro
     let grandTotalMaterials = 0;
     let grandTotalOperations = 0;
 
-    operations.forEach(op => {
+    safeOperations.forEach(op => {
       grandTotalOperations += op.price || 0;
       const mats = grouped[op.id] || [];
-      const opMatsTotal = mats.reduce((sum, m) => sum + (m.quantity * m.current_unit_cost), 0) * materialCostFactor;
+      const opMatsTotal = mats.reduce((sum, m) => sum + ((m.quantity || 0) * (m.current_unit_cost || 0)), 0) * factor;
       grandTotalMaterials += opMatsTotal;
     });
 

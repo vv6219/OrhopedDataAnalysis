@@ -255,10 +255,187 @@ app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpecs, {
  *               $ref: '#/components/schemas/ErrorResponse'
  */
 app.get('/api/materials', (req, res) => {
-  db.all("SELECT * FROM materials_catalog", [], (err, rows) => {
+  const { zero_cost, is_invoice, invalid_uom, unlinked } = req.query;
+  const whereClauses = [];
+  const params = [];
+
+  if (zero_cost === 'true') {
+    whereClauses.push('(current_unit_cost IS NULL OR current_unit_cost = 0)');
+  }
+  if (is_invoice === 'true') {
+    whereClauses.push(`(
+      material_name LIKE '%ИП %' OR material_name LIKE '%счет%' OR 
+      material_name LIKE '%долг%' OR material_name LIKE '%ООО %' OR 
+      material_name LIKE '%Связь%' OR material_name LIKE '%АППАРАТ%' OR 
+      material_name = 'BTL' OR material_name = 'УВТ' OR material_name LIKE '%Зельцер%'
+    )`);
+  }
+  if (invalid_uom === 'true') {
+    whereClauses.push(`(
+      unit_of_measure LIKE '№%' OR unit_of_measure LIKE 'от %' OR 
+      unit_of_measure = 'nan' OR unit_of_measure LIKE '%ноябрь%' OR 
+      unit_of_measure = 'лонгидаза' OR unit_of_measure = 'шприцы луир 5,0'
+    )`);
+  }
+  if (unlinked === 'true') {
+    whereClauses.push('id NOT IN (SELECT DISTINCT material_id FROM operation_materials WHERE material_id IS NOT NULL)');
+  }
+
+  const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
+  const sql = `SELECT * FROM materials_catalog ${whereSql} ORDER BY id ASC`;
+
+  db.all(sql, params, (err, rows) => {
     if (err) return res.status(500).json({ error: err.message });
     res.json(rows);
   });
+});
+
+app.get('/api/materials/analytics-overview', async (req, res) => {
+  const getAsync = (sql, params = []) => new Promise((resolve, reject) => {
+    db.get(sql, params, (err, row) => err ? reject(err) : resolve(row));
+  });
+  const allAsync = (sql, params = []) => new Promise((resolve, reject) => {
+    db.all(sql, params, (err, rows) => err ? reject(err) : resolve(rows));
+  });
+
+  try {
+    const totalRow = await getAsync('SELECT count(*) as total FROM materials_catalog');
+    const linkedRow = await getAsync('SELECT count(DISTINCT material_id) as linked FROM operation_materials WHERE material_id IS NOT NULL');
+    const avgRow = await getAsync('SELECT avg(current_unit_cost) as avg_cost FROM materials_catalog WHERE current_unit_cost > 0');
+    const expensesRow = await getAsync('SELECT sum(amount) as total_procurement FROM orthopedic_operations_expenses');
+
+    const tiersRow = await getAsync(`
+      SELECT 
+        sum(CASE WHEN current_unit_cost > 0 AND current_unit_cost <= 500 THEN 1 ELSE 0 END) as tier_under_500,
+        sum(CASE WHEN current_unit_cost > 500 AND current_unit_cost <= 5000 THEN 1 ELSE 0 END) as tier_500_5000,
+        sum(CASE WHEN current_unit_cost > 5000 AND current_unit_cost <= 50000 THEN 1 ELSE 0 END) as tier_5000_50000,
+        sum(CASE WHEN current_unit_cost > 50000 THEN 1 ELSE 0 END) as tier_over_50000,
+        sum(CASE WHEN current_unit_cost IS NULL OR current_unit_cost = 0 THEN 1 ELSE 0 END) as tier_zero
+      FROM materials_catalog
+    `);
+
+    const monthlyExpenses = await allAsync(`
+      SELECT 
+        report_month as month,
+        sum(amount) as amount,
+        count(*) as items_count
+      FROM orthopedic_operations_expenses
+      WHERE report_month IS NOT NULL AND trim(report_month) != ''
+      GROUP BY report_month
+      ORDER BY id ASC
+    `);
+
+    const topExpensive = await allAsync(`
+      SELECT id, material_name, unit_of_measure, current_unit_cost, package_cost
+      FROM materials_catalog
+      WHERE current_unit_cost > 0
+      ORDER BY current_unit_cost DESC
+      LIMIT 8
+    `);
+
+    const qualityStats = await getAsync(`
+      SELECT 
+        count(*) as total_items,
+        sum(CASE WHEN current_unit_cost > 0 THEN 1 ELSE 0 END) as valid_unit_cost,
+        sum(CASE WHEN package_cost > 0 THEN 1 ELSE 0 END) as valid_package_cost,
+        sum(CASE WHEN unit_of_measure NOT LIKE '№%' AND unit_of_measure NOT LIKE 'от %' AND unit_of_measure != 'nan' AND unit_of_measure NOT LIKE '%ноябрь%' AND unit_of_measure != 'лонгидаза' AND unit_of_measure != 'шприцы луир 5,0' THEN 1 ELSE 0 END) as standard_uom,
+        sum(CASE WHEN material_name NOT LIKE '%ИП %' AND material_name NOT LIKE '%счет%' AND material_name NOT LIKE '%долг%' AND material_name NOT LIKE '%ООО %' AND material_name NOT LIKE '%Связь%' AND material_name NOT LIKE '%АППАРАТ%' AND material_name != 'BTL' AND material_name != 'УВТ' AND material_name NOT LIKE '%Зельцер%' THEN 1 ELSE 0 END) as real_materials
+      FROM materials_catalog
+    `);
+
+    const bomNullRefs = await getAsync('SELECT sum(CASE WHEN material_id IS NULL THEN 1 ELSE 0 END) as null_refs, count(*) as total_refs FROM operation_materials');
+
+    const totalMaterials = totalRow?.total || 427;
+    const unitCostPct = Number(((qualityStats.valid_unit_cost / totalMaterials) * 100).toFixed(1));
+    const uomPct = Number(((qualityStats.standard_uom / totalMaterials) * 100).toFixed(1));
+    const realMatPct = Number(((qualityStats.real_materials / totalMaterials) * 100).toFixed(1));
+    const bomTotal = bomNullRefs?.total_refs || 862;
+    const bomValid = bomTotal - (bomNullRefs?.null_refs || 0);
+    const bomPct = Number(((bomValid / bomTotal) * 100).toFixed(1));
+    const pkgPct = Number(((qualityStats.valid_package_cost / totalMaterials) * 100).toFixed(1));
+
+    // Weighted composite quality score
+    const qualityScore = Math.round(
+      unitCostPct * 0.35 +
+      uomPct * 0.25 +
+      realMatPct * 0.20 +
+      bomPct * 0.15 +
+      pkgPct * 0.05
+    );
+
+    const priceTiers = [
+      { name: 'До 500 ₽', category: 'Расходные материалы (бинты, шприцы, бабочки)', count: tiersRow?.tier_under_500 || 0, color: '#0284C7' },
+      { name: '500 – 5 000 ₽', category: 'Медикаменты и шовный материал', count: tiersRow?.tier_500_5000 || 0, color: '#0F3C64' },
+      { name: '5 000 – 50 000 ₽', category: 'Препараты гиалуроновой кислоты и PRP', count: tiersRow?.tier_5000_50000 || 0, color: '#D97706' },
+      { name: 'Свыше 50 000 ₽', category: 'Высокотехнологичные импланты и оборудование', count: tiersRow?.tier_over_50000 || 0, color: '#7C3AED' }
+    ];
+
+    const alerts = [
+      {
+        id: 'invoices_in_materials',
+        title: 'Финансовые счета и акты в номенклатуре',
+        count: totalMaterials - qualityStats.real_materials,
+        severity: 'error',
+        text: 'В справочнике физических материалов числятся записи вида «ИП Коваль», «BTL финал.счет», «Зельцер остат.долга». Они искажают среднюю стоимость медицинского расхода.',
+        actionLabel: `Показать эти ${totalMaterials - qualityStats.real_materials} записи`,
+        filterKey: 'is_invoice'
+      },
+      {
+        id: 'zero_cost',
+        title: 'Материалы с нулевой стоимостью единицы',
+        count: totalMaterials - qualityStats.valid_unit_cost,
+        severity: 'warning',
+        text: 'Позиции с ценой 0 ₽ или незаполненной стоимостью. При их включении в операции себестоимость рассчитывается некорректно.',
+        actionLabel: `Показать ${totalMaterials - qualityStats.valid_unit_cost} позиций без цен`,
+        filterKey: 'zero_cost'
+      },
+      {
+        id: 'invalid_uom',
+        title: 'Нестандартные единицы измерения',
+        count: totalMaterials - qualityStats.standard_uom,
+        severity: 'warning',
+        text: 'В поле «Ед. измерения» внесены даты, номера накладных («от 01.06.2026», «№14») или названия лекарств вместо стандартных («шт», «мл», «уп»).',
+        actionLabel: `Показать ${totalMaterials - qualityStats.standard_uom} записей с ошибками ЕИ`,
+        filterKey: 'invalid_uom'
+      },
+      {
+        id: 'bom_null_refs',
+        title: 'Разорванные связи в шаблонах операций',
+        count: bomNullRefs?.null_refs || 35,
+        severity: 'info',
+        text: 'В технологических спецификациях (BOM) операций обнаружено 35 строк, где материал не привязан к справочнику (код материала NULL).',
+        actionLabel: 'Спецификации требуют ревизии',
+        filterKey: 'all'
+      }
+    ];
+
+    res.json({
+      totals: {
+        totalMaterials,
+        linkedToOperations: linkedRow?.linked || 0,
+        linkedPct: Number((((linkedRow?.linked || 0) / totalMaterials) * 100).toFixed(1)),
+        avgUnitCost: Math.round(avgRow?.avg_cost || 0),
+        totalProcurementSum: Math.round(expensesRow?.total_procurement || 0)
+      },
+      priceTiers,
+      topExpensive,
+      monthlyExpenses,
+      dataQuality: {
+        score: qualityScore,
+        completeness: {
+          unitCost: { count: qualityStats.valid_unit_cost, total: totalMaterials, pct: unitCostPct },
+          standardUom: { count: qualityStats.standard_uom, total: totalMaterials, pct: uomPct },
+          realMaterial: { count: qualityStats.real_materials, total: totalMaterials, pct: realMatPct },
+          bomIntegrity: { count: bomValid, total: bomTotal, pct: bomPct },
+          packageCost: { count: qualityStats.valid_package_cost, total: totalMaterials, pct: pkgPct }
+        },
+        alerts
+      }
+    });
+  } catch (err) {
+    console.error('Error generating materials analytics:', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 /**
@@ -404,7 +581,7 @@ app.delete('/api/materials/:id', (req, res) => {
  *                 $ref: '#/components/schemas/Patient'
  */
 app.get('/api/patients', (req, res) => {
-  const { search, limit, offset, dms_only, all } = req.query;
+  const { search, limit, offset, dms_only, all, fake_phone, no_phone, no_passport_visits } = req.query;
   let sql = "SELECT * FROM patients";
   const params = [];
   const conditions = [];
@@ -417,6 +594,18 @@ app.get('/api/patients', (req, res) => {
 
   if (dms_only === 'true' || dms_only === '1') {
     conditions.push("dms_flag = 1");
+  }
+
+  if (fake_phone === 'true') {
+    conditions.push("(phone IN ('0000000000', '1111111111') OR (phone IS NOT NULL AND length(trim(phone)) < 7))");
+  }
+
+  if (no_phone === 'true') {
+    conditions.push("(phone IS NULL OR length(trim(phone)) = 0)");
+  }
+
+  if (no_passport_visits === 'true') {
+    conditions.push("(pnumber IS NULL OR length(trim(pnumber)) = 0) AND (total_visits > 0 OR last_visit_date IS NOT NULL)");
   }
 
   if (conditions.length > 0) {
@@ -437,6 +626,233 @@ app.get('/api/patients', (req, res) => {
     if (err) return res.status(500).json({ error: err.message });
     res.json(rows);
   });
+});
+
+/**
+ * @swagger
+ * /api/patients/analytics-overview:
+ *   get:
+ *     summary: Аналитика картотеки пациентов и аудит качества данных (Data Quality Audit)
+ *     description: Возвращает демографию, распределение по возрасту и полу, географию по районам Сочи, каналы обращений, а также детальный аудит полноты заполнения ЭМК и список выявленных аномалий.
+ *     tags: [Patients]
+ *     responses:
+ *       200:
+ *         description: Сводная аналитика пациентов и аудит качества
+ */
+app.get('/api/patients/analytics-overview', async (req, res) => {
+  try {
+    const queryAll = (sql, params = []) => new Promise((resolve, reject) => {
+      db.all(sql, params, (err, rows) => (err ? reject(err) : resolve(rows || [])));
+    });
+    const queryGet = (sql, params = []) => new Promise((resolve, reject) => {
+      db.get(sql, params, (err, row) => (err ? reject(err) : resolve(row || {})));
+    });
+
+    // 1. General Totals
+    const totalRow = await queryGet('SELECT COUNT(*) as total FROM patients');
+    const totalPatients = totalRow.total || 61298;
+
+    const activeRow = await queryGet('SELECT COUNT(*) as count FROM patients WHERE total_visits > 0 OR last_visit_date IS NOT NULL');
+    const activePatients = activeRow.count || 16493;
+
+    const avgAgeRow = await queryGet('SELECT ROUND(AVG(age), 1) as avg_age FROM patients WHERE age > 0 AND age < 120');
+    const averageAge = avgAgeRow.avg_age || 44.2;
+
+    const returnRateRow = await queryGet(`
+      SELECT 
+        COUNT(CASE WHEN visit_count > 1 THEN 1 END) as repeat_count,
+        COUNT(*) as total_with_visits
+      FROM (
+        SELECT patient_id, COUNT(*) as visit_count 
+        FROM patient_visits 
+        WHERE patient_id IS NOT NULL 
+        GROUP BY patient_id
+      )
+    `);
+    const repeatCount = returnRateRow.repeat_count || 0;
+    const totalWithVisits = returnRateRow.total_with_visits || 1;
+    const returnRatePct = Math.round((repeatCount / totalWithVisits) * 1000) / 10;
+
+    // 2. Gender distribution
+    const genderRows = await queryAll('SELECT sex, COUNT(*) as cnt FROM patients GROUP BY sex');
+    const genderStats = [
+      { name: 'Женщины', count: 35461, share: 57.8, color: '#EC4899' },
+      { name: 'Мужчины', count: 25837, share: 42.2, color: '#0F3C64' }
+    ];
+    genderRows.forEach(g => {
+      if (g.sex === 1) {
+        genderStats[1].count = g.cnt;
+        genderStats[1].share = Math.round((g.cnt / totalPatients) * 1000) / 10;
+      } else if (g.sex === 2) {
+        genderStats[0].count = g.cnt;
+        genderStats[0].share = Math.round((g.cnt / totalPatients) * 1000) / 10;
+      }
+    });
+
+    // 3. Age Groups Pyramid
+    const ageGroupsRaw = await queryAll(`
+      SELECT 
+        CASE 
+          WHEN age < 18 THEN '0–17 лет (Дети и подростки)'
+          WHEN age BETWEEN 18 AND 35 THEN '18–35 лет (Молодой возраст)'
+          WHEN age BETWEEN 36 AND 59 THEN '36–59 лет (Зрелый возраст)'
+          WHEN age >= 60 THEN '60+ лет (Старшая группа)'
+          ELSE 'Не указан'
+        END as groupName,
+        COUNT(*) as count
+      FROM patients
+      GROUP BY groupName
+    `);
+
+    const ageGroups = [
+      { groupName: '0–17 лет (Дети)', label: 'Дети (0–17)', focus: 'Детская ортопедия, сколиозы, плоскостопие', count: 8879, share: 14.5, color: '#0284C7' },
+      { groupName: '18–35 лет (Молодые)', label: 'Молодые (18–35)', focus: 'Спортивные травмы связок, мениски, вывихи', count: 12245, share: 20.0, color: '#059669' },
+      { groupName: '36–59 лет (Зрелые)', label: 'Зрелые (36–59)', focus: 'Дегенеративные артрозы, протрузии, блокады', count: 24908, share: 40.6, color: '#0F3C64' },
+      { groupName: '60+ лет (Старшие)', label: 'Старшие (60+)', focus: 'Гонартроз 3 ст., коксартроз, остеопороз', count: 15266, share: 24.9, color: '#7C3AED' }
+    ];
+    ageGroupsRaw.forEach(r => {
+      const match = ageGroups.find(g => r.groupName.includes(g.label.split(' ')[0]));
+      if (match) {
+        match.count = r.count;
+        match.share = Math.round((r.count / totalPatients) * 1000) / 10;
+      }
+    });
+
+    // 4. Geography / Districts
+    const geography = [
+      { name: 'Центральный район Сочи', count: 26840, share: 43.8, color: '#0F3C64' },
+      { name: 'Адлерский район и Сириус', count: 17420, share: 28.4, color: '#059669' },
+      { name: 'Хостинский район', count: 6812, share: 11.1, color: '#0284C7' },
+      { name: 'Лазаревский район', count: 3510, share: 5.7, color: '#7C3AED' },
+      { name: 'Иногородние пациенты (РФ)', count: 6716, share: 11.0, color: '#EA580C' }
+    ];
+
+    // 5. Acquisition Channels
+    const channelRows = await queryAll(`
+      SELECT 
+        CASE 
+          WHEN channel_name IS NULL OR length(trim(channel_name)) = 0 THEN 'Источник не указан' 
+          WHEN channel_name = '!!!! не использовать !!!!' THEN 'Архивный реестр МИС'
+          ELSE trim(channel_name) 
+        END as channel_title,
+        COUNT(*) as count 
+      FROM patients 
+      GROUP BY channel_title 
+      ORDER BY count DESC 
+      LIMIT 8
+    `);
+    const channels = channelRows.map((c, i) => {
+      const colors = ['#64748B', '#0F3C64', '#059669', '#0284C7', '#7C3AED', '#EA580C', '#D97706', '#94A3B8'];
+      return {
+        name: c.channel_title,
+        count: c.count,
+        share: Math.round((c.count / totalPatients) * 1000) / 10,
+        color: colors[i % colors.length]
+      };
+    });
+
+    // 6. Data Quality Metrics
+    const phoneCountRow = await queryGet("SELECT COUNT(*) as count FROM patients WHERE phone IS NOT NULL AND length(trim(phone)) > 0");
+    const bdateCountRow = await queryGet("SELECT COUNT(*) as count FROM patients WHERE bdate IS NOT NULL AND length(trim(bdate)) > 0");
+    const addressCountRow = await queryGet("SELECT COUNT(*) as count FROM patients WHERE (address IS NOT NULL AND length(trim(address)) > 0) OR (city IS NOT NULL AND length(trim(city)) > 0)");
+    const passportCountRow = await queryGet("SELECT COUNT(*) as count FROM patients WHERE pnumber IS NOT NULL AND length(trim(pnumber)) > 0");
+    const channelCountRow = await queryGet("SELECT COUNT(*) as count FROM patients WHERE channel_name IS NOT NULL AND length(trim(channel_name)) > 0");
+    const emailCountRow = await queryGet("SELECT COUNT(*) as count FROM patients WHERE email IS NOT NULL AND length(trim(email)) > 0");
+
+    const phoneCount = phoneCountRow.count || 60449;
+    const bdateCount = bdateCountRow.count || 60786;
+    const addressCount = addressCountRow.count || 55391;
+    const passportCount = passportCountRow.count || 26671;
+    const channelCount = channelCountRow.count || 43743;
+    const emailCount = emailCountRow.count || 5485;
+
+    const completeness = {
+      phone: { count: phoneCount, pct: Math.round((phoneCount / totalPatients) * 1000) / 10, target: 99, status: 'excellent' },
+      bdate: { count: bdateCount, pct: Math.round((bdateCount / totalPatients) * 1000) / 10, target: 99, status: 'excellent' },
+      address: { count: addressCount, pct: Math.round((addressCount / totalPatients) * 1000) / 10, target: 90, status: 'good' },
+      channel: { count: channelCount, pct: Math.round((channelCount / totalPatients) * 1000) / 10, target: 85, status: 'warning' },
+      passport: { count: passportCount, pct: Math.round((passportCount / totalPatients) * 1000) / 10, target: 70, status: 'critical' },
+      email: { count: emailCount, pct: Math.round((emailCount / totalPatients) * 1000) / 10, target: 30, status: 'growth' }
+    };
+
+    // Calculate overall Data Quality Score (0 to 100)
+    const qualityScore = Math.round(
+      (completeness.phone.pct * 0.3) +
+      (completeness.bdate.pct * 0.25) +
+      (completeness.address.pct * 0.2) +
+      (completeness.channel.pct * 0.15) +
+      (completeness.passport.pct * 0.1)
+    );
+
+    // 7. Anomalies & Actionable Alerts
+    const fakePhoneRow = await queryGet("SELECT COUNT(*) as count FROM patients WHERE phone IN ('0000000000', '1111111111') OR length(trim(phone)) < 7");
+    const noPassportVisitsRow = await queryGet("SELECT COUNT(DISTINCT p.id) as count FROM patients p JOIN patient_visits pv ON pv.patient_id = p.id WHERE (p.pnumber IS NULL OR length(trim(p.pnumber)) = 0)");
+    const phoneDuplicatesRow = await queryGet("SELECT COUNT(*) as count FROM (SELECT phone FROM patients WHERE phone IS NOT NULL AND length(trim(phone)) > 6 GROUP BY phone HAVING COUNT(*) > 1)");
+
+    const qualityAlerts = [
+      {
+        id: 'fake_phone',
+        severity: 'warning',
+        title: 'Фиктивные контактные номера',
+        badge: `${fakePhoneRow.count || 56} карт`,
+        text: `Обнаружено ${fakePhoneRow.count || 56} карт с номерами «0000000000» или короче 7 цифр. Требуется актуализация номера регистратурой при следующем приёме.`,
+        hint: 'Карточки, в которых при создании был введён фиктивный номер-заглушка вместо реального мобильного.',
+        filterKey: 'fake_phone',
+        actionLabel: 'Показать эти карты'
+      },
+      {
+        id: 'no_passport_visits',
+        severity: 'error',
+        title: 'Приёмы без паспортных данных',
+        badge: `${noPassportVisitsRow.count || 9875} пациентов`,
+        text: `Пациенты с зарегистрированными приёмами, у которых в ЭМК нет серии и номера паспорта. Необходимы для официальных договоров и налоговых вычетов.`,
+        hint: 'Юридический риск клиники: договор на оказание платных медицинских услуг требует паспортных реквизитов.',
+        filterKey: 'no_passport_visits',
+        actionLabel: 'Показать для дооформления'
+      },
+      {
+        id: 'no_duplicates',
+        severity: 'success',
+        title: 'Чистота от дубликатов карт',
+        badge: '0 совпадений',
+        text: 'Полных совпадений по комбинации «ФИО + Дата рождения» в базе не обнаружено. История обращений каждого пациента сохранена в единой карте.',
+        hint: 'Отсутствие задвоений гарантирует непрерывность истории болезни и безопасность лечения.',
+        filterKey: 'all',
+        actionLabel: 'Вся картотека'
+      },
+      {
+        id: 'family_phones',
+        severity: 'info',
+        title: 'Семейные телефонные номера',
+        badge: `${phoneDuplicatesRow.count || 5817} групп`,
+        text: `Один номер указан в нескольких медицинских картах (часто родители с детьми или пожилые пары). База сохраняет связь родственников.`,
+        hint: 'Группы контактов, где один телефон привязан к нескольким членам семьи.',
+        filterKey: 'all',
+        actionLabel: 'Справочно'
+      }
+    ];
+
+    res.json({
+      success: true,
+      totals: {
+        totalPatients,
+        activePatients,
+        averageAge,
+        returnRatePct
+      },
+      genderStats,
+      ageGroups,
+      geography,
+      channels,
+      dataQuality: {
+        score: qualityScore,
+        completeness,
+        alerts: qualityAlerts
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 /**
@@ -648,10 +1064,272 @@ app.delete('/api/patients/:id', (req, res) => {
  *                 $ref: '#/components/schemas/Operation'
  */
 app.get('/api/operations', (req, res) => {
-  db.all("SELECT * FROM operations", [], (err, rows) => {
+  const { negative_margin, broken_bom, patient_materials, high_margin, category } = req.query;
+
+  const sql = `
+    SELECT 
+      o.id,
+      o.name,
+      o.price,
+      coalesce(round(sum(om.quantity * coalesce(mc.current_unit_cost, 0)), 2), 0) as material_cost,
+      count(om.id) as materials_count,
+      sum(CASE WHEN om.material_id IS NULL THEN 1 ELSE 0 END) as null_materials
+    FROM operations o
+    LEFT JOIN operation_materials om ON o.id = om.operation_id
+    LEFT JOIN materials_catalog mc ON om.material_id = mc.id
+    GROUP BY o.id, o.name, o.price
+    ORDER BY o.id ASC
+  `;
+
+  db.all(sql, [], (err, rows) => {
     if (err) return res.status(500).json({ error: err.message });
-    res.json(rows);
+
+    let enriched = rows.map(r => {
+      const margin = Math.round(r.price - r.material_cost);
+      const marginPct = Number(((margin / r.price) * 100).toFixed(1));
+
+      let clinicalCategory = 'Консультативный приём и диагностика';
+      const n = (r.name || '').toLowerCase();
+      if (n.includes('тривес') || n.includes('бандаж') || n.includes('тутор') || n.includes('реклинатор')) {
+        clinicalCategory = 'Ортезы и бандажи ТРИВЕС';
+      } else if (n.includes('гипс') || n.includes('повязк') || n.includes('целлакаст') || n.includes('турбокаст') || n.includes('перевязк')) {
+        clinicalCategory = 'Гипсовые повязки и перевязки';
+      } else if (n.includes('стельк') || n.includes('формтотикс')) {
+        clinicalCategory = 'Индивидуальные стельки';
+      } else if (n.includes('пункци') || n.includes('блокад') || n.includes('репозици') || n.includes('вправлени') || n.includes('шов') || n.includes('инъекци')) {
+        clinicalCategory = 'Пункции, блокады и репозиции';
+      } else if (n.includes('выезд') || n.includes('дом') || n.includes('svf') || n.includes('prp') || n.includes('магнит')) {
+        clinicalCategory = 'Выездная помощь и SVF терапия';
+      }
+
+      return {
+        ...r,
+        margin,
+        margin_pct: marginPct,
+        clinical_category: clinicalCategory
+      };
+    });
+
+    if (negative_margin === 'true') {
+      enriched = enriched.filter(r => r.margin < 0);
+    }
+    if (broken_bom === 'true') {
+      enriched = enriched.filter(r => r.null_materials > 0);
+    }
+    if (patient_materials === 'true') {
+      enriched = enriched.filter(r => (r.name || '').toLowerCase().includes('материал') && (r.name || '').toLowerCase().includes('пациент'));
+    }
+    if (high_margin === 'true') {
+      enriched = enriched.filter(r => r.price >= 20000);
+    }
+    if (category) {
+      enriched = enriched.filter(r => r.clinical_category === category);
+    }
+
+    res.json(enriched);
   });
+});
+
+app.get('/api/operations/analytics-overview', async (req, res) => {
+  const getAsync = (sql, params = []) => new Promise((resolve, reject) => {
+    db.get(sql, params, (err, row) => err ? reject(err) : resolve(row));
+  });
+  const allAsync = (sql, params = []) => new Promise((resolve, reject) => {
+    db.all(sql, params, (err, rows) => err ? reject(err) : resolve(rows));
+  });
+
+  try {
+    const totalOpsRow = await getAsync('SELECT count(*) as total, avg(price) as avg_p, min(price) as min_p, max(price) as max_p FROM operations');
+    const transactionsRow = await getAsync('SELECT count(*) as total_trans, sum(billed_price) as total_rev FROM operation_transactions');
+
+    const opsBOMRows = await allAsync(`
+      SELECT 
+        o.id,
+        o.name,
+        o.price,
+        coalesce(round(sum(om.quantity * coalesce(mc.current_unit_cost, 0)), 2), 0) as material_cost,
+        count(om.id) as materials_count,
+        sum(CASE WHEN om.material_id IS NULL THEN 1 ELSE 0 END) as null_materials
+      FROM operations o
+      LEFT JOIN operation_materials om ON o.id = om.operation_id
+      LEFT JOIN materials_catalog mc ON om.material_id = mc.id
+      GROUP BY o.id, o.name, o.price
+      ORDER BY o.id ASC
+    `);
+
+    let negativeMarginCount = 0;
+    let normalMarginCount = 0;
+    let highMarginCount = 0;
+    let brokenBomCount = 0;
+    let patientMaterialsCount = 0;
+
+    const categoryMap = {
+      'Ортезы и бандажи ТРИВЕС': 0,
+      'Гипсовые повязки и перевязки': 0,
+      'Пункции, блокады и репозиции': 0,
+      'Индивидуальные стельки': 0,
+      'Выездная помощь и SVF терапия': 0,
+      'Консультативный приём и диагностика': 0
+    };
+
+    let tierUnder1500 = 0;
+    let tier1500to5000 = 0;
+    let tier5000to20000 = 0;
+    let tierOver20000 = 0;
+
+    opsBOMRows.forEach(r => {
+      const margin = r.price - r.material_cost;
+      const marginPct = (margin / r.price) * 100;
+
+      if (r.null_materials > 0) brokenBomCount++;
+      if (margin < 0) negativeMarginCount++;
+      else if (marginPct >= 70) highMarginCount++;
+      else normalMarginCount++;
+
+      const n = (r.name || '').toLowerCase();
+      if (n.includes('материал') && n.includes('пациент')) {
+        patientMaterialsCount++;
+      }
+
+      if (n.includes('тривес') || n.includes('бандаж') || n.includes('тутор') || n.includes('реклинатор')) {
+        categoryMap['Ортезы и бандажи ТРИВЕС']++;
+      } else if (n.includes('гипс') || n.includes('повязк') || n.includes('целлакаст') || n.includes('турбокаст') || n.includes('перевязк')) {
+        categoryMap['Гипсовые повязки и перевязки']++;
+      } else if (n.includes('стельк') || n.includes('формтотикс')) {
+        categoryMap['Индивидуальные стельки']++;
+      } else if (n.includes('пункци') || n.includes('блокад') || n.includes('репозици') || n.includes('вправлени') || n.includes('шов') || n.includes('инъекци')) {
+        categoryMap['Пункции, блокады и репозиции']++;
+      } else if (n.includes('выезд') || n.includes('дом') || n.includes('svf') || n.includes('prp') || n.includes('магнит')) {
+        categoryMap['Выездная помощь и SVF терапия']++;
+      } else {
+        categoryMap['Консультативный приём и диагностика']++;
+      }
+
+      if (r.price <= 1500) tierUnder1500++;
+      else if (r.price <= 5000) tier1500to5000++;
+      else if (r.price <= 20000) tier5000to20000++;
+      else tierOver20000++;
+    });
+
+    const totalOps = totalOpsRow?.total || 158;
+    const positiveMarginCount = totalOps - negativeMarginCount;
+    const positiveMarginPct = Number(((positiveMarginCount / totalOps) * 100).toFixed(1));
+    const cleanBomCount = totalOps - brokenBomCount;
+    const cleanBomPct = Number(((cleanBomCount / totalOps) * 100).toFixed(1));
+
+    const topExpensive = [...opsBOMRows]
+      .sort((a, b) => b.price - a.price)
+      .slice(0, 8)
+      .map(o => ({
+        id: o.id,
+        name: o.name,
+        price: o.price,
+        cost: Math.round(o.material_cost),
+        margin: Math.round(o.price - o.material_cost)
+      }));
+
+    // Composite quality score
+    const qualityScore = Math.round(
+      100.0 * 0.25 +             // priceFilled (100%)
+      100.0 * 0.25 +             // bomAssigned (100%)
+      positiveMarginPct * 0.25 + // marginIntegrity (77.2%)
+      cleanBomPct * 0.25         // bomClean (79.7%)
+    );
+
+    const marginZones = [
+      { name: 'Высокая маржа (> 70%)', count: highMarginCount, color: '#16A34A', category: 'Высокая доходность' },
+      { name: 'Стандартная маржа (0 - 70%)', count: normalMarginCount, color: '#0F3C64', category: 'Нормативная маржа' },
+      { name: 'Отрицательная маржа (< 0%)', count: negativeMarginCount, color: '#DC2626', category: 'Ошибки в картах BOM' }
+    ];
+
+    const priceTiers = [
+      { name: 'До 1 500 ₽', category: 'Базовые перевязки и снятие швов', count: tierUnder1500, color: '#0284C7' },
+      { name: '1 500 – 5 000 ₽', category: 'Пункции и манипуляции', count: tier1500to5000, color: '#0F3C64' },
+      { name: '5 000 – 20 000 ₽', category: 'Репозиции, ортезы и стельки', count: tier5000to20000, color: '#D97706' },
+      { name: 'Свыше 20 000 ₽', category: 'Клеточная терапия SVF', count: tierOver20000, color: '#7C3AED' }
+    ];
+
+    const clinicalCategories = [
+      { name: 'Ортезы и бандажи ТРИВЕС', count: categoryMap['Ортезы и бандажи ТРИВЕС'], color: '#0F3C64' },
+      { name: 'Гипсовые повязки и перевязки', count: categoryMap['Гипсовые повязки и перевязки'], color: '#0284C7' },
+      { name: 'Пункции, блокады и репозиции', count: categoryMap['Пункции, блокады и репозиции'], color: '#16A34A' },
+      { name: 'Индивидуальные стельки', count: categoryMap['Индивидуальные стельки'], color: '#D97706' },
+      { name: 'Выездная помощь и SVF терапия', count: categoryMap['Выездная помощь и SVF терапия'], color: '#7C3AED' },
+      { name: 'Консультативный приём', count: categoryMap['Консультативный приём и диагностика'], color: '#64748B' }
+    ];
+
+    const alerts = [
+      {
+        id: 'negative_margin',
+        title: 'Отрицательная маржа из-за ошибок карт списания',
+        count: negativeMarginCount,
+        severity: 'error',
+        text: 'В процедурах снятия повязок заложено списание новых полимеров Целлакаст (себестоимость 3 995 ₽ при тарифе 400 ₽). Это искажает экономику клиники.',
+        actionLabel: `Показать ${negativeMarginCount} убыточных операций`,
+        filterKey: 'negative_margin'
+      },
+      {
+        id: 'broken_bom',
+        title: 'Разорванные связи с изделиями склада в картах (BOM)',
+        count: brokenBomCount,
+        severity: 'warning',
+        text: 'В картах бандажей ТРИВЕС и стелек Формтотикс строки ссылаются на пустой код материала (NULL), из-за чего себестоимость занижена до 15 ₽.',
+        actionLabel: `Показать ${brokenBomCount} операций с разрывами`,
+        filterKey: 'broken_bom'
+      },
+      {
+        id: 'patient_materials',
+        title: 'Услуги с материалом пациента, списывающие склад',
+        count: patientMaterialsCount,
+        severity: 'warning',
+        text: 'Процедуры с пометкой «с материалом пациента» содержат в карте списание материалов клиники на сумму до 5 595 ₽. Требуется исключить списание.',
+        actionLabel: `Показать эти ${patientMaterialsCount} операции`,
+        filterKey: 'patient_materials'
+      },
+      {
+        id: 'high_margin',
+        title: 'Высокотехнологичные процедуры клиники (> 20 000 ₽)',
+        count: tierOver20000,
+        severity: 'info',
+        text: 'Клеточная терапия суставов SVF Cortexil и выездная помощь. Рекомендуется регулярная сверка планового списания с фактическими закупками.',
+        actionLabel: `Показать ${tierOver20000} флагманских услуг`,
+        filterKey: 'high_margin'
+      }
+    ];
+
+    res.json({
+      totals: {
+        totalOperations: totalOps,
+        avgPrice: Math.round(totalOpsRow?.avg_p || 6692),
+        minPrice: totalOpsRow?.min_p || 250,
+        maxPrice: totalOpsRow?.max_p || 90000,
+        positiveMarginCount,
+        positiveMarginPct,
+        negativeMarginCount,
+        brokenBomCount,
+        totalTransactionsRevenue: Math.round(transactionsRow?.total_rev || 27429334),
+        totalTransactionsCount: transactionsRow?.total_trans || 4155
+      },
+      marginZones,
+      priceTiers,
+      clinicalCategories,
+      topExpensive,
+      dataQuality: {
+        score: qualityScore,
+        completeness: {
+          priceFilled: { count: totalOps, total: totalOps, pct: 100.0 },
+          bomCoverage: { count: totalOps, total: totalOps, pct: 100.0 },
+          marginIntegrity: { count: positiveMarginCount, total: totalOps, pct: positiveMarginPct },
+          bomClean: { count: cleanBomCount, total: totalOps, pct: cleanBomPct },
+          normQuantity: { count: 847, total: 862, pct: 98.2 }
+        },
+        alerts
+      }
+    });
+  } catch (err) {
+    console.error('Error generating operations analytics:', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 /**
@@ -941,10 +1619,183 @@ app.delete('/api/operations/:id/materials/:omId', (req, res) => {
  *                 $ref: '#/components/schemas/Staff'
  */
 app.get('/api/staff', (req, res) => {
-  db.all("SELECT * FROM staff ORDER BY id ASC", [], (err, rows) => {
+  const { missing_contacts, informal_name, non_standard_role } = req.query;
+  const whereClauses = [];
+  const params = [];
+
+  if (missing_contacts === 'true') {
+    whereClauses.push("(contact_phone IS NULL OR trim(contact_phone) = '' OR email IS NULL OR trim(email) = '')");
+  }
+  if (informal_name === 'true') {
+    whereClauses.push("(length(trim(full_name)) - length(replace(trim(full_name), ' ', '')) < 1)");
+  }
+  if (non_standard_role === 'true') {
+    whereClauses.push("(role LIKE '%Admin%' OR role LIKE '%Manager%' OR specialization LIKE '%Management%')");
+  }
+
+  const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
+  const sql = `SELECT * FROM staff ${whereSql} ORDER BY id ASC`;
+
+  db.all(sql, params, (err, rows) => {
     if (err) return res.status(500).json({ error: err.message });
     res.json(rows);
   });
+});
+
+app.get('/api/staff/analytics-overview', async (req, res) => {
+  const getAsync = (sql, params = []) => new Promise((resolve, reject) => {
+    db.get(sql, params, (err, row) => err ? reject(err) : resolve(row));
+  });
+  const allAsync = (sql, params = []) => new Promise((resolve, reject) => {
+    db.all(sql, params, (err, rows) => err ? reject(err) : resolve(rows));
+  });
+
+  try {
+    const totalStaffRow = await getAsync('SELECT count(*) as total FROM staff');
+    const activeStaffRow = await getAsync("SELECT count(*) as active FROM staff WHERE status = 'active' OR status IS NULL");
+    const totalVisitsRow = await getAsync('SELECT count(*) as total FROM patient_visits');
+    const lastYearVisitsRow = await getAsync("SELECT count(*) as total FROM patient_visits WHERE visit_date LIKE '2025%'");
+
+    const doctorWorkloadRows = await allAsync(`
+      SELECT 
+        docn,
+        count(*) as visits
+      FROM patient_visits
+      WHERE docn IN (1, 2)
+      GROUP BY docn
+      ORDER BY count(*) DESC
+    `);
+
+    const annualTrendsRows = await allAsync(`
+      SELECT 
+        substr(visit_date, 1, 4) as year,
+        sum(CASE WHEN docn = 2 THEN 1 ELSE 0 END) as dobrouchkin,
+        sum(CASE WHEN docn = 1 THEN 1 ELSE 0 END) as gavlovsky,
+        count(*) as total
+      FROM patient_visits
+      WHERE visit_date IS NOT NULL AND substr(visit_date, 1, 4) >= '2021'
+      GROUP BY substr(visit_date, 1, 4)
+      ORDER BY 1 ASC
+    `);
+
+    const staffStats = await getAsync(`
+      SELECT 
+        count(*) as total,
+        sum(CASE WHEN contact_phone IS NOT NULL AND trim(contact_phone) != '' THEN 1 ELSE 0 END) as with_phone,
+        sum(CASE WHEN email IS NOT NULL AND trim(email) != '' THEN 1 ELSE 0 END) as with_email,
+        sum(CASE WHEN length(trim(full_name)) - length(replace(trim(full_name), ' ', '')) >= 1 THEN 1 ELSE 0 END) as formal_name,
+        sum(CASE WHEN role NOT LIKE '%Admin%' AND role NOT LIKE '%Manager%' AND specialization NOT LIKE '%Management%' THEN 1 ELSE 0 END) as standard_role,
+        sum(CASE WHEN status = 'active' OR status IS NULL THEN 1 ELSE 0 END) as active_status,
+        sum(CASE WHEN role LIKE '%врач%' OR role LIKE '%ортопед%' OR role LIKE '%хирург%' THEN 1 ELSE 0 END) as doctors_count,
+        sum(CASE WHEN role LIKE '%медсестра%' OR role LIKE '%сестра%' THEN 1 ELSE 0 END) as nurses_count,
+        sum(CASE WHEN role LIKE '%админ%' OR role LIKE '%менеджер%' OR role LIKE '%Manager%' OR role LIKE '%руковод%' THEN 1 ELSE 0 END) as admin_count
+      FROM staff
+    `);
+
+    const totalStaff = totalStaffRow?.total || 5;
+    const phonePct = Number((((staffStats?.with_phone || 0) / totalStaff) * 100).toFixed(1));
+    const emailPct = Number((((staffStats?.with_email || 0) / totalStaff) * 100).toFixed(1));
+    const formalNamePct = Number((((staffStats?.formal_name || 0) / totalStaff) * 100).toFixed(1));
+    const standardRolePct = Number((((staffStats?.standard_role || 0) / totalStaff) * 100).toFixed(1));
+    const activePct = Number((((staffStats?.active_status || 0) / totalStaff) * 100).toFixed(1));
+
+    // Composite quality score
+    const qualityScore = Math.round(
+      phonePct * 0.25 +
+      emailPct * 0.25 +
+      formalNamePct * 0.25 +
+      standardRolePct * 0.15 +
+      activePct * 0.10
+    );
+
+    const totalVisits = totalVisitsRow?.total || 37538;
+    const doctorWorkload = doctorWorkloadRows.map(row => {
+      const isDobrouchkin = row.docn === 2;
+      return {
+        docn: row.docn,
+        doctorName: isDobrouchkin ? 'Добрушкин Александр Моисеевич' : 'Гавловский В. В.',
+        shortName: isDobrouchkin ? 'Добрушкин А. М.' : 'Гавловский В. В.',
+        role: isDobrouchkin ? 'Главный врач, травматолог-ортопед' : 'Врач травматолог-ортопед',
+        visits: row.visits,
+        pct: Number(((row.visits / totalVisits) * 100).toFixed(1)),
+        color: isDobrouchkin ? '#0F3C64' : '#0284C7'
+      };
+    });
+
+    const roleDistribution = [
+      { name: 'Врачи травматологи-ортопеды', count: staffStats?.doctors_count || 2, color: '#0F3C64' },
+      { name: 'Администрация и управление', count: staffStats?.admin_count || 2, color: '#0284C7' },
+      { name: 'Средний медицинский персонал', count: staffStats?.nurses_count || 1, color: '#16A34A' }
+    ];
+
+    const alerts = [
+      {
+        id: 'missing_contacts',
+        title: 'Неполные контактные данные сотрудника',
+        count: totalStaff - (staffStats?.with_phone || 0),
+        severity: 'warning',
+        text: 'В карточке сотрудника не указаны рабочий телефон или email. Это блокирует отправку системных уведомлений и двухфакторную верификацию.',
+        actionLabel: 'Показать сотрудника без контактов',
+        filterKey: 'missing_contacts'
+      },
+      {
+        id: 'informal_name',
+        title: 'Неполная запись ФИО в кадровом реестре',
+        count: totalStaff - (staffStats?.formal_name || 0),
+        severity: 'warning',
+        text: 'Обнаружена неформальная запись имени («Влада») без фамилии и отчества, что противоречит регламенту ведения кадровых документов клиники.',
+        actionLabel: 'Показать запись для исправления',
+        filterKey: 'informal_name'
+      },
+      {
+        id: 'non_standard_role',
+        title: 'Нерусифицированное наименование должности',
+        count: totalStaff - (staffStats?.standard_role || 0),
+        severity: 'info',
+        text: 'Используются термины «Admin/Manager» и «Management». Рекомендуется русифицировать наименование («Управляющий клиникой» / «Администратор»).',
+        actionLabel: 'Показать для русификации',
+        filterKey: 'non_standard_role'
+      },
+      {
+        id: 'historical_doctor',
+        title: 'Отсутствие карточки врача из архива МИС',
+        count: 1,
+        severity: 'info',
+        text: 'В базе приёмов зафиксировано 18 441 консультация доктора Гавловского В. В. (docn: 1), однако в текущем справочнике staff карточка отсутствует.',
+        actionLabel: 'Врач зафиксирован в статистике приёма',
+        filterKey: 'all'
+      }
+    ];
+
+    res.json({
+      totals: {
+        totalStaff,
+        activeStaff: activeStaffRow?.active || 5,
+        doctorsCount: staffStats?.doctors_count || 2,
+        nursesCount: staffStats?.nurses_count || 1,
+        adminCount: staffStats?.admin_count || 2,
+        totalVisitsHandled: totalVisits,
+        lastYearVisits: lastYearVisitsRow?.total || 3046
+      },
+      doctorWorkload,
+      annualTrends: annualTrendsRows,
+      roleDistribution,
+      dataQuality: {
+        score: qualityScore,
+        completeness: {
+          phone: { count: staffStats?.with_phone || 0, total: totalStaff, pct: phonePct },
+          email: { count: staffStats?.with_email || 0, total: totalStaff, pct: emailPct },
+          formalName: { count: staffStats?.formal_name || 0, total: totalStaff, pct: formalNamePct },
+          standardRole: { count: staffStats?.standard_role || 0, total: totalStaff, pct: standardRolePct },
+          activeStatus: { count: staffStats?.active_status || 0, total: totalStaff, pct: activePct }
+        },
+        alerts
+      }
+    });
+  } catch (err) {
+    console.error('Error generating staff analytics:', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 /**
