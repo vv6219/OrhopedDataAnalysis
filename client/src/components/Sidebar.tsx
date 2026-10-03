@@ -116,30 +116,46 @@ export default function Sidebar() {
         }
       }}
     >
-      {/* Top Header / Clinic Brand (Click always leads to BI Dashboard) */}
-      <Toolbar sx={{ height: 90, display: 'flex', alignItems: 'center', p: 2, flexShrink: 0 }}>
-        <Box
-          sx={{ display: 'flex', alignItems: 'center', cursor: 'pointer', width: '100%' }}
-          onClick={() => navigate('/')}
-        >
-          <Tooltip title="На главный экран (BI Дашборд)">
-            <img src="/MainLogoTransparent.png" alt="Логотип" style={{ width: 46, height: 46, marginRight: 12 }} />
-          </Tooltip>
-          <Box sx={{ display: 'flex', flexDirection: 'column' }}>
-            <Typography variant="body2" sx={{ fontWeight: 800, color: '#0F3C64', lineHeight: 1.2, fontSize: '0.82rem' }}>
-              Центр Ортопедии
-            </Typography>
-            <Typography variant="body2" sx={{ fontWeight: 800, color: '#0F3C64', lineHeight: 1.2, fontSize: '0.82rem' }}>
-              и Травматологии
-            </Typography>
-            <Typography variant="caption" sx={{ fontWeight: 600, color: '#156C9C', lineHeight: 1.2, mt: 0.3 }}>
-              Добрушкина
-            </Typography>
-            <Typography variant="caption" sx={{ fontWeight: 500, color: '#718096', lineHeight: 1.2 }}>
-              в Сочи
-            </Typography>
+      {/* Top Header / Clinic Brand (Click opens official website in new tab) */}
+      <Toolbar sx={{ height: 90, display: 'flex', alignItems: 'center', p: 1.5, flexShrink: 0 }}>
+        <Tooltip title="Открыть официальный сайт: orthoped-sochi.ru (в новой вкладке)" placement="right" arrow>
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              cursor: 'pointer',
+              width: '100%',
+              borderRadius: 2,
+              p: 0.5,
+              transition: 'all 0.2s ease',
+              '&:hover': {
+                bgcolor: 'rgba(15, 60, 100, 0.05)',
+                transform: 'translateY(-1px)'
+              }
+            }}
+            onClick={() => window.open('https://orthoped-sochi.ru', '_blank', 'noopener,noreferrer')}
+          >
+            <img
+              src="/MainLogoTransparent.png"
+              alt="Логотип Центра Ортопедии и Травматологии"
+              style={{ width: 46, height: 46, marginRight: 12, objectFit: 'contain' }}
+            />
+            <Box sx={{ display: 'flex', flexDirection: 'column' }}>
+              <Typography variant="body2" sx={{ fontWeight: 800, color: '#0F3C64', lineHeight: 1.2, fontSize: '0.82rem' }}>
+                Центр Ортопедии
+              </Typography>
+              <Typography variant="body2" sx={{ fontWeight: 800, color: '#0F3C64', lineHeight: 1.2, fontSize: '0.82rem' }}>
+                и Травматологии
+              </Typography>
+              <Typography variant="caption" sx={{ fontWeight: 600, color: '#156C9C', lineHeight: 1.2, mt: 0.3 }}>
+                Добрушкина
+              </Typography>
+              <Typography variant="caption" sx={{ fontWeight: 500, color: '#718096', lineHeight: 1.2 }}>
+                в Сочи
+              </Typography>
+            </Box>
           </Box>
-        </Box>
+        </Tooltip>
       </Toolbar>
 
       {/* Sticky Top Header: Search Field + Expand/Collapse All Controls */}
