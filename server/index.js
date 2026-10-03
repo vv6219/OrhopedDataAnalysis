@@ -12,6 +12,9 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+const schedulingRoutes = require('./schedulingRoutes');
+app.use('/api/scheduling', schedulingRoutes);
+
 // ============================================================================
 // Swagger OpenAPI 3.0 Configuration
 // ============================================================================

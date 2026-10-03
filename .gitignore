@@ -7,5 +7,5 @@ client/node_modules/
 .vscode/
 .agents/
 Demo/
-*.sqlite-wal
-*.sqlite-shm
+**/*.sqlite-wal
+**/*.sqlite-shm

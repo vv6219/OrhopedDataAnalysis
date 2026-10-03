@@ -1,4 +1,4 @@
-import React from 'react';
+import type {} from '@mui/x-data-grid/themeAugmentation';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { Box, CssBaseline, ThemeProvider, createTheme } from '@mui/material';
 import Sidebar from './components/Sidebar';
@@ -13,6 +13,7 @@ import SqliteStudio from './pages/SqliteStudio';
 import Staff from './pages/Staff';
 import FirebirdSync from './pages/FirebirdSync';
 import OperationsAnalytics from './pages/OperationsAnalytics';
+import Scheduling from './pages/Scheduling';
 
 const theme = createTheme({
   palette: {
@@ -182,7 +183,7 @@ function App() {
                 <Route path="/" element={<Dashboard />} />
                 <Route path="/analytics/operations" element={<OperationsAnalytics />} />
                 <Route path="/checkout" element={<CheckoutWizard />} />
-                <Route path="/scheduling" element={<CheckoutWizard />} />
+                <Route path="/scheduling" element={<Scheduling />} />
                 <Route path="/patients" element={<Patients />} />
                 <Route path="/staff" element={<Staff />} />
                 <Route path="/operations" element={<Operations />} />
