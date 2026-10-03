@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect } from 'react';
+import { useRef, useState, useEffect, forwardRef } from 'react';
 import {
   Box,
   Paper,
@@ -58,7 +58,7 @@ interface SchedulingReportsProps {
 // -----------------------------------------------------------------------------
 // 1. PRINTABLE COMPONENT: Appointment Ticket (Талон предварительной записи)
 // -----------------------------------------------------------------------------
-export const AppointmentTicket = React.forwardRef<
+export const AppointmentTicket = forwardRef<
   HTMLDivElement,
   { appointment: Appointment; clinicInfo?: ClinicInfo }
 >(({ appointment, clinicInfo = DEFAULT_CLINIC_INFO }, ref) => {
@@ -360,7 +360,7 @@ export const AppointmentTicket = React.forwardRef<
 // -----------------------------------------------------------------------------
 // 2. PRINTABLE COMPONENT: Doctor's Daily Appointment Roster (Суточный лист врача)
 // -----------------------------------------------------------------------------
-export const DoctorDailyRoster = React.forwardRef<
+export const DoctorDailyRoster = forwardRef<
   HTMLDivElement,
   {
     doctor: Doctor;
