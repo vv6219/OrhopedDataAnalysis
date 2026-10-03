@@ -9,12 +9,18 @@ import InventoryIcon from '@mui/icons-material/Inventory';
 import SettingsIcon from '@mui/icons-material/Settings';
 import AutoAwesomeMotionIcon from '@mui/icons-material/AutoAwesomeMotion';
 import FolderSpecialIcon from '@mui/icons-material/FolderSpecial';
+import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
+import SyncAltIcon from '@mui/icons-material/SyncAlt';
+import StorageIcon from '@mui/icons-material/Storage';
+import CodeIcon from '@mui/icons-material/Code';
+import BarChartIcon from '@mui/icons-material/BarChart';
 
 export interface NavItem {
   text: string;
   path: string;
   icon: React.ReactElement;
   tooltip: string;
+  isExternal?: boolean;
 }
 
 export interface NavGroup {
@@ -32,12 +38,6 @@ export const navigationGroups: NavGroup[] = [
     icon: <AutoAwesomeMotionIcon sx={{ fontSize: 20 }} />,
     defaultOpen: true,
     items: [
-      {
-        text: 'BI Дашборд',
-        path: '/',
-        icon: <DashboardIcon sx={{ fontSize: 20 }} />,
-        tooltip: 'Главный экран аналитики и KPI'
-      },
       {
         text: 'Оформление визита (Wizard)',
         path: '/checkout',
@@ -95,6 +95,53 @@ export const navigationGroups: NavGroup[] = [
         tooltip: 'Системные настройки и коэффициенты'
       }
     ]
+  },
+  {
+    id: 'bi',
+    title: 'Аналитика',
+    icon: <BarChartIcon sx={{ fontSize: 20 }} />,
+    defaultOpen: true,
+    items: [
+      {
+        text: 'BI Дашборд',
+        path: '/',
+        icon: <DashboardIcon sx={{ fontSize: 20 }} />,
+        tooltip: 'Главный экран аналитики и KPI'
+      },
+      {
+        text: 'Анализ операций',
+        path: '/analytics/operations',
+        icon: <AssessmentIcon sx={{ fontSize: 20 }} />,
+        tooltip: 'Глубокий финансовый и маржинальный анализ операций'
+      }
+    ]
+  },
+  {
+    id: 'administrator',
+    title: 'Администратор',
+    icon: <AdminPanelSettingsIcon sx={{ fontSize: 20 }} />,
+    defaultOpen: true,
+    items: [
+      {
+        text: 'FireBird Sync',
+        path: '/admin/firebird-sync',
+        icon: <SyncAltIcon sx={{ fontSize: 20 }} />,
+        tooltip: 'Мастер синхронизации медицинской БД Firebird (MEDICAL.FDB)'
+      },
+      {
+        text: 'SQLite Studio (БД)',
+        path: '/sqlite-studio',
+        icon: <StorageIcon sx={{ fontSize: 20 }} />,
+        tooltip: 'Менеджер базы данных SQLite: таблицы, структура, SQL-консоль'
+      },
+      {
+        text: 'OpenAPI (Swagger)',
+        path: 'http://localhost:5000/api-docs',
+        icon: <CodeIcon sx={{ fontSize: 20 }} />,
+        tooltip: 'Интерактивная REST API документация Swagger UI (в новой вкладке)',
+        isExternal: true
+      }
+    ]
   }
 ];
 
@@ -108,8 +155,14 @@ export interface RouteMeta {
 export const routeMetaMap: Record<string, RouteMeta> = {
   '/': {
     title: 'BI Дашборд',
-    groupTitle: 'Операции и Мастеры',
-    groupId: 'operations_and_wizards',
+    groupTitle: 'Аналитика',
+    groupId: 'bi',
+    parentPath: '/'
+  },
+  '/analytics/operations': {
+    title: 'Анализ операций и услуг',
+    groupTitle: 'Аналитика',
+    groupId: 'bi',
     parentPath: '/'
   },
   '/checkout': {
@@ -160,16 +213,22 @@ export const routeMetaMap: Record<string, RouteMeta> = {
     groupId: 'base_entities',
     parentPath: '/'
   },
+  '/admin/firebird-sync': {
+    title: 'FireBird Sync (Мастер синхронизации)',
+    groupTitle: 'Администратор',
+    groupId: 'administrator',
+    parentPath: '/'
+  },
   '/sqlite-studio': {
     title: 'SQLite Studio (БД)',
-    groupTitle: 'Системные Инструменты',
-    groupId: 'system_tools',
+    groupTitle: 'Администратор',
+    groupId: 'administrator',
     parentPath: '/'
   },
   '/db-studio': {
     title: 'SQLite Studio (БД)',
-    groupTitle: 'Системные Инструменты',
-    groupId: 'system_tools',
+    groupTitle: 'Администратор',
+    groupId: 'administrator',
     parentPath: '/'
   }
 };

@@ -3,6 +3,10 @@ dist/
 build/
 .env
 db/*.sqlite
+DB/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
 server/node_modules/
 client/node_modules/
 server/db/*.sqlite

@@ -11,6 +11,8 @@ import Operations from './pages/Operations';
 import Parameters from './pages/Parameters';
 import SqliteStudio from './pages/SqliteStudio';
 import Staff from './pages/Staff';
+import FirebirdSync from './pages/FirebirdSync';
+import OperationsAnalytics from './pages/OperationsAnalytics';
 
 const theme = createTheme({
   palette: {
@@ -178,6 +180,7 @@ function App() {
               <Routes>
                 {/* Default start on BI Dashboard */}
                 <Route path="/" element={<Dashboard />} />
+                <Route path="/analytics/operations" element={<OperationsAnalytics />} />
                 <Route path="/checkout" element={<CheckoutWizard />} />
                 <Route path="/scheduling" element={<CheckoutWizard />} />
                 <Route path="/patients" element={<Patients />} />
@@ -186,6 +189,7 @@ function App() {
                 <Route path="/reports" element={<Operations />} />
                 <Route path="/inventory" element={<Inventory />} />
                 <Route path="/parameters" element={<Parameters />} />
+                <Route path="/admin/firebird-sync" element={<FirebirdSync />} />
                 <Route path="/sqlite-studio" element={<SqliteStudio />} />
                 <Route path="/db-studio" element={<SqliteStudio />} />
                 {/* Fallback to BI Dashboard */}

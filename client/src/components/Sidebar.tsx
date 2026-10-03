@@ -78,8 +78,12 @@ export default function Sidebar() {
 
   const isDbActive = location.pathname === '/sqlite-studio' || location.pathname === '/db-studio';
 
-  const handleItemClick = (path: string) => {
-    navigate(path);
+  const handleItemClick = (item: { path: string; isExternal?: boolean }) => {
+    if (item.isExternal || item.path.startsWith('http')) {
+      window.open(item.path, '_blank', 'noopener,noreferrer');
+    } else {
+      navigate(item.path);
+    }
   };
 
   // Filter groups and items based on search term
@@ -296,7 +300,7 @@ export default function Sidebar() {
                         <Tooltip title={item.tooltip} placement="right" key={item.text} arrow>
                           <ListItem
                             button
-                            onClick={() => handleItemClick(item.path)}
+                            onClick={() => handleItemClick(item)}
                             sx={{
                               cursor: 'pointer',
                               borderRadius: '8px',
@@ -326,6 +330,9 @@ export default function Sidebar() {
                                 color: isActive ? '#0F3C64' : 'inherit'
                               }}
                             />
+                            {item.isExternal && (
+                              <OpenInNewIcon sx={{ fontSize: 13, color: '#A0AEC0', ml: 'auto' }} />
+                            )}
                           </ListItem>
                         </Tooltip>
                       );
@@ -338,153 +345,42 @@ export default function Sidebar() {
 
           {filteredGroups.length === 0 && (
             <Typography variant="body2" sx={{ p: 2, textAlign: 'center', color: 'text.secondary', fontSize: '0.82rem' }}>
-              Разделы не найдены
+              Ничего не найдено
             </Typography>
           )}
         </List>
       </Box>
 
-      {/* FREEZED DOWN SIDEBAR MENU: Docked Tools (SQLite Studio & OpenAPI Swagger) */}
+      {/* Compact System & Database Status Footer */}
       <Box
         sx={{
           flexShrink: 0,
           borderTop: '1px solid #E2E8F0',
-          bgcolor: '#FFFFFF',
-          p: 1.5,
+          bgcolor: '#FAFCFE',
+          px: 2,
+          py: 1.5,
           display: 'flex',
-          flexDirection: 'column',
-          gap: 1,
-          boxShadow: '0 -4px 16px rgba(0, 0, 0, 0.03)'
+          alignItems: 'center',
+          justifyContent: 'space-between'
         }}
       >
-        <Typography
-          variant="caption"
-          sx={{
-            px: 0.5,
-            fontWeight: 700,
-            letterSpacing: '0.6px',
-            textTransform: 'uppercase',
-            color: '#718096',
-            fontSize: '0.66rem'
-          }}
-        >
-          Системные Инструменты
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Box
+            sx={{
+              width: 8,
+              height: 8,
+              borderRadius: '50%',
+              bgcolor: '#38A169',
+              boxShadow: '0 0 0 2px rgba(56, 161, 105, 0.25)'
+            }}
+          />
+          <Typography variant="caption" sx={{ fontWeight: 600, color: '#4A5568', fontSize: '0.72rem' }}>
+            SQLite + Firebird
+          </Typography>
+        </Box>
+        <Typography variant="caption" sx={{ color: '#A0AEC0', fontSize: '0.68rem', fontWeight: 600 }}>
+          v1.2.0
         </Typography>
-
-        {/* 1. SQLite Studio Docked Item (Opens in new tab) */}
-        <Tooltip title="Открыть менеджер базы данных SQLite Studio в новой вкладке" placement="right" arrow>
-          <Paper
-            elevation={isDbActive ? 2 : 0}
-            onClick={() => window.open('/sqlite-studio', '_blank', 'noopener,noreferrer')}
-            sx={{
-              p: 1.2,
-              borderRadius: 2,
-              cursor: 'pointer',
-              border: isDbActive ? '1.5px solid #0F3C64' : '1px solid #E2E8F0',
-              bgcolor: isDbActive ? '#F0F6FA' : '#FAFCFE',
-              transition: 'all 0.2s ease',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              '&:hover': {
-                bgcolor: '#F0F6FA',
-                borderColor: '#156C9C',
-                transform: 'translateY(-1px)',
-                boxShadow: '0 4px 12px rgba(15, 60, 100, 0.08)'
-              }
-            }}
-          >
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <Box
-                sx={{
-                  width: 32,
-                  height: 32,
-                  borderRadius: 1.5,
-                  bgcolor: '#0F3C64',
-                  color: '#FFFFFF',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center'
-                }}
-              >
-                <StorageIcon sx={{ fontSize: 18 }} />
-              </Box>
-              <Box>
-                <Typography variant="body2" sx={{ fontWeight: 700, color: '#0F3C64', fontSize: '0.82rem', lineHeight: 1.2 }}>
-                  SQLite Studio
-                </Typography>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.2 }}>
-                  <CircleIcon sx={{ fontSize: 7, color: '#38A169' }} />
-                  <Typography variant="caption" sx={{ color: '#4A5568', fontSize: '0.68rem', fontWeight: 500 }}>
-                    Менеджер БД (15 табл.)
-                  </Typography>
-                </Box>
-              </Box>
-            </Box>
-            <IconButton
-              size="small"
-              sx={{ color: '#718096', p: 0.5, '&:hover': { color: '#0F3C64' } }}
-            >
-              <OpenInNewIcon sx={{ fontSize: 16 }} />
-            </IconButton>
-          </Paper>
-        </Tooltip>
-
-        {/* 2. OpenAPI / Swagger Docked Item (Opens in new tab) */}
-        <Tooltip title="Открыть интерактивную документацию Swagger UI (REST API) в новой вкладке" placement="right" arrow>
-          <Paper
-            elevation={0}
-            onClick={() => window.open('http://localhost:5000/api-docs', '_blank', 'noopener,noreferrer')}
-            sx={{
-              p: 1.2,
-              borderRadius: 2,
-              cursor: 'pointer',
-              border: '1px solid #E2E8F0',
-              bgcolor: '#FAFCFE',
-              transition: 'all 0.2s ease',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              '&:hover': {
-                bgcolor: '#EBF8FF',
-                borderColor: '#3182CE',
-                transform: 'translateY(-1px)',
-                boxShadow: '0 4px 12px rgba(49, 130, 206, 0.15)'
-              }
-            }}
-          >
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <Box
-                sx={{
-                  width: 32,
-                  height: 32,
-                  borderRadius: 1.5,
-                  bgcolor: '#2B6CB0',
-                  color: '#FFFFFF',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center'
-                }}
-              >
-                <CodeIcon sx={{ fontSize: 18 }} />
-              </Box>
-              <Box>
-                <Typography variant="body2" sx={{ fontWeight: 700, color: '#2B6CB0', fontSize: '0.82rem', lineHeight: 1.2 }}>
-                  OpenAPI (Swagger)
-                </Typography>
-                <Typography variant="caption" sx={{ color: '#4A5568', fontSize: '0.68rem', fontWeight: 500 }}>
-                  REST API документация
-                </Typography>
-              </Box>
-            </Box>
-            <IconButton
-              size="small"
-              sx={{ color: '#718096', p: 0.5, '&:hover': { color: '#2B6CB0' } }}
-            >
-              <OpenInNewIcon sx={{ fontSize: 16 }} />
-            </IconButton>
-          </Paper>
-        </Tooltip>
       </Box>
     </Drawer>
   );

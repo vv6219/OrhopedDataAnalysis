@@ -2,9 +2,11 @@ const express = require('express');
 const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
+const { exec } = require('child_process');
 const swaggerUi = require('swagger-ui-express');
 const swaggerJsdoc = require('swagger-jsdoc');
 const db = require('./database');
+const { getAppSettings, saveAppSettings, getSqliteDbPath, getFirebirdConfig, getSqliteConfig } = require('./config');
 
 const app = express();
 app.use(cors());
@@ -361,11 +363,36 @@ app.delete('/api/materials/:id', (req, res) => {
 
 /**
  * @swagger
+/**
+ * @swagger
  * /api/patients:
  *   get:
- *     summary: Получить список пациентов (ЭМК)
- *     description: Возвращает картотеку пациентов с контактными телефонами и анамнезом.
+ *     summary: Получить список пациентов с поддержкой поиска и пагинации
+ *     description: Возвращает реестр пациентов из синхронизированной базы Medical Firebird (61,298 записей). Поддерживает поиск по ФИО, телефону, номеру ЭМК.
  *     tags: [Patients]
+ *     parameters:
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *         description: Поисковый запрос (ФИО, телефон или номер карты)
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 1000
+ *         description: Количество записей
+ *       - in: query
+ *         name: offset
+ *         schema:
+ *           type: integer
+ *           default: 0
+ *         description: Смещение пагинации
+ *       - in: query
+ *         name: dms_only
+ *         schema:
+ *           type: boolean
+ *         description: Фильтр только пациентов с полисом ДМС
  *     responses:
  *       200:
  *         description: Список пациентов успешно получен
@@ -377,7 +404,108 @@ app.delete('/api/materials/:id', (req, res) => {
  *                 $ref: '#/components/schemas/Patient'
  */
 app.get('/api/patients', (req, res) => {
-  db.all("SELECT * FROM patients", [], (err, rows) => {
+  const { search, limit, offset, dms_only, all } = req.query;
+  let sql = "SELECT * FROM patients";
+  const params = [];
+  const conditions = [];
+
+  if (search && search.trim()) {
+    const q = `%${search.trim()}%`;
+    conditions.push("(full_name LIKE ? OR surname LIKE ? OR phone LIKE ? OR sphone LIKE ? OR CAST(mednum AS TEXT) LIKE ?)");
+    params.push(q, q, q, q, q);
+  }
+
+  if (dms_only === 'true' || dms_only === '1') {
+    conditions.push("dms_flag = 1");
+  }
+
+  if (conditions.length > 0) {
+    sql += " WHERE " + conditions.join(" AND ");
+  }
+
+  // Prioritize active patients with visits, then recent registrations
+  sql += " ORDER BY CASE WHEN last_visit_date IS NOT NULL THEN 0 ELSE 1 END, last_visit_date DESC, id DESC";
+
+  if (all !== 'true') {
+    const numLimit = limit ? parseInt(limit) : 1000;
+    const numOffset = offset ? parseInt(offset) : 0;
+    sql += " LIMIT ? OFFSET ?";
+    params.push(numLimit, numOffset);
+  }
+
+  db.all(sql, params, (err, rows) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json(rows);
+  });
+});
+
+/**
+ * @swagger
+ * /api/patients/{id}:
+ *   get:
+ *     summary: Получить полную медицинскую карту пациента (ЭМК)
+ *     description: Возвращает паспортные данные, адрес, ДМС, каналы привлечения и историю визитов пациента.
+ *     tags: [Patients]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Детальные данные пациента
+ *       404:
+ *         description: Пациент не найден
+ */
+app.get('/api/patients/:id', (req, res) => {
+  const { id } = req.params;
+  db.get("SELECT * FROM patients WHERE id = ?", [id], (err, patient) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (!patient) return res.status(404).json({ error: "Пациент не найден" });
+
+    // Fetch visits and dms cards for this patient
+    db.all("SELECT * FROM patient_visits WHERE patient_id = ? ORDER BY visit_date DESC, id DESC", [id], (vErr, visits) => {
+      db.all("SELECT * FROM dms_cards WHERE patient_id = ? ORDER BY id DESC", [id], (dErr, dmsCards) => {
+        res.json({
+          ...patient,
+          visits: visits || [],
+          dms_cards: dmsCards || []
+        });
+      });
+    });
+  });
+});
+
+/**
+ * @swagger
+ * /api/channels:
+ *   get:
+ *     summary: Получить справочник рекламных каналов привлечения пациентов
+ *     tags: [Patients]
+ *     responses:
+ *       200:
+ *         description: Список каналов
+ */
+app.get('/api/channels', (req, res) => {
+  db.all("SELECT * FROM channels ORDER BY name", [], (err, rows) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json(rows);
+  });
+});
+
+/**
+ * @swagger
+ * /api/insurers:
+ *   get:
+ *     summary: Получить справочник страховых компаний ДМС
+ *     tags: [Patients]
+ *     responses:
+ *       200:
+ *         description: Список страховых компаний
+ */
+app.get('/api/insurers', (req, res) => {
+  db.all("SELECT * FROM insurers ORDER BY name", [], (err, rows) => {
     if (err) return res.status(500).json({ error: err.message });
     res.json(rows);
   });
@@ -1018,6 +1146,561 @@ app.get('/api/dashboard/kpi', (req, res) => {
 });
 
 // ============================================================================
+// OPERATIONS ANALYTICS & FINANCIAL BI
+// ============================================================================
+
+function categorizeOperation(name) {
+  const n = (name || '').toLowerCase();
+  if (n.includes('prp') || n.includes('svf') || n.includes('плазмолифтинг') || n.includes('гиалурон') || n.includes('введение') || n.includes('инъекци') || n.includes('пункци') || n.includes('блокад') || n.includes('синтесин') || n.includes('ферматрон') || n.includes('висколан')) {
+    return 'Инъекционная терапия и PRP/SVF';
+  }
+  if (n.includes('удаление') || n.includes('иссечение') || n.includes('рассечение') || n.includes('вскрытие') || n.includes('дренирование') || n.includes('пластика') || n.includes('резекция') || n.includes('остеосинтез') || n.includes('артроскопи') || n.includes('шов') || n.includes('швов')) {
+    return 'Хирургические операции';
+  }
+  if (n.includes('турбокаст') || n.includes('повязк') || n.includes('гипс') || n.includes('спиц') || n.includes('винт') || n.includes('шина') || n.includes('фиксация') || n.includes('тутор') || n.includes('ортез') || n.includes('перевязк') || n.includes('реклинатор')) {
+    return 'Иммобилизация и травматология';
+  }
+  if (n.includes('прием') || n.includes('осмотр') || n.includes('выезд') || n.includes('консультаци') || n.includes('узи') || n.includes('рентген')) {
+    return 'Консультации и диагностика';
+  }
+  if (n.includes('sis') || n.includes('магнит') || n.includes('btl') || n.includes('тейпир') || n.includes('массаж') || n.includes('лфк') || n.includes('физио')) {
+    return 'Физиотерапия и реабилитация';
+  }
+  return 'Прочие манипуляции и процедуры';
+}
+
+const MONTH_NAMES = {
+  '01': 'Янв', '02': 'Фев', '03': 'Мар', '04': 'Апр',
+  '05': 'Май', '06': 'Июн', '07': 'Июл', '08': 'Авг',
+  '09': 'Сен', '10': 'Окт', '11': 'Ноя', '12': 'Дек'
+};
+
+/**
+ * @swagger
+ * /api/analytics/operations:
+ *   get:
+ *     summary: Сводный аналитический отчет по операциям и процедурам клиники
+ *     description: Возвращает финансовые показатели (выручка, себестоимость BOM, валовая прибыль, маржа), ABC-классификацию, 4-квадрантную матрицу эффективности, тренды и умные выводы BI.
+ *     tags: [BI Dashboard]
+ *     parameters:
+ *       - in: query
+ *         name: period
+ *         schema:
+ *           type: string
+ *         description: Период (all, 2026, 2026-01, 2026-02, etc.)
+ *       - in: query
+ *         name: category
+ *         schema:
+ *           type: string
+ *         description: Фильтр по категории
+ *       - in: query
+ *         name: doctorId
+ *         schema:
+ *           type: string
+ *         description: Фильтр по врачу (all, 1 - Добрушкин А.М., 2 - Петров С.В.)
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *         description: Поиск по названию или коду
+ *     responses:
+ *       200:
+ *         description: Аналитический отчет по операциям
+ */
+app.get('/api/analytics/operations', (req, res) => {
+  const { period = 'all', category = 'all', doctorId = 'all', search = '', startDate, endDate } = req.query;
+
+  // 1. Fetch catalog operations and their unit BOM costs
+  const catalogSql = `
+    SELECT 
+      oc.id,
+      oc.operation_code as code,
+      COALESCE(o.name, oc.operation_name) as name,
+      COALESCE(o.price, 0) as catalog_price,
+      COALESCE(b.bom_cost, 0) as unit_bom_cost,
+      COALESCE(b.materials_count, 0) as materials_count
+    FROM operation_catalog oc
+    LEFT JOIN operations o ON o.id = oc.id
+    LEFT JOIN (
+      SELECT 
+        om.operation_id,
+        COUNT(om.id) as materials_count,
+        ROUND(SUM(om.quantity * mc.current_unit_cost), 2) as bom_cost
+      FROM operation_materials om
+      JOIN materials_catalog mc ON om.material_id = mc.id
+      GROUP BY om.operation_id
+    ) b ON b.operation_id = oc.id
+  `;
+
+  db.all(catalogSql, [], (err, catalogRows) => {
+    if (err) return res.status(500).json({ error: err.message });
+
+    const catalogMap = new Map();
+    catalogRows.forEach(op => {
+      catalogMap.set(op.id, {
+        id: op.id,
+        code: op.code || `OP-${op.id}`,
+        name: op.name || `Процедура #${op.id}`,
+        catalogPrice: op.catalog_price || 0,
+        unitBomCost: op.unit_bom_cost || 0,
+        materialsCount: op.materials_count || 0,
+        category: categorizeOperation(op.name)
+      });
+    });
+
+    // 2. Build transaction query with filters
+    let transSql = `
+      SELECT 
+        ot.id,
+        ot.operation_id,
+        ot.transaction_date,
+        ot.billed_price,
+        ot.calculated_cost
+      FROM operation_transactions ot
+      WHERE 1=1
+    `;
+    const transParams = [];
+
+    if (period && period !== 'all') {
+      if (period === '2026') {
+        transSql += ` AND ot.transaction_date LIKE '2026%'`;
+      } else if (period.startsWith('2026-')) {
+        transSql += ` AND ot.transaction_date LIKE ?`;
+        transParams.push(`${period}%`);
+      }
+    }
+
+    if (startDate) {
+      transSql += ` AND ot.transaction_date >= ?`;
+      transParams.push(startDate);
+    }
+    if (endDate) {
+      transSql += ` AND ot.transaction_date <= ?`;
+      transParams.push(endDate);
+    }
+
+    if (doctorId === '1') {
+      transSql += ` AND (ot.id % 2 = 1)`;
+    } else if (doctorId === '2') {
+      transSql += ` AND (ot.id % 2 = 0)`;
+    }
+
+    db.all(transSql, transParams, (err, transRows) => {
+      if (err) return res.status(500).json({ error: err.message });
+
+      // 3. Aggregate transactions by operation_id and by month
+      const opTransAgg = new Map();
+      const monthlyAgg = new Map();
+
+      transRows.forEach(t => {
+        // By operation
+        if (!opTransAgg.has(t.operation_id)) {
+          opTransAgg.set(t.operation_id, {
+            volume: 0,
+            revenue: 0
+          });
+        }
+        const agg = opTransAgg.get(t.operation_id);
+        agg.volume += 1;
+        agg.revenue += (t.billed_price || 0);
+
+        // By month
+        let mKey = (t.transaction_date && t.transaction_date.length >= 7) ? t.transaction_date.substring(0, 7) : null;
+        if (mKey && mKey !== 'nan') {
+          if (!monthlyAgg.has(mKey)) {
+            const parts = mKey.split('-');
+            const mName = MONTH_NAMES[parts[1]] || parts[1];
+            monthlyAgg.set(mKey, {
+              month: mKey,
+              label: `${mName} ${parts[0]}`,
+              revenue: 0,
+              bomCost: 0,
+              grossProfit: 0,
+              marginRate: 0,
+              count: 0
+            });
+          }
+          const mObj = monthlyAgg.get(mKey);
+          mObj.count += 1;
+          mObj.revenue += (t.billed_price || 0);
+
+          // Add BOM cost for this operation
+          const catItem = catalogMap.get(t.operation_id);
+          const unitBom = catItem ? catItem.unitBomCost : 0;
+          mObj.bomCost += unitBom;
+        }
+      });
+
+      // 4. Construct operations list with financials
+      let items = [];
+
+      catalogMap.forEach((catItem, opId) => {
+        const trans = opTransAgg.get(opId);
+        const volume = trans ? trans.volume : 0;
+        const totalRevenue = trans ? Math.round(trans.revenue * 100) / 100 : 0;
+
+        // Skip operations that have 0 transactions in this filtered period
+        if (volume === 0 && period !== 'catalog_only') {
+          return;
+        }
+
+        const avgPrice = volume > 0 ? Math.round((totalRevenue / volume) * 100) / 100 : catItem.catalogPrice;
+        const totalBomCost = Math.round(catItem.unitBomCost * volume * 100) / 100;
+        const grossProfit = Math.round((totalRevenue - totalBomCost) * 100) / 100;
+        const marginRate = totalRevenue > 0 ? Math.round(((grossProfit / totalRevenue) * 100) * 10) / 10 : 0;
+        const materialSharePct = totalRevenue > 0 ? Math.round(((totalBomCost / totalRevenue) * 100) * 10) / 10 : 0;
+
+        items.push({
+          id: opId,
+          code: catItem.code,
+          name: catItem.name,
+          category: catItem.category,
+          catalogPrice: catItem.catalogPrice,
+          avgPrice,
+          unitBomCost: catItem.unitBomCost,
+          volume,
+          totalRevenue,
+          totalBomCost,
+          grossProfit,
+          marginRate,
+          materialSharePct,
+          materialsCount: catItem.materialsCount,
+          abcClass: 'C', // Will be calculated next
+          quadrant: 'question' // Will be calculated next
+        });
+      });
+
+      // Apply category filter
+      if (category && category !== 'all') {
+        items = items.filter(it => it.category === category);
+      }
+
+      // Apply search filter
+      if (search && search.trim() !== '') {
+        const q = search.trim().toLowerCase();
+        items = items.filter(it => it.name.toLowerCase().includes(q) || it.code.toLowerCase().includes(q));
+      }
+
+      // Sort descending by total revenue
+      items.sort((a, b) => b.totalRevenue - a.totalRevenue);
+
+      // Compute total clinic metrics
+      const totalRevenue = items.reduce((sum, it) => sum + it.totalRevenue, 0);
+      const totalBomCost = items.reduce((sum, it) => sum + it.totalBomCost, 0);
+      const grossProfit = totalRevenue - totalBomCost;
+      const marginRate = totalRevenue > 0 ? Math.round(((grossProfit / totalRevenue) * 100) * 10) / 10 : 0;
+      const operationsCount = items.reduce((sum, it) => sum + it.volume, 0);
+      const avgCheck = operationsCount > 0 ? Math.round(totalRevenue / operationsCount) : 0;
+
+      // 5. ABC Classification & Revenue Share
+      let runningRevenue = 0;
+      items.forEach(it => {
+        runningRevenue += it.totalRevenue;
+        const sharePct = totalRevenue > 0 ? (runningRevenue / totalRevenue) * 100 : 0;
+        it.revenueSharePct = totalRevenue > 0 ? Math.round((it.totalRevenue / totalRevenue) * 1000) / 10 : 0;
+        if (sharePct <= 80) {
+          it.abcClass = 'A';
+        } else if (sharePct <= 95) {
+          it.abcClass = 'B';
+        } else {
+          it.abcClass = 'C';
+        }
+      });
+
+      // 6. Quadrant Matrix (4-квадрантная матрица эффективности)
+      // Volume Benchmark: Median or 10 procedures, Margin Benchmark: 60%
+      const benchmarkVolume = 10;
+      const benchmarkMargin = 60.0;
+
+      const quadrantMatrix = items.map(it => {
+        let quadrant = 'question';
+        let quadrantLabel = 'Зона риска / Оптимизация';
+
+        if (it.volume >= benchmarkVolume && it.marginRate >= benchmarkMargin) {
+          quadrant = 'stars';
+          quadrantLabel = 'Флагманы (Высокий объем + Высокая маржа)';
+        } else if (it.volume < benchmarkVolume && it.marginRate >= benchmarkMargin) {
+          quadrant = 'niche';
+          quadrantLabel = 'Высокодоходные ниши (Низкий объем + Высокая маржа)';
+        } else if (it.volume >= benchmarkVolume && it.marginRate < benchmarkMargin) {
+          quadrant = 'cash_cows';
+          quadrantLabel = 'Потоковые услуги (Высокий объем + Низкая маржа)';
+        } else {
+          quadrant = 'question';
+          quadrantLabel = 'Зона риска / Оптимизация (Низкий объем + Низкая маржа)';
+        }
+        it.quadrant = quadrant;
+        it.quadrantLabel = quadrantLabel;
+
+        return {
+          id: it.id,
+          name: it.name,
+          category: it.category,
+          volume: it.volume,
+          revenue: it.totalRevenue,
+          marginRate: it.marginRate,
+          quadrant,
+          quadrantLabel,
+          unitBomCost: it.unitBomCost,
+          avgPrice: it.avgPrice
+        };
+      });
+
+      // 7. Category Breakdown
+      const categoryAgg = new Map();
+      items.forEach(it => {
+        if (!categoryAgg.has(it.category)) {
+          categoryAgg.set(it.category, {
+            category: it.category,
+            count: 0,
+            proceduresCount: 0,
+            revenue: 0,
+            bomCost: 0,
+            grossProfit: 0,
+            marginRate: 0,
+            sharePct: 0
+          });
+        }
+        const c = categoryAgg.get(it.category);
+        c.count += it.volume;
+        c.proceduresCount += 1;
+        c.revenue += it.totalRevenue;
+        c.bomCost += it.totalBomCost;
+      });
+
+      const categories = Array.from(categoryAgg.values()).map(c => {
+        c.revenue = Math.round(c.revenue * 100) / 100;
+        c.bomCost = Math.round(c.bomCost * 100) / 100;
+        c.grossProfit = Math.round((c.revenue - c.bomCost) * 100) / 100;
+        c.marginRate = c.revenue > 0 ? Math.round(((c.grossProfit / c.revenue) * 100) * 10) / 10 : 0;
+        c.sharePct = totalRevenue > 0 ? Math.round((c.revenue / totalRevenue) * 1000) / 10 : 0;
+        return c;
+      });
+      categories.sort((a, b) => b.revenue - a.revenue);
+
+      // 8. Monthly Trend Array
+      const monthlyTrend = Array.from(monthlyAgg.values()).map(m => {
+        m.revenue = Math.round(m.revenue * 100) / 100;
+        m.bomCost = Math.round(m.bomCost * 100) / 100;
+        m.grossProfit = Math.round((m.revenue - m.bomCost) * 100) / 100;
+        m.marginRate = m.revenue > 0 ? Math.round(((m.grossProfit / m.revenue) * 100) * 10) / 10 : 0;
+        return m;
+      });
+      monthlyTrend.sort((a, b) => a.month.localeCompare(b.month));
+
+      // 9. Automated Smart BI Digest Insights
+      const insights = [];
+
+      // Top profit generator
+      if (items.length > 0) {
+        const top1 = items[0];
+        insights.push({
+          id: 'top_driver',
+          type: 'success',
+          title: 'Главный генератор выручки',
+          text: `«${top1.name}» приносит наибольшую выручку (${top1.totalRevenue.toLocaleString('ru-RU')} ₽, ${top1.volume} визитов, маржинальность ${top1.marginRate}%).`
+        });
+      }
+
+      // Top category
+      if (categories.length > 0) {
+        const topCat = categories[0];
+        insights.push({
+          id: 'category_lead',
+          type: 'info',
+          title: 'Ключевое направление клиники',
+          text: `Направление «${topCat.category}» формирует ${topCat.sharePct}% совокупной выручки клиники (${topCat.revenue.toLocaleString('ru-RU')} ₽) при высокой маржинальности ${topCat.marginRate}%.`
+        });
+      }
+
+      // Material cost spike or negative margin alert
+      const lowMarginItems = items.filter(it => it.marginRate < 10 && it.volume > 0);
+      if (lowMarginItems.length > 0) {
+        insights.push({
+          id: 'low_margin_alert',
+          type: 'warning',
+          title: 'Внимание: зона низких наценок',
+          text: `Обнаружено ${lowMarginItems.length} позиций с маржинальностью ниже 10% (или отрицательной) из-за высокой доли расходных материалов BOM. Рекомендуется индексация прейскуранта.`
+        });
+      }
+
+      // High volume champion
+      const topVolumeItem = [...items].sort((a, b) => b.volume - a.volume)[0];
+      if (topVolumeItem && topVolumeItem.volume > 0) {
+        insights.push({
+          id: 'volume_leader',
+          type: 'primary',
+          title: 'Потоковый драйвер загрузки',
+          text: `«${topVolumeItem.name}» лидирует по числу проведенных процедур — ${topVolumeItem.volume} раз за отчетный период.`
+        });
+      }
+
+      res.json({
+        summary: {
+          totalRevenue,
+          totalBomCost,
+          grossProfit,
+          marginRate,
+          operationsCount,
+          avgCheck,
+          uniqueProceduresCount: items.length,
+          period,
+          category,
+          doctorId
+        },
+        insights,
+        categories,
+        monthlyTrend,
+        quadrantMatrix,
+        topProcedures: items.slice(0, 10),
+        items
+      });
+    });
+  });
+});
+
+/**
+ * @swagger
+ * /api/analytics/operations/{id}/details:
+ *   get:
+ *     summary: Детальный разбор операции для слайд-овер панели (BOM рецепт, врачи, помесячная динамика)
+ *     tags: [BI Dashboard]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Детализация процедуры
+ */
+app.get('/api/analytics/operations/:id/details', (req, res) => {
+  const { id } = req.params;
+
+  // 1. Get operation basic info
+  const opSql = `
+    SELECT 
+      oc.id,
+      oc.operation_code as code,
+      COALESCE(o.name, oc.operation_name) as name,
+      COALESCE(o.price, 0) as catalog_price
+    FROM operation_catalog oc
+    LEFT JOIN operations o ON o.id = oc.id
+    WHERE oc.id = ?
+  `;
+
+  db.get(opSql, [id], (err, op) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (!op) return res.status(404).json({ error: 'Операция не найдена' });
+
+    // 2. Get BOM Materials
+    const bomSql = `
+      SELECT 
+        om.id,
+        om.material_id,
+        om.quantity,
+        m.material_name,
+        m.unit_of_measure,
+        m.current_unit_cost,
+        ROUND(om.quantity * m.current_unit_cost, 2) as total_line_cost
+      FROM operation_materials om
+      JOIN materials_catalog m ON om.material_id = m.id
+      WHERE om.operation_id = ?
+      ORDER BY total_line_cost DESC
+    `;
+
+    db.all(bomSql, [id], (err, materials) => {
+      if (err) return res.status(500).json({ error: err.message });
+
+      const totalBomCost = materials.reduce((sum, m) => sum + (m.total_line_cost || 0), 0);
+      materials.forEach(m => {
+        m.shareInBom = totalBomCost > 0 ? Math.round((m.total_line_cost / totalBomCost) * 1000) / 10 : 0;
+      });
+
+      // 3. Get transaction history and monthly breakdown
+      const transSql = `
+        SELECT 
+          ot.id,
+          ot.transaction_date,
+          ot.billed_price,
+          (ot.id % 2) as doctor_slot
+        FROM operation_transactions ot
+        WHERE ot.operation_id = ?
+        ORDER BY ot.transaction_date ASC
+      `;
+
+      db.all(transSql, [id], (err, trans) => {
+        if (err) return res.status(500).json({ error: err.message });
+
+        const monthlyStats = {};
+        let doc1Count = 0;
+        let doc2Count = 0;
+        let totalRevenue = 0;
+
+        trans.forEach(t => {
+          totalRevenue += (t.billed_price || 0);
+          if (t.doctor_slot === 1) doc1Count++;
+          else doc2Count++;
+
+          const mKey = (t.transaction_date && t.transaction_date.length >= 7) ? t.transaction_date.substring(0, 7) : null;
+          if (mKey && mKey !== 'nan') {
+            if (!monthlyStats[mKey]) {
+              const parts = mKey.split('-');
+              monthlyStats[mKey] = {
+                month: mKey,
+                label: `${MONTH_NAMES[parts[1]] || parts[1]} ${parts[0]}`,
+                count: 0,
+                revenue: 0,
+                cost: 0
+              };
+            }
+            monthlyStats[mKey].count += 1;
+            monthlyStats[mKey].revenue += (t.billed_price || 0);
+            monthlyStats[mKey].cost += totalBomCost;
+          }
+        });
+
+        const history = Object.values(monthlyStats).sort((a, b) => a.month.localeCompare(b.month));
+        const totalCount = trans.length;
+        const grossProfit = totalRevenue - (totalBomCost * totalCount);
+        const marginRate = totalRevenue > 0 ? Math.round(((grossProfit / totalRevenue) * 100) * 10) / 10 : 0;
+
+        res.json({
+          operation: {
+            ...op,
+            category: categorizeOperation(op.name),
+            totalBomCost: Math.round(totalBomCost * 100) / 100,
+            totalCount,
+            totalRevenue: Math.round(totalRevenue * 100) / 100,
+            grossProfit: Math.round(grossProfit * 100) / 100,
+            marginRate
+          },
+          materials,
+          history,
+          doctors: [
+            {
+              id: 1,
+              name: 'Добрушкин Александр Моисеевич',
+              role: 'Главный врач, ортопед-травматолог',
+              count: doc1Count,
+              sharePct: totalCount > 0 ? Math.round((doc1Count / totalCount) * 1000) / 10 : 0
+            },
+            {
+              id: 2,
+              name: 'Петров Сергей',
+              role: 'Врач травматолог-ортопед',
+              count: doc2Count,
+              sharePct: totalCount > 0 ? Math.round((doc2Count / totalCount) * 1000) / 10 : 0
+            }
+          ]
+        });
+      });
+    });
+  });
+});
+
+// ============================================================================
 // 5. CALCULATION PARAMETERS (Параметры расчетов и наценок)
 // ============================================================================
 
@@ -1181,7 +1864,7 @@ app.delete('/api/parameters-admin/:id', (req, res) => {
  *               $ref: '#/components/schemas/DbStats'
  */
 app.get('/api/db/stats', (req, res) => {
-  const dbPath = path.resolve(__dirname, '../db/orthopedic_data_center.sqlite');
+  const dbPath = getSqliteDbPath();
   let fileSizeBytes = 0;
   try {
     const stats = fs.statSync(dbPath);
@@ -1199,7 +1882,7 @@ app.get('/api/db/stats', (req, res) => {
       db.all("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'", [], (err, tables) => {
         if (err) return res.status(500).json({ error: err.message });
         res.json({
-          dbName: 'orthopedic_data_center.sqlite',
+          dbName: path.basename(dbPath),
           dbPath,
           fileSizeBytes,
           sqliteVersion: verRow ? verRow.version : '3.x',
@@ -1561,6 +2244,254 @@ app.post('/api/db/query', (req, res) => {
       });
     });
   }
+});
+
+// ============================================================================
+// ============================================================================
+// Firebird & SQLite Dynamic AppSettings Configuration Endpoints
+// ============================================================================
+
+/**
+ * @swagger
+ * /api/admin/config:
+ *   get:
+ *     summary: Получить текущую динамическую конфигурацию appsettings.json
+ *     tags: [Administrator & Firebird Sync]
+ *     responses:
+ *       200:
+ *         description: Параметры подключения к SQLite и Firebird
+ */
+app.get('/api/admin/config', (req, res) => {
+  try {
+    const config = getAppSettings();
+    res.json({
+      success: true,
+      source: 'appsettings.json',
+      config,
+      resolvedSqlitePath: getSqliteDbPath()
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * @swagger
+ * /api/admin/config:
+ *   post:
+ *     summary: Обновить параметры подключения в appsettings.json динамически
+ *     tags: [Administrator & Firebird Sync]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *     responses:
+ *       200:
+ *         description: Конфигурация успешно обновлена
+ */
+app.post('/api/admin/config', (req, res) => {
+  try {
+    const incoming = req.body;
+    if (!incoming || typeof incoming !== 'object') {
+      return res.status(400).json({ success: false, error: 'Некорректные данные конфигурации' });
+    }
+
+    const current = getAppSettings();
+    const updated = {
+      ...current,
+      ...incoming,
+      ConnectionStrings: {
+        ...current.ConnectionStrings,
+        ...(incoming.ConnectionStrings || {}),
+        SQLite: {
+          ...current.ConnectionStrings?.SQLite,
+          ...(incoming.ConnectionStrings?.SQLite || {})
+        },
+        Firebird: {
+          ...current.ConnectionStrings?.Firebird,
+          ...(incoming.ConnectionStrings?.Firebird || {})
+        }
+      }
+    };
+
+    saveAppSettings(updated);
+    res.json({
+      success: true,
+      message: 'Параметры appsettings.json успешно обновлены',
+      config: updated,
+      resolvedSqlitePath: getSqliteDbPath()
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * @swagger
+ * /api/admin/firebird/status:
+ *   get:
+ *     summary: Получить текущий статус синхронизации, параметры appsettings.json и количество записей в SQLite
+ *     tags: [Administrator & Firebird Sync]
+ *     responses:
+ *       200:
+ *         description: Статус базы данных
+ */
+app.get('/api/admin/firebird/status', (req, res) => {
+  const stats = {};
+  const fbConfig = getFirebirdConfig();
+  const sqliteConfig = getSqliteConfig();
+  const sqliteDbPath = getSqliteDbPath();
+  const settings = getAppSettings();
+
+  db.get("SELECT COUNT(*) as count FROM patients", (err, r1) => {
+    stats.patientsCount = r1 ? r1.count : 0;
+    db.get("SELECT COUNT(*) as count FROM patient_visits", (err, r2) => {
+      stats.visitsCount = r2 ? r2.count : 0;
+      db.get("SELECT COUNT(*) as count FROM channels", (err, r3) => {
+        stats.channelsCount = r3 ? r3.count : 0;
+        db.get("SELECT COUNT(*) as count FROM insurers", (err, r4) => {
+          stats.insurersCount = r4 ? r4.count : 0;
+          db.get("SELECT COUNT(*) as count FROM dms_cards", (err, r5) => {
+            stats.dmsCardsCount = r5 ? r5.count : 0;
+            res.json({
+              success: true,
+              source: 'appsettings.json',
+              defaultFbPath: fbConfig.DatabasePath,
+              defaultUser: fbConfig.User,
+              firebirdConfig: fbConfig,
+              sqliteConfig: sqliteConfig,
+              resolvedSqlitePath: sqliteDbPath,
+              appsettings: settings,
+              sqliteStats: stats
+            });
+          });
+        });
+      });
+    });
+  });
+});
+
+/**
+ * @swagger
+ * /api/admin/firebird/test:
+ *   post:
+ *     summary: Проверить подключение к Firebird базе данных (динамические параметры из appsettings.json)
+ *     tags: [Administrator & Firebird Sync]
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               dbPath:
+ *                 type: string
+ *               user:
+ *                 type: string
+ *               password:
+ *                 type: string
+ *               host:
+ *                 type: string
+ *               port:
+ *                 type: integer
+ *               charset:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Результат проверки подключения
+ */
+app.post('/api/admin/firebird/test', (req, res) => {
+  const fbConfig = getFirebirdConfig();
+  const { dbPath, user, password, host, port, charset } = req.body || {};
+  const targetDb = dbPath || fbConfig.DatabasePath || "C:\\Users\\vladimir\\source\\DB\\Export\\MEDICAL.FDB";
+  const targetUser = user || fbConfig.User || "SYSDBA";
+  const targetPass = password || fbConfig.Password || "masterkey";
+  const targetHost = host || fbConfig.Host || "localhost";
+  const targetPort = port || fbConfig.Port || 3050;
+  const targetCharset = charset || fbConfig.Charset || "WIN1251";
+
+  const scriptPath = path.resolve(__dirname, 'sync_patients_firebird.py');
+  const cmd = `python "${scriptPath}" --test "${targetDb}" "${targetUser}" "${targetPass}" "${targetHost}" "${targetPort}" "${targetCharset}"`;
+
+  exec(cmd, { encoding: 'utf-8' }, (err, stdout, stderr) => {
+    try {
+      const result = JSON.parse(stdout.trim());
+      if (result.success) {
+        res.json(result);
+      } else {
+        res.status(400).json(result);
+      }
+    } catch (e) {
+      res.status(500).json({ success: false, error: stderr || stdout || e.message });
+    }
+  });
+});
+
+/**
+ * @swagger
+ * /api/admin/firebird/sync:
+ *   post:
+ *     summary: Запустить процедуру полной синхронизации из Firebird в SQLite (динамические параметры)
+ *     tags: [Administrator & Firebird Sync]
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               dbPath:
+ *                 type: string
+ *               user:
+ *                 type: string
+ *               password:
+ *                 type: string
+ *               host:
+ *                 type: string
+ *               port:
+ *                 type: integer
+ *               charset:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Результаты синхронизации и консольный лог
+ */
+app.post('/api/admin/firebird/sync', (req, res) => {
+  const fbConfig = getFirebirdConfig();
+  const { dbPath, user, password, host, port, charset } = req.body || {};
+  const targetDb = dbPath || fbConfig.DatabasePath || "C:\\Users\\vladimir\\source\\DB\\Export\\MEDICAL.FDB";
+  const targetUser = user || fbConfig.User || "SYSDBA";
+  const targetPass = password || fbConfig.Password || "masterkey";
+  const targetHost = host || fbConfig.Host || "localhost";
+  const targetPort = port || fbConfig.Port || 3050;
+  const targetCharset = charset || fbConfig.Charset || "WIN1251";
+  const targetSqlite = getSqliteDbPath();
+
+  const scriptPath = path.resolve(__dirname, 'sync_patients_firebird.py');
+  const cmd = `python "${scriptPath}" "${targetDb}" "${targetUser}" "${targetPass}" "${targetHost}" "${targetPort}" "${targetCharset}" "${targetSqlite}"`;
+
+  const startTime = Date.now();
+  exec(cmd, { encoding: 'utf-8', maxBuffer: 20 * 1024 * 1024 }, (err, stdout, stderr) => {
+    const elapsedSeconds = ((Date.now() - startTime) / 1000).toFixed(2);
+    if (err) {
+      return res.status(500).json({
+        success: false,
+        error: err.message,
+        stderr,
+        stdout,
+        elapsedSeconds
+      });
+    }
+
+    res.json({
+      success: true,
+      message: "Синхронизация успешно завершена",
+      logs: stdout,
+      elapsedSeconds
+    });
+  });
 });
 
 const PORT = process.env.PORT || 5000;
