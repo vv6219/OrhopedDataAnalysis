@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import {
   Box,
   Paper,
@@ -9,12 +9,10 @@ import {
   TableRow,
   TableCell,
   TableBody,
-  Divider,
   Dialog,
   DialogTitle,
   DialogContent,
   DialogActions,
-  Chip,
   IconButton,
   TextField,
   MenuItem
