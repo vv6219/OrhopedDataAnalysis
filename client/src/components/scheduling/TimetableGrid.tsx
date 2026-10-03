@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import {
   Box,
   Paper,
@@ -15,9 +15,7 @@ import {
   Alert
 } from '@mui/material';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
-import PersonIcon from '@mui/icons-material/Person';
 import MedicalServicesIcon from '@mui/icons-material/MedicalServices';
-import CleaningServicesIcon from '@mui/icons-material/CleaningServices';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import HourglassTopIcon from '@mui/icons-material/HourglassTop';
@@ -47,7 +45,7 @@ const STATUS_CONFIG: Record<AppointmentStatus, { label: string; color: string; b
 };
 
 export default function TimetableGrid({
-  date,
+  date: _date,
   appointments,
   doctors,
   onRefresh,

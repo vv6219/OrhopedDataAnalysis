@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -394,28 +394,26 @@ export default function SchedulingWizard({
                   onInputChange={(_, value) => setPatientSearchTerm(value)}
                   onChange={(_, value) => setSelectedPatient(value)}
                   value={selectedPatient}
-                  renderInput={(params) => {
-                    const { InputProps, ...restParams } = params;
-                    return (
-                      <TextField
-                        {...restParams}
-                        label="Введите ФИО, телефон или номер карты ЭМК"
-                        placeholder="Например: Добрушкин, 189-13-62 или 1054"
-                        slotProps={{
-                          input: {
-                            ...InputProps,
-                            endAdornment: (
-                              <>
-                                {patientSearching ? <CircularProgress color="inherit" size={20} /> : null}
-                                {InputProps?.endAdornment}
-                              </>
-                            )
-                          }
-                        }}
-                        sx={{ mb: 2 }}
-                      />
-                    );
-                  }}
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      label="Введите ФИО, телефон или номер карты ЭМК"
+                      placeholder="Например: Добрушкин, 189-13-62 или 1054"
+                      slotProps={{
+                        ...params.slotProps,
+                        input: {
+                          ...params.slotProps.input,
+                          endAdornment: (
+                            <>
+                              {patientSearching ? <CircularProgress color="inherit" size={20} /> : null}
+                              {params.slotProps.input.endAdornment}
+                            </>
+                          )
+                        }
+                      }}
+                      sx={{ mb: 2 }}
+                    />
+                  )}
                 />
 
                 {selectedPatient ? (
