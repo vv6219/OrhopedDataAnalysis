@@ -378,25 +378,25 @@ export default function Staff() {
   };
 
   const columns: GridColDef[] = [
-    { field: 'id', headerName: '№', width: 60, align: 'center', headerAlign: 'center' },
+    { field: 'id', headerName: '№', width: 50, minWidth: 45, align: 'center', headerAlign: 'center' },
     {
       field: 'full_name',
       headerName: 'ФИО Сотрудника',
       flex: 2,
-      minWidth: 260,
+      minWidth: 200,
       filterOperators: customStringOperators,
       renderCell: (params) => {
         const name = String(params.value || '');
         const isInformal = name.trim().split(' ').length < 2;
 
         return (
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, width: '100%', py: 0.5 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.2, width: '100%', py: 0.5 }}>
             <Avatar
               sx={{
                 bgcolor: '#0F3C64',
-                width: 36,
-                height: 36,
-                fontSize: '0.85rem',
+                width: 32,
+                height: 32,
+                fontSize: '0.8rem',
                 fontWeight: 700,
                 flexShrink: 0
               }}
@@ -409,8 +409,8 @@ export default function Staff() {
                 sx={{
                   fontWeight: 700,
                   color: '#0F3C64',
-                  fontSize: '0.88rem',
-                  lineHeight: 1.3,
+                  fontSize: '0.86rem',
+                  lineHeight: 1.25,
                   whiteSpace: 'normal',
                   wordBreak: 'break-word'
                 }}
@@ -418,13 +418,13 @@ export default function Staff() {
                 {name}
               </Typography>
               {isInformal && (
-                <Box sx={{ mt: 0.35 }}>
+                <Box sx={{ mt: 0.25 }}>
                   <Chip 
                     label="Неполное ФИО" 
                     size="small" 
                     sx={{
                       height: 18,
-                      fontSize: '0.65rem',
+                      fontSize: '0.62rem',
                       bgcolor: '#FEF2F2',
                       color: '#DC2626',
                       fontWeight: 700,
@@ -441,8 +441,8 @@ export default function Staff() {
     {
       field: 'role',
       headerName: 'Должность / Роль',
-      flex: 1.4,
-      minWidth: 210,
+      flex: 1.3,
+      minWidth: 160,
       filterOperators: customStringOperators,
       renderCell: (params) => (
         <Box sx={{ display: 'flex', alignItems: 'center', width: '100%', py: 0.5 }}>
@@ -453,18 +453,18 @@ export default function Staff() {
     {
       field: 'specialization',
       headerName: 'Специализация / Направление',
-      flex: 1.8,
-      minWidth: 240,
+      flex: 1.5,
+      minWidth: 175,
       filterOperators: customStringOperators,
       renderCell: (params) => (
         <Typography
           variant="body2"
           sx={{
             color: '#4A5568',
-            fontSize: '0.85rem',
+            fontSize: '0.82rem',
             whiteSpace: 'normal',
             wordBreak: 'break-word',
-            lineHeight: 1.35,
+            lineHeight: 1.3,
             py: 0.5
           }}
         >
@@ -475,12 +475,13 @@ export default function Staff() {
     {
       field: 'contact_phone',
       headerName: 'Контактный телефон',
-      width: 175,
+      width: 150,
+      minWidth: 140,
       filterOperators: customStringOperators,
       renderCell: (params) => params.value ? (
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, color: '#2D3748' }}>
-          <PhoneIcon sx={{ fontSize: 16, color: '#0F3C64', flexShrink: 0 }} />
-          <Typography variant="body2">{params.value}</Typography>
+          <PhoneIcon sx={{ fontSize: 15, color: '#0F3C64', flexShrink: 0 }} />
+          <Typography variant="body2" sx={{ fontSize: '0.82rem', whiteSpace: 'nowrap' }}>{params.value}</Typography>
         </Box>
       ) : (
         <Chip label="Не указан" size="small" sx={{ height: 20, fontSize: '0.7rem', bgcolor: '#FEF2F2', color: '#DC2626', fontWeight: 600 }} />
@@ -489,15 +490,16 @@ export default function Staff() {
     {
       field: 'email',
       headerName: 'Корпоративный Email',
-      width: 230,
+      flex: 1.2,
+      minWidth: 165,
       filterOperators: customStringOperators,
       renderCell: (params) => params.value ? (
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, color: '#2D3748', width: '100%' }}>
-          <EmailIcon sx={{ fontSize: 16, color: '#0284C7', flexShrink: 0 }} />
+          <EmailIcon sx={{ fontSize: 15, color: '#0284C7', flexShrink: 0 }} />
           <Typography
             variant="body2"
             sx={{
-              fontSize: '0.84rem',
+              fontSize: '0.82rem',
               whiteSpace: 'normal',
               wordBreak: 'break-all',
               lineHeight: 1.25
@@ -513,7 +515,8 @@ export default function Staff() {
     {
       field: 'status',
       headerName: 'Статус',
-      width: 130,
+      width: 110,
+      minWidth: 105,
       align: 'center',
       headerAlign: 'center',
       renderCell: (params) => {
@@ -521,11 +524,11 @@ export default function Staff() {
         return (
           <Chip
             size="small"
-            icon={<CheckCircleIcon style={{ color: isActive ? '#16A34A' : '#94A3B8', fontSize: 14 }} />}
+            icon={<CheckCircleIcon style={{ color: isActive ? '#16A34A' : '#94A3B8', fontSize: 13 }} />}
             label={isActive ? 'Работает' : 'В отпуске'}
             sx={{
-              height: 24,
-              fontSize: '0.75rem',
+              height: 22,
+              fontSize: '0.72rem',
               fontWeight: 600,
               bgcolor: isActive ? '#DCFCE7' : '#F1F5F9',
               color: isActive ? '#166534' : '#64748B'
@@ -538,7 +541,8 @@ export default function Staff() {
       field: 'actions',
       type: 'actions',
       headerName: 'Действия',
-      width: 110,
+      width: 80,
+      minWidth: 75,
       getActions: (params) => [
         <GridActionsCellItem
           key="edit"
@@ -568,7 +572,7 @@ export default function Staff() {
   ];
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', width: '100%', maxWidth: '1440px', margin: '0 auto', gap: 3, pb: 6 }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', width: '100%', gap: 3, pb: 6 }}>
       {/* Top Banner / Hero Card */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 2 }}>
         <Box>
@@ -696,6 +700,8 @@ export default function Staff() {
               localeText={ruRU.components.MuiDataGrid.defaultProps.localeText}
               sx={{
                 border: 0,
+                width: '100%',
+                '& .MuiDataGrid-main': { width: '100%' },
                 '& .MuiDataGrid-virtualScroller': { overflowX: 'hidden' },
                 '& .MuiDataGrid-columnHeader': {
                   alignItems: 'flex-start',
