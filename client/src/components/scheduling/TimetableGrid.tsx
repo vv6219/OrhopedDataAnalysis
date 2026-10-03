@@ -349,6 +349,7 @@ export default function TimetableGrid({
           onClose={() => setSelectedApp(null)}
           maxWidth="sm"
           fullWidth
+          disableRestoreFocus
           slotProps={{
             paper: {
               sx: { borderRadius: '16px', overflow: 'hidden' }

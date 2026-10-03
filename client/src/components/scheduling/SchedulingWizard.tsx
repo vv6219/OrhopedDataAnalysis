@@ -284,6 +284,7 @@ export default function SchedulingWizard({
       onClose={onClose}
       maxWidth="md"
       fullWidth
+      disableRestoreFocus
       slotProps={{
         paper: {
           sx: {
@@ -393,23 +394,28 @@ export default function SchedulingWizard({
                   onInputChange={(_, value) => setPatientSearchTerm(value)}
                   onChange={(_, value) => setSelectedPatient(value)}
                   value={selectedPatient}
-                  renderInput={(params) => (
-                    <TextField
-                      {...params}
-                      label="Введите ФИО, телефон или номер карты ЭМК"
-                      placeholder="Например: Добрушкин, 189-13-62 или 1054"
-                      InputProps={{
-                        ...params.InputProps,
-                        endAdornment: (
-                          <>
-                            {patientSearching ? <CircularProgress color="inherit" size={20} /> : null}
-                            {params.InputProps?.endAdornment}
-                          </>
-                        )
-                      }}
-                      sx={{ mb: 2 }}
-                    />
-                  )}
+                  renderInput={(params) => {
+                    const { InputProps, ...restParams } = params;
+                    return (
+                      <TextField
+                        {...restParams}
+                        label="Введите ФИО, телефон или номер карты ЭМК"
+                        placeholder="Например: Добрушкин, 189-13-62 или 1054"
+                        slotProps={{
+                          input: {
+                            ...InputProps,
+                            endAdornment: (
+                              <>
+                                {patientSearching ? <CircularProgress color="inherit" size={20} /> : null}
+                                {InputProps?.endAdornment}
+                              </>
+                            )
+                          }
+                        }}
+                        sx={{ mb: 2 }}
+                      />
+                    );
+                  }}
                 />
 
                 {selectedPatient ? (

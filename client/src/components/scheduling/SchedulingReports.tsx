@@ -676,6 +676,7 @@ export default function SchedulingReports({ appointments, doctors, currentDate }
           onClose={() => setTicketModalOpen(false)}
           maxWidth="md"
           fullWidth
+          disableRestoreFocus
           slotProps={{
             paper: { sx: { borderRadius: '16px', overflow: 'hidden' } }
           }}
