@@ -12,6 +12,38 @@ function calculateEndTime(startTime, durationMinutes) {
 }
 
 // -----------------------------------------------------------------------------
+// 0. GET /api/scheduling/clinic-info - Fetch clinic address, map url and parameters from DB
+// -----------------------------------------------------------------------------
+router.get('/clinic-info', (req, res) => {
+  db.all(
+    "SELECT param_name, param_value FROM calculation_parameters WHERE param_name LIKE 'clinic_%'",
+    [],
+    (err, rows) => {
+      if (err) {
+        return res.status(500).json({ success: false, error: err.message });
+      }
+      const clinicInfo = {
+        clinic_name: 'Центр Ортопедии и Травматологии Добрушкина',
+        clinic_address: 'г. Сочи, ул. Транспортная 65, 3 этаж',
+        clinic_landmark: 'Центр доктора Добрушкина, 3 этаж (вход оборудован лифтом)',
+        clinic_map_url:
+          'https://yandex.com/maps/org/orthopedics_center/28107661846/?ll=39.753959%2C43.603715&utm_campaign=desktop&utm_medium=search&utm_source=maps&z=17.3',
+        clinic_parking: 'Бесплатная парковка',
+        clinic_elevator: 'Лифт (безбарьерная среда)',
+        clinic_driveway: 'Заезд с Дублера Курортного пр-та',
+        clinic_phone: '+7 (862) 267-00-00'
+      };
+      if (rows && rows.length > 0) {
+        rows.forEach((r) => {
+          clinicInfo[r.param_name] = r.param_value;
+        });
+      }
+      res.json({ success: true, clinicInfo });
+    }
+  );
+});
+
+// -----------------------------------------------------------------------------
 // 1. GET /api/scheduling/calendar - Fetch appointments with filter by date/doctor
 // -----------------------------------------------------------------------------
 router.get('/calendar', (req, res) => {

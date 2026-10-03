@@ -314,7 +314,7 @@ export default function SchedulingWizard({
               Мастер предварительной записи (Scheduling Wizard 2.0)
             </Typography>
             <Typography variant="caption" sx={{ color: 'rgba(255, 255, 255, 0.8)' }}>
-              Центр Ортопедии и Травматологии Добрушкина · Сочи, ул. Роз, 67
+              Центр Ортопедии и Травматологии Добрушкина · Сочи, ул. Транспортная 65, 3 этаж
             </Typography>
           </Box>
         </Box>
@@ -915,7 +915,7 @@ export default function SchedulingWizard({
                 Врач: <strong>{selectedDocObj?.full_name}</strong> ({selectedDocObj?.roomNumber}).{'\n'}
                 Услуга: {selectedOpObj?.name}.{'\n'}
                 Стоимость: <strong>{selectedOpObj?.price.toLocaleString('ru-RU')} ₽</strong>.{'\n'}
-                Адрес клиники: г. Сочи, ул. Роз, 67.
+                Адрес клиники: г. Сочи, ул. Транспортная 65, 3 этаж.
               </Typography>
 
               {/* Interactive buttons mockup */}

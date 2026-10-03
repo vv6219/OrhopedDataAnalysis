@@ -199,6 +199,24 @@ const db = new sqlite3.Database(dbPath, (err) => {
         }
       });
 
+      // Seed default clinic address & map parameters if missing
+      const clinicParams = [
+        ['clinic_name', 'Центр Ортопедии и Травматологии Добрушкина'],
+        ['clinic_address', 'г. Сочи, ул. Транспортная 65, 3 этаж'],
+        ['clinic_landmark', 'Центр доктора Добрушкина, 3 этаж (вход оборудован лифтом)'],
+        ['clinic_map_url', 'https://yandex.com/maps/org/orthopedics_center/28107661846/?ll=39.753959%2C43.603715&utm_campaign=desktop&utm_medium=search&utm_source=maps&z=17.3'],
+        ['clinic_parking', 'Бесплатная парковка'],
+        ['clinic_elevator', 'Лифт (безбарьерная среда)'],
+        ['clinic_driveway', 'Заезд с Дублера Курортного пр-та'],
+        ['clinic_phone', '+7 (862) 267-00-00']
+      ];
+      clinicParams.forEach(([paramName, paramVal]) => {
+        db.run(
+          "INSERT OR IGNORE INTO calculation_parameters (param_name, param_value) VALUES (?, ?)",
+          [paramName, paramVal]
+        );
+      });
+
       // Seed realistic appointments if empty
       db.get("SELECT COUNT(*) AS count FROM appointments", (err, row) => {
         if (!err && row && row.count === 0) {

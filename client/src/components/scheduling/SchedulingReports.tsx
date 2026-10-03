@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import {
   Box,
   Paper,
@@ -21,11 +21,35 @@ import {
 } from '@mui/material';
 import PrintIcon from '@mui/icons-material/Print';
 import CloseIcon from '@mui/icons-material/Close';
-import QrCode2Icon from '@mui/icons-material/QrCode2';
+import LocationOnIcon from '@mui/icons-material/LocationOn';
 import ConfirmationNumberIcon from '@mui/icons-material/ConfirmationNumber';
 import AssignmentIcon from '@mui/icons-material/Assignment';
 import { useReactToPrint } from 'react-to-print';
+import { QRCodeSVG } from 'qrcode.react';
 import type { Appointment, Doctor } from './SchedulingTypes';
+
+export interface ClinicInfo {
+  clinic_name: string;
+  clinic_address: string;
+  clinic_landmark: string;
+  clinic_map_url: string;
+  clinic_parking: string;
+  clinic_elevator: string;
+  clinic_driveway: string;
+  clinic_phone: string;
+}
+
+export const DEFAULT_CLINIC_INFO: ClinicInfo = {
+  clinic_name: 'Центр Ортопедии и Травматологии Добрушкина',
+  clinic_address: 'г. Сочи, ул. Транспортная 65, 3 этаж',
+  clinic_landmark: 'Центр доктора Добрушкина, 3 этаж (вход оборудован лифтом)',
+  clinic_map_url:
+    'https://yandex.com/maps/org/orthopedics_center/28107661846/?ll=39.753959%2C43.603715&utm_campaign=desktop&utm_medium=search&utm_source=maps&z=17.3',
+  clinic_parking: 'Бесплатная парковка',
+  clinic_elevator: 'Лифт (безбарьерная среда)',
+  clinic_driveway: 'Заезд с Дублера Курортного пр-та',
+  clinic_phone: '+7 (862) 267-00-00'
+};
 
 interface SchedulingReportsProps {
   appointments: Appointment[];
@@ -36,51 +60,53 @@ interface SchedulingReportsProps {
 // -----------------------------------------------------------------------------
 // 1. PRINTABLE COMPONENT: Appointment Ticket (Талон предварительной записи)
 // -----------------------------------------------------------------------------
-export const AppointmentTicket = React.forwardRef<HTMLDivElement, { appointment: Appointment }>(
-  ({ appointment }, ref) => {
-    return (
-      <Box
-        ref={ref}
-        sx={{
-          p: 4,
-          bgcolor: '#FFFFFF',
-          color: '#000000',
-          maxWidth: '190mm',
-          mx: 'auto',
-          fontFamily: '"Inter", "Roboto", sans-serif',
-          '@media print': {
-            '@page': { size: 'A4 portrait', margin: '8mm 10mm' }
-          }
-        }}
-      >
-        {/* Header */}
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '2px solid #0F3C64', pb: 2, mb: 3 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-            <img
-              src="/MainLogoTransparent.png"
-              alt="Центр Ортопедии"
-              style={{ width: 64, height: 64, objectFit: 'contain' }}
-            />
-            <Box>
-              <Typography variant="h6" sx={{ fontWeight: 800, color: '#0F3C64', lineHeight: 1.1 }}>
-                Центр Ортопедии и Травматологии Добрушкина
-              </Typography>
-              <Typography variant="caption" sx={{ color: '#475569', display: 'block' }}>
-                г. Сочи, ул. Роз, 67 · Телефон регистратуры: +7 (862) 267-00-00 · www.orthocenter.ru
-              </Typography>
-            </Box>
-          </Box>
-          <Box sx={{ textAlign: 'right' }}>
-            <Typography variant="subtitle2" sx={{ fontWeight: 800, color: '#0F3C64' }}>
-              ТАЛОН НА ПРИЁМ
+export const AppointmentTicket = React.forwardRef<
+  HTMLDivElement,
+  { appointment: Appointment; clinicInfo?: ClinicInfo }
+>(({ appointment, clinicInfo = DEFAULT_CLINIC_INFO }, ref) => {
+  return (
+    <Box
+      ref={ref}
+      sx={{
+        p: 4,
+        bgcolor: '#FFFFFF',
+        color: '#000000',
+        maxWidth: '190mm',
+        mx: 'auto',
+        fontFamily: '"Inter", "Roboto", sans-serif',
+        '@media print': {
+          '@page': { size: 'A4 portrait', margin: '8mm 10mm' }
+        }
+      }}
+    >
+      {/* Header */}
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '2px solid #0F3C64', pb: 2, mb: 3 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          <img
+            src="/MainLogoTransparent.png"
+            alt="Центр Ортопедии"
+            style={{ width: 64, height: 64, objectFit: 'contain' }}
+          />
+          <Box>
+            <Typography variant="h6" sx={{ fontWeight: 800, color: '#0F3C64', lineHeight: 1.1 }}>
+              {clinicInfo.clinic_name}
             </Typography>
-            <Typography variant="caption" sx={{ color: '#64748B' }}>
-              № ЗАПИСИ: APP-{appointment.id}
+            <Typography variant="caption" sx={{ color: '#475569', display: 'block' }}>
+              {clinicInfo.clinic_address} · Телефон: {clinicInfo.clinic_phone} · www.orthocenter.ru
             </Typography>
           </Box>
         </Box>
+        <Box sx={{ textAlign: 'right' }}>
+          <Typography variant="subtitle2" sx={{ fontWeight: 800, color: '#0F3C64' }}>
+            ТАЛОН НА ПРИЁМ
+          </Typography>
+          <Typography variant="caption" sx={{ color: '#64748B' }}>
+            № ЗАПИСИ: APP-{appointment.id}
+          </Typography>
+        </Box>
+      </Box>
 
-        {/* Ticket Body */}
+      {/* Ticket Body */}
         <Paper variant="outlined" sx={{ p: 2.5, borderRadius: '8px', mb: 3, borderColor: '#CBD5E1' }}>
           <Box sx={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 2 }}>
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
@@ -144,38 +170,182 @@ export const AppointmentTicket = React.forwardRef<HTMLDivElement, { appointment:
           </Box>
         </Box>
 
-        {/* QR Code and Map info */}
-        <Box
+        {/* Exact Pin Address Card matching clinic design */}
+        <Paper
+          variant="outlined"
           sx={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            p: 2,
-            bgcolor: '#F1F5F9',
-            borderRadius: '8px',
-            mb: 4
+            p: 2.5,
+            borderRadius: '20px',
+            border: '1.5px solid #E2E8F0',
+            bgcolor: '#FFFFFF',
+            boxShadow: '0 4px 20px rgba(0, 0, 0, 0.03)',
+            mb: 3
           }}
         >
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-            <QrCode2Icon sx={{ fontSize: 52, color: '#0F3C64' }} />
-            <Box>
-              <Typography variant="caption" sx={{ fontWeight: 700, color: '#0F3C64', display: 'block' }}>
-                НАВЕДИТЕ КАМЕРУ ДЛЯ МАРШРУТА
-              </Typography>
-              <Typography variant="caption" sx={{ color: '#475569' }}>
-                Яндекс.Карты: г. Сочи, ул. Роз, 67 (Центр Ортопедии)
+          <Box
+            sx={{
+              display: 'flex',
+              flexDirection: { xs: 'column', sm: 'row' },
+              gap: 2.5,
+              alignItems: { sm: 'center' },
+              justifyContent: 'space-between'
+            }}
+          >
+            <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-start' }}>
+              {/* Blue Pin Circle Icon */}
+              <Box
+                sx={{
+                  width: 48,
+                  height: 48,
+                  minWidth: 48,
+                  borderRadius: '14px',
+                  bgcolor: '#EFF6FF',
+                  border: '1px solid #DBEAFE',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  mt: 0.5
+                }}
+              >
+                <LocationOnIcon sx={{ color: '#2563EB', fontSize: 28 }} />
+              </Box>
+
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+                {/* Badge "АДРЕС КЛИНИКИ" */}
+                <Box sx={{ alignSelf: 'flex-start' }}>
+                  <Box
+                    sx={{
+                      px: 1.25,
+                      py: 0.25,
+                      bgcolor: '#E6F4EA',
+                      color: '#137333',
+                      borderRadius: '100px',
+                      fontSize: '0.72rem',
+                      fontWeight: 800,
+                      letterSpacing: '0.5px',
+                      display: 'inline-block'
+                    }}
+                  >
+                    АДРЕС КЛИНИКИ
+                  </Box>
+                </Box>
+
+                {/* Main Address Title */}
+                <Typography
+                  variant="h5"
+                  sx={{ fontWeight: 800, color: '#0F3C64', letterSpacing: '-0.3px', lineHeight: 1.2 }}
+                >
+                  {clinicInfo.clinic_address}
+                </Typography>
+
+                {/* Subtitle / Landmark */}
+                <Typography variant="body2" sx={{ color: '#475569', fontSize: '0.9rem' }}>
+                  {clinicInfo.clinic_landmark}
+                </Typography>
+
+                {/* 3 Pill Badges */}
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 0.5 }}>
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 0.75,
+                      px: 1.25,
+                      py: 0.5,
+                      borderRadius: '100px',
+                      bgcolor: '#F1F5F9',
+                      border: '1px solid #E2E8F0',
+                      fontSize: '0.78rem',
+                      fontWeight: 600,
+                      color: '#334155'
+                    }}
+                  >
+                    <span>🚗</span>
+                    <span>{clinicInfo.clinic_parking}</span>
+                  </Box>
+
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 0.75,
+                      px: 1.25,
+                      py: 0.5,
+                      borderRadius: '100px',
+                      bgcolor: '#F1F5F9',
+                      border: '1px solid #E2E8F0',
+                      fontSize: '0.78rem',
+                      fontWeight: 600,
+                      color: '#334155'
+                    }}
+                  >
+                    <span>🛗</span>
+                    <span>{clinicInfo.clinic_elevator}</span>
+                  </Box>
+
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 0.75,
+                      px: 1.25,
+                      py: 0.5,
+                      borderRadius: '100px',
+                      bgcolor: '#F1F5F9',
+                      border: '1px solid #E2E8F0',
+                      fontSize: '0.78rem',
+                      fontWeight: 600,
+                      color: '#334155'
+                    }}
+                  >
+                    <span>📍</span>
+                    <span>{clinicInfo.clinic_driveway}</span>
+                  </Box>
+                </Box>
+              </Box>
+            </Box>
+
+            {/* Scannable Yandex Maps QR Code */}
+            <Box
+              sx={{
+                p: 1.5,
+                bgcolor: '#F8FAFC',
+                borderRadius: '16px',
+                border: '1px solid #E2E8F0',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                minWidth: 120,
+                textAlign: 'center'
+              }}
+            >
+              <QRCodeSVG value={clinicInfo.clinic_map_url} size={88} level="M" />
+              <Typography
+                variant="caption"
+                sx={{
+                  mt: 1,
+                  fontSize: '0.65rem',
+                  fontWeight: 800,
+                  color: '#0F3C64',
+                  maxWidth: 100,
+                  lineHeight: 1.15
+                }}
+              >
+                МАРШРУТ В ЯНДЕКС.КАРТАХ
               </Typography>
             </Box>
           </Box>
+        </Paper>
 
-          <Box sx={{ textAlign: 'right' }}>
-            <Typography variant="caption" sx={{ color: '#64748B', display: 'block' }}>
-              Талон сформирован: {new Date().toLocaleString('ru-RU')}
-            </Typography>
-            <Typography variant="caption" sx={{ color: '#64748B' }}>
-              Администратор клиники: Соколова О.В. / Подпись: ______________
-            </Typography>
-          </Box>
+        {/* Timestamp and Administrator Signature */}
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3, px: 1 }}>
+          <Typography variant="caption" sx={{ color: '#64748B' }}>
+            Талон сформирован: {new Date().toLocaleString('ru-RU')}
+          </Typography>
+          <Typography variant="caption" sx={{ color: '#64748B' }}>
+            Администратор клиники: Соколова О.В. / Подпись: ______________
+          </Typography>
         </Box>
 
         {/* Avoid break signature */}
@@ -334,9 +504,21 @@ export const DoctorDailyRoster = React.forwardRef<
 export default function SchedulingReports({ appointments, doctors, currentDate }: SchedulingReportsProps) {
   const [selectedDoctorId, setSelectedDoctorId] = useState<number>(doctors[0]?.id || 2);
   const [ticketModalOpen, setTicketModalOpen] = useState(false);
+  const [clinicInfo, setClinicInfo] = useState<ClinicInfo>(DEFAULT_CLINIC_INFO);
   const [selectedAppForTicket, setSelectedAppForTicket] = useState<Appointment | null>(
     appointments.length > 0 ? appointments[0] : null
   );
+
+  useEffect(() => {
+    fetch('http://127.0.0.1:5000/api/scheduling/clinic-info')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success && data.clinicInfo) {
+          setClinicInfo(data.clinicInfo);
+        }
+      })
+      .catch((err) => console.error('Error fetching clinic info:', err));
+  }, []);
 
   const ticketPrintRef = useRef<HTMLDivElement>(null);
   const rosterPrintRef = useRef<HTMLDivElement>(null);
@@ -524,7 +706,7 @@ export default function SchedulingReports({ appointments, doctors, currentDate }
 
           <DialogContent sx={{ p: 2, bgcolor: '#F8FAFC' }}>
             <Paper elevation={2} sx={{ borderRadius: '12px', overflow: 'hidden' }}>
-              <AppointmentTicket ref={ticketPrintRef} appointment={selectedAppForTicket} />
+              <AppointmentTicket ref={ticketPrintRef} appointment={selectedAppForTicket} clinicInfo={clinicInfo} />
             </Paper>
           </DialogContent>
 
