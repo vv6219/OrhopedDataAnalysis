@@ -78,10 +78,10 @@ export const ReportTemplate = React.forwardRef<HTMLDivElement, ReportTemplatePro
         </Box>
 
         {/* BODY */}
-        {operations.map(op => {
+        {safeOperations.map(op => {
           const mats = grouped[op.id] || [];
-          const rawTotal = mats.reduce((sum, m) => sum + (m.quantity * m.current_unit_cost), 0);
-          const matsTotal = rawTotal * materialCostFactor;
+          const rawTotal = mats.reduce((sum, m) => sum + ((m.quantity || 0) * (m.current_unit_cost || 0)), 0);
+          const matsTotal = rawTotal * factor;
 
           return (
             <Box key={op.id} sx={{ mb: 4, pageBreakInside: 'avoid' }}>
@@ -89,7 +89,7 @@ export const ReportTemplate = React.forwardRef<HTMLDivElement, ReportTemplatePro
                 Процедура: {op.name}
               </Typography>
               <Typography variant="body2" sx={{ ml: 1, mt: 1, mb: 1, fontWeight: 500 }}>
-                Стоимость самой процедуры: {op.price ? op.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 0} ₽
+                Стоимость самой процедуры: {op.price ? Number(op.price).toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0,00'} ₽
               </Typography>
               
               <Typography variant="subtitle2" sx={{ ml: 1, mt: 2, mb: 1 }}>Материалы для процедуры:</Typography>
@@ -111,13 +111,13 @@ export const ReportTemplate = React.forwardRef<HTMLDivElement, ReportTemplatePro
                           <TableCell>{m.material_name}</TableCell>
                           <TableCell>{m.unit_of_measure}</TableCell>
                           <TableCell align="right">{m.quantity}</TableCell>
-                          <TableCell align="right">{m.current_unit_cost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₽</TableCell>
-                          <TableCell align="right">{(m.quantity * m.current_unit_cost).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₽</TableCell>
+                          <TableCell align="right">{Number(m.current_unit_cost || 0).toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₽</TableCell>
+                          <TableCell align="right">{((m.quantity || 0) * (m.current_unit_cost || 0)).toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₽</TableCell>
                         </TableRow>
                       ))}
                       <TableRow>
                         <TableCell colSpan={4} align="right"><strong>Итого материалов:</strong></TableCell>
-                        <TableCell align="right"><strong>{matsTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₽</strong></TableCell>
+                        <TableCell align="right"><strong>{matsTotal.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₽</strong></TableCell>
                       </TableRow>
                     </TableBody>
                   </Table>
@@ -137,16 +137,16 @@ export const ReportTemplate = React.forwardRef<HTMLDivElement, ReportTemplatePro
             <Box sx={{ width: '400px' }}>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
                 <Typography variant="body2" sx={{ color: 'text.secondary' }}>Сумма за процедуры:</Typography>
-                <Typography variant="body2" sx={{ fontWeight: 600 }}>{grandTotalOperations.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₽</Typography>
+                <Typography variant="body2" sx={{ fontWeight: 600 }}>{grandTotalOperations.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₽</Typography>
               </Box>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
                 <Typography variant="body2" sx={{ color: 'text.secondary' }}>Сумма за материалы:</Typography>
-                <Typography variant="body2" sx={{ fontWeight: 600 }}>{grandTotalMaterials.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₽</Typography>
+                <Typography variant="body2" sx={{ fontWeight: 600 }}>{grandTotalMaterials.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₽</Typography>
               </Box>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 1, pt: 1, borderTop: '1px solid #ccc' }}>
                 <Typography variant="subtitle1" sx={{ fontWeight: 800, color: '#0F3C64' }}>ОБЩИЙ ИТОГ:</Typography>
                 <Typography variant="h6" sx={{ fontWeight: 800, color: '#0F3C64' }}>
-                  {grandTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₽
+                  {grandTotal.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₽
                 </Typography>
               </Box>
             </Box>

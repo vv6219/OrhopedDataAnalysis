@@ -1207,8 +1207,11 @@ export default function Staff() {
             onChange={(e) => setCurrentStaff({ ...currentStaff, full_name: e.target.value })}
           />
           <FormControl fullWidth margin="normal">
-            <InputLabel>Должность / Роль</InputLabel>
+            <InputLabel id="staff-role-label" htmlFor="staff-role-select">Должность / Роль</InputLabel>
             <Select
+              id="staff-role-select"
+              labelId="staff-role-label"
+              inputProps={{ id: 'staff-role-select' }}
               value={currentStaff.role || 'Врач травматолог-ортопед'}
               label="Должность / Роль"
               onChange={(e) => setCurrentStaff({ ...currentStaff, role: e.target.value })}
@@ -1247,8 +1250,11 @@ export default function Staff() {
             onChange={(e) => setCurrentStaff({ ...currentStaff, email: e.target.value })}
           />
           <FormControl fullWidth margin="normal">
-            <InputLabel>Статус занятости</InputLabel>
+            <InputLabel id="staff-status-label" htmlFor="staff-status-select">Статус занятости</InputLabel>
             <Select
+              id="staff-status-select"
+              labelId="staff-status-label"
+              inputProps={{ id: 'staff-status-select' }}
               value={currentStaff.status || 'active'}
               label="Статус занятости"
               onChange={(e) => setCurrentStaff({ ...currentStaff, status: e.target.value })}

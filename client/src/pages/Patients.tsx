@@ -1449,8 +1449,15 @@ export default function Patients() {
             </Grid>
             <Grid size={{ xs: 12, sm: 6 }}>
               <FormControl fullWidth size="small">
-                <InputLabel>Пол</InputLabel>
-                <Select value={newSex} label="Пол" onChange={(e) => setNewSex(Number(e.target.value))}>
+                <InputLabel id="patient-sex-label" htmlFor="patient-sex-select">Пол</InputLabel>
+                <Select
+                  id="patient-sex-select"
+                  labelId="patient-sex-label"
+                  inputProps={{ id: 'patient-sex-select' }}
+                  value={newSex}
+                  label="Пол"
+                  onChange={(e) => setNewSex(Number(e.target.value))}
+                >
                   <MenuItem value={1}>Мужской</MenuItem>
                   <MenuItem value={2}>Женский</MenuItem>
                 </Select>

@@ -809,9 +809,11 @@ export default function OperationsAnalytics() {
       >
         <Tooltip title="Ограничить анализ конкретным временным интервалом: за весь период, текущий год или отдельный месяц" arrow>
           <FormControl size="small" sx={{ minWidth: 170 }}>
-            <InputLabel id="period-label">Отчетный период</InputLabel>
+            <InputLabel id="period-label" htmlFor="period-select">Отчетный период</InputLabel>
             <Select
+              id="period-select"
               labelId="period-label"
+              inputProps={{ id: 'period-select' }}
               value={period}
               label="Отчетный период"
               onChange={(e) => setPeriod(e.target.value)}
@@ -833,9 +835,11 @@ export default function OperationsAnalytics() {
 
         <Tooltip title="Фильтровать операции по типу вмешательства (инъекции гиалуроновой кислоты и PRP, хирургия, иммобилизация Турбокаст и др.)" arrow>
           <FormControl size="small" sx={{ minWidth: 230 }}>
-            <InputLabel id="category-label">Клиническое направление</InputLabel>
+            <InputLabel id="category-label" htmlFor="category-select">Клиническое направление</InputLabel>
             <Select
+              id="category-select"
               labelId="category-label"
+              inputProps={{ id: 'category-select' }}
               value={category}
               label="Клиническое направление"
               onChange={(e) => setCategory(e.target.value)}
@@ -853,9 +857,11 @@ export default function OperationsAnalytics() {
 
         <Tooltip title="Анализ эффективности работы конкретного специалиста: Добрушкин А.М. (Главврач) или Петров С.В. (Ортопед)" arrow>
           <FormControl size="small" sx={{ minWidth: 220 }}>
-            <InputLabel id="doctor-label">Оперирующий хирург</InputLabel>
+            <InputLabel id="doctor-label" htmlFor="doctor-select">Оперирующий хирург</InputLabel>
             <Select
+              id="doctor-select"
               labelId="doctor-label"
+              inputProps={{ id: 'doctor-select' }}
               value={doctorId}
               label="Оперирующий хирург"
               onChange={(e) => setDoctorId(e.target.value)}

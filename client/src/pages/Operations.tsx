@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { 
   Typography,
   Box,
@@ -11,10 +11,6 @@ import {
   DialogActions,
   TextField,
   Tooltip,
-  Select,
-  MenuItem,
-  InputLabel,
-  FormControl,
   Autocomplete,
   Tabs,
   Tab,
@@ -40,7 +36,6 @@ import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import AddIcon from '@mui/icons-material/Add';
 import PrintIcon from '@mui/icons-material/Print';
-import LocalHospitalIcon from '@mui/icons-material/LocalHospital';
 import BarChartIcon from '@mui/icons-material/BarChart';
 import HealthAndSafetyIcon from '@mui/icons-material/HealthAndSafety';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
@@ -159,10 +154,12 @@ export default function Operations() {
   const [editingDetailItem, setEditingDetailItem] = useState<any>(null);
   const [parameters, setParameters] = useState<Record<string, number>>({});
   
-  // Print state
+  // Print & Report Preview state
   const [selectedOperationIds, setSelectedOperationIds] = useState<number[]>([]);
   const [bulkMaterials, setBulkMaterials] = useState<any[]>([]);
   const [printOperations, setPrintOperations] = useState<any[]>([]);
+  const [pdfPreviewOpen, setPdfPreviewOpen] = useState(false);
+  const [isPrinting, setIsPrinting] = useState(false);
   const printRef = useRef<HTMLDivElement>(null);
 
   const handlePrintTrigger = useReactToPrint({
@@ -182,30 +179,51 @@ export default function Operations() {
     `
   });
 
-  const operationsRef = useRef(operations);
-  const selectedIdsRef = useRef(selectedOperationIds);
-  useEffect(() => {
-    operationsRef.current = operations;
-    selectedIdsRef.current = selectedOperationIds;
-  }, [operations, selectedOperationIds]);
+  const extractRowIds = (model: any): number[] => {
+    if (!model) return [];
+    if (Array.isArray(model)) {
+      return model.map(Number).filter((n) => !isNaN(n));
+    }
+    if (model.ids) {
+      if (model.ids instanceof Set) {
+        return Array.from(model.ids).map(Number).filter((n) => !isNaN(n));
+      }
+      if (Array.isArray(model.ids)) {
+        return model.ids.map(Number).filter((n) => !isNaN(n));
+      }
+    }
+    return [];
+  };
 
-  const handlePrint = async () => {
-    const currentSelectedIds = selectedIdsRef.current;
-    if (!Array.isArray(currentSelectedIds) || currentSelectedIds.length === 0) return;
+  const getEffectivePrintIds = (): number[] => {
+    if (selectedOperationIds.length > 0) {
+      return selectedOperationIds;
+    }
+    if (selectedOperationId) {
+      return [selectedOperationId];
+    }
+    return [];
+  };
+
+  const handleOpenPrintPreview = async (customIds?: number[]) => {
+    const targetIds = customIds && customIds.length > 0 ? customIds : getEffectivePrintIds();
+    if (targetIds.length === 0) return;
+    
+    setIsPrinting(true);
     try {
-      const res = await fetch(`http://localhost:5000/api/operations/materials-bulk?ids=${currentSelectedIds.join(',')}`);
-      const data = await res.json();
-      setBulkMaterials(data);
+      const res = await fetch(`http://localhost:5000/api/operations/materials-bulk?ids=${targetIds.join(',')}`);
+      if (res.ok) {
+        const data = await res.json();
+        setBulkMaterials(data);
+      }
       
-      const latestOps = operationsRef.current;
-      const filteredOps = latestOps.filter(o => currentSelectedIds.map(String).includes(String(o.id)));
+      const filteredOps = operations.filter((o) => targetIds.map(String).includes(String(o.id)));
       setPrintOperations(filteredOps);
-      
-      setTimeout(() => {
-        handlePrintTrigger();
-      }, 300);
+      setPdfPreviewOpen(true);
     } catch (err) {
       console.error('Print fetch error', err);
+    } finally {
+      setIsPrinting(false);
     }
   };
 
@@ -598,17 +616,27 @@ export default function Operations() {
               Обновить
             </Button>
           </Tooltip>
-          <Tooltip title="Напечатать официальный бланк калькуляции выбранных процедур" arrow enterDelay={200}>
+          <Tooltip 
+            title={
+              getEffectivePrintIds().length > 0
+                ? `Открыть предпросмотр и напечатать официальный бланк калькуляции (${getEffectivePrintIds().length} процедур)`
+                : "Выберите одну или несколько процедур в таблице (чекбоксом или кликом) для печати бланка калькуляции"
+            } 
+            arrow 
+            enterDelay={200}
+          >
             <span>
               <Button
                 variant="outlined"
                 color="secondary"
-                startIcon={<PrintIcon />}
-                onClick={handlePrint}
-                disabled={selectedOperationIds.length === 0}
+                startIcon={isPrinting ? <CircularProgress size={16} color="inherit" /> : <PrintIcon />}
+                onClick={() => handleOpenPrintPreview()}
+                disabled={getEffectivePrintIds().length === 0 || isPrinting}
                 sx={{ textTransform: 'none', fontWeight: 700 }}
               >
-                Печать калькуляции ({selectedOperationIds.length})
+                {getEffectivePrintIds().length > 0 
+                  ? `Печать калькуляции (${getEffectivePrintIds().length})`
+                  : 'Печать калькуляции'}
               </Button>
             </span>
           </Tooltip>
@@ -710,7 +738,10 @@ export default function Operations() {
               }}
               pageSizeOptions={[10, 25, 50, 100]}
               checkboxSelection
-              onRowSelectionModelChange={(ids) => setSelectedOperationIds(ids as number[])}
+              onRowSelectionModelChange={(model) => {
+                const ids = extractRowIds(model);
+                setSelectedOperationIds(ids);
+              }}
               onRowClick={(params) => setSelectedOperationId(params.row.id)}
               columnHeaderHeight={54}
               localeText={ruRU.components.MuiDataGrid.defaultProps.localeText}
@@ -777,17 +808,32 @@ export default function Operations() {
                       Коэффициент накладных расходов: {parameters.material_cost_factor || 1.15}x
                     </Typography>
                   </Box>
-                  <Tooltip title="Привязать расходный материал к данной процедуре" arrow enterDelay={200}>
-                    <Button
-                      size="small"
-                      variant="contained"
-                      startIcon={<AddIcon />}
-                      onClick={() => handleOpenDetail()}
-                      sx={{ bgcolor: '#0F3C64', textTransform: 'none', fontWeight: 700 }}
-                    >
-                      Добавить материал в карту
-                    </Button>
-                  </Tooltip>
+                  <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                    <Tooltip title="Напечатать официальный бланк калькуляции для этой выбранной процедуры" arrow enterDelay={200}>
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        color="secondary"
+                        startIcon={isPrinting ? <CircularProgress size={14} color="inherit" /> : <PrintIcon fontSize="small" />}
+                        onClick={() => handleOpenPrintPreview([selectedOperationId])}
+                        disabled={isPrinting}
+                        sx={{ textTransform: 'none', fontWeight: 700 }}
+                      >
+                        Печать этой карты
+                      </Button>
+                    </Tooltip>
+                    <Tooltip title="Привязать расходный материал к данной процедуре" arrow enterDelay={200}>
+                      <Button
+                        size="small"
+                        variant="contained"
+                        startIcon={<AddIcon />}
+                        onClick={() => handleOpenDetail()}
+                        sx={{ bgcolor: '#0F3C64', textTransform: 'none', fontWeight: 700 }}
+                      >
+                        Добавить материал в карту
+                      </Button>
+                    </Tooltip>
+                  </Box>
                 </Box>
 
                 {operationMaterials.length === 0 ? (
@@ -1395,15 +1441,72 @@ export default function Operations() {
         </DialogActions>
       </Dialog>
 
-      {/* Hidden print container */}
-      <Box sx={{ display: 'none' }}>
-        <ReportTemplate 
-          ref={printRef}
-          operations={printOperations || []}
-          materialsData={bulkMaterials || []}
-          materialCostFactor={parameters?.material_cost_factor || 1.15}
-        />
-      </Box>
+      {/* Print Preview & Direct Print Modal Dialog */}
+      <Dialog
+        open={pdfPreviewOpen}
+        onClose={() => setPdfPreviewOpen(false)}
+        maxWidth="md"
+        fullWidth
+        slotProps={{
+          paper: {
+            sx: {
+              borderRadius: 3,
+              maxHeight: '92vh',
+              bgcolor: '#F8FAFC'
+            }
+          }
+        }}
+      >
+        <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', pb: 1.5, borderBottom: '1px solid #E2E8F0', flexWrap: 'wrap', gap: 1 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+            <PrintIcon sx={{ color: '#0F3C64' }} />
+            <Box>
+              <Typography variant="h6" sx={{ fontWeight: 800, color: '#0F3C64', lineHeight: 1.2 }}>
+                Предпросмотр бланка калькуляции ({printOperations.length} {printOperations.length === 1 ? 'процедура' : 'процедур'})
+              </Typography>
+              <Typography variant="caption" sx={{ color: '#64748B' }}>
+                Официальный расчет себестоимости и нормативного расхода материалов клиники
+              </Typography>
+            </Box>
+          </Box>
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            <Button
+              variant="contained"
+              startIcon={<PrintIcon />}
+              onClick={() => handlePrintTrigger()}
+              sx={{ bgcolor: '#0F3C64', textTransform: 'none', fontWeight: 700, '&:hover': { bgcolor: '#0A2744' } }}
+            >
+              Распечатать бланк
+            </Button>
+            <Button
+              variant="outlined"
+              onClick={() => setPdfPreviewOpen(false)}
+              sx={{ textTransform: 'none', fontWeight: 600, color: '#64748B', borderColor: '#CBD5E1' }}
+            >
+              Закрыть
+            </Button>
+          </Box>
+        </DialogTitle>
+        <DialogContent sx={{ p: 3, bgcolor: '#F1F5F9' }}>
+          <Paper
+            elevation={0}
+            sx={{
+              p: 0,
+              bgcolor: '#FFFFFF',
+              borderRadius: 2,
+              overflow: 'hidden',
+              boxShadow: '0 4px 20px rgba(0,0,0,0.06)'
+            }}
+          >
+            <ReportTemplate
+              ref={printRef}
+              operations={printOperations || []}
+              materialsData={bulkMaterials || []}
+              materialCostFactor={parameters?.material_cost_factor || 1.15}
+            />
+          </Paper>
+        </DialogContent>
+      </Dialog>
     </Box>
   );
 }
