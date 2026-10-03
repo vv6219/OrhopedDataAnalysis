@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Box,
   Typography,
@@ -39,7 +39,6 @@ import {
 } from '@mui/x-data-grid';
 import type { GridColDef } from '@mui/x-data-grid';
 import { ruRU } from '@mui/x-data-grid/locales';
-import BadgeIcon from '@mui/icons-material/Badge';
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -330,43 +329,42 @@ export default function Staff() {
 
   const getRoleChip = (role: string) => {
     const r = (role || '').toLowerCase();
+    let sxStyles = {
+      bgcolor: 'rgba(124, 58, 237, 0.1)',
+      color: '#7C3AED',
+      fontWeight: 700,
+      border: '1px solid rgba(124, 58, 237, 0.25)'
+    };
     if (r.includes('главный') || r.includes('врач') || r.includes('ортопед') || r.includes('хирург')) {
-      return (
-        <Chip
-          label={role}
-          size="small"
-          sx={{
-            bgcolor: 'rgba(15, 60, 100, 0.1)',
-            color: '#0F3C64',
-            fontWeight: 700,
-            border: '1px solid rgba(15, 60, 100, 0.25)'
-          }}
-        />
-      );
+      sxStyles = {
+        bgcolor: 'rgba(15, 60, 100, 0.1)',
+        color: '#0F3C64',
+        fontWeight: 700,
+        border: '1px solid rgba(15, 60, 100, 0.25)'
+      };
+    } else if (r.includes('медсестра') || r.includes('сестра') || r.includes('ассистент')) {
+      sxStyles = {
+        bgcolor: 'rgba(2, 132, 199, 0.1)',
+        color: '#0284C7',
+        fontWeight: 700,
+        border: '1px solid rgba(2, 132, 199, 0.25)'
+      };
     }
-    if (r.includes('медсестра') || r.includes('сестра') || r.includes('ассистент')) {
-      return (
-        <Chip
-          label={role}
-          size="small"
-          sx={{
-            bgcolor: 'rgba(2, 132, 199, 0.1)',
-            color: '#0284C7',
-            fontWeight: 700,
-            border: '1px solid rgba(2, 132, 199, 0.25)'
-          }}
-        />
-      );
-    }
+
     return (
       <Chip
         label={role}
         size="small"
         sx={{
-          bgcolor: 'rgba(124, 58, 237, 0.1)',
-          color: '#7C3AED',
-          fontWeight: 700,
-          border: '1px solid rgba(124, 58, 237, 0.25)'
+          ...sxStyles,
+          height: 'auto',
+          maxWidth: '100%',
+          '& .MuiChip-label': {
+            whiteSpace: 'normal',
+            lineHeight: 1.25,
+            py: 0.5,
+            px: 0.8
+          }
         }}
       />
     );
@@ -380,32 +378,60 @@ export default function Staff() {
   };
 
   const columns: GridColDef[] = [
-    { field: 'id', headerName: '№', width: 70, align: 'center', headerAlign: 'center' },
+    { field: 'id', headerName: '№', width: 60, align: 'center', headerAlign: 'center' },
     {
       field: 'full_name',
       headerName: 'ФИО Сотрудника',
-      flex: 1.4,
-      minWidth: 220,
+      flex: 2,
+      minWidth: 260,
       filterOperators: customStringOperators,
       renderCell: (params) => {
         const name = String(params.value || '');
         const isInformal = name.trim().split(' ').length < 2;
 
         return (
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, height: '100%' }}>
-            <Avatar sx={{ bgcolor: '#0F3C64', width: 32, height: 32, fontSize: '0.8rem', fontWeight: 700 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, width: '100%', py: 0.5 }}>
+            <Avatar
+              sx={{
+                bgcolor: '#0F3C64',
+                width: 36,
+                height: 36,
+                fontSize: '0.85rem',
+                fontWeight: 700,
+                flexShrink: 0
+              }}
+            >
               {getInitials(name)}
             </Avatar>
-            <Box>
-              <Typography variant="body2" sx={{ fontWeight: 700, color: '#0F3C64' }}>
+            <Box sx={{ minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+              <Typography
+                variant="body2"
+                sx={{
+                  fontWeight: 700,
+                  color: '#0F3C64',
+                  fontSize: '0.88rem',
+                  lineHeight: 1.3,
+                  whiteSpace: 'normal',
+                  wordBreak: 'break-word'
+                }}
+              >
                 {name}
               </Typography>
               {isInformal && (
-                <Chip 
-                  label="Неполное ФИО" 
-                  size="small" 
-                  sx={{ height: 16, fontSize: '0.62rem', bgcolor: '#FEF2F2', color: '#DC2626', fontWeight: 700 }}
-                />
+                <Box sx={{ mt: 0.35 }}>
+                  <Chip 
+                    label="Неполное ФИО" 
+                    size="small" 
+                    sx={{
+                      height: 18,
+                      fontSize: '0.65rem',
+                      bgcolor: '#FEF2F2',
+                      color: '#DC2626',
+                      fontWeight: 700,
+                      border: '1px solid #FECACA'
+                    }}
+                  />
+                </Box>
               )}
             </Box>
           </Box>
@@ -415,11 +441,11 @@ export default function Staff() {
     {
       field: 'role',
       headerName: 'Должность / Роль',
-      flex: 1.2,
-      minWidth: 200,
+      flex: 1.4,
+      minWidth: 210,
       filterOperators: customStringOperators,
       renderCell: (params) => (
-        <Box sx={{ display: 'flex', alignItems: 'center', height: '100%' }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', width: '100%', py: 0.5 }}>
           {getRoleChip(params.value)}
         </Box>
       )
@@ -427,11 +453,21 @@ export default function Staff() {
     {
       field: 'specialization',
       headerName: 'Специализация / Направление',
-      flex: 1.5,
+      flex: 1.8,
       minWidth: 240,
       filterOperators: customStringOperators,
       renderCell: (params) => (
-        <Typography variant="body2" sx={{ color: '#4A5568', fontSize: '0.85rem' }}>
+        <Typography
+          variant="body2"
+          sx={{
+            color: '#4A5568',
+            fontSize: '0.85rem',
+            whiteSpace: 'normal',
+            wordBreak: 'break-word',
+            lineHeight: 1.35,
+            py: 0.5
+          }}
+        >
           {params.value || 'Общая практика'}
         </Typography>
       )
@@ -439,11 +475,11 @@ export default function Staff() {
     {
       field: 'contact_phone',
       headerName: 'Контактный телефон',
-      width: 180,
+      width: 175,
       filterOperators: customStringOperators,
       renderCell: (params) => params.value ? (
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, color: '#2D3748' }}>
-          <PhoneIcon sx={{ fontSize: 16, color: '#0F3C64' }} />
+          <PhoneIcon sx={{ fontSize: 16, color: '#0F3C64', flexShrink: 0 }} />
           <Typography variant="body2">{params.value}</Typography>
         </Box>
       ) : (
@@ -453,12 +489,22 @@ export default function Staff() {
     {
       field: 'email',
       headerName: 'Корпоративный Email',
-      width: 220,
+      width: 230,
       filterOperators: customStringOperators,
       renderCell: (params) => params.value ? (
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, color: '#2D3748' }}>
-          <EmailIcon sx={{ fontSize: 16, color: '#0284C7' }} />
-          <Typography variant="body2">{params.value}</Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, color: '#2D3748', width: '100%' }}>
+          <EmailIcon sx={{ fontSize: 16, color: '#0284C7', flexShrink: 0 }} />
+          <Typography
+            variant="body2"
+            sx={{
+              fontSize: '0.84rem',
+              whiteSpace: 'normal',
+              wordBreak: 'break-all',
+              lineHeight: 1.25
+            }}
+          >
+            {params.value}
+          </Typography>
         </Box>
       ) : (
         <Chip label="Не указан" size="small" sx={{ height: 20, fontSize: '0.7rem', bgcolor: '#FEF2F2', color: '#DC2626', fontWeight: 600 }} />
@@ -634,6 +680,8 @@ export default function Staff() {
 
             <DataGrid
               autoHeight
+              showToolbar
+              getRowHeight={() => 'auto'}
               loading={loading}
               rows={staffList}
               columns={columns}
@@ -661,6 +709,18 @@ export default function Staff() {
                   lineHeight: '1.2rem',
                   fontWeight: 700,
                   color: '#1E293B'
+                },
+                '& .MuiDataGrid-cell': {
+                  display: 'flex',
+                  alignItems: 'center',
+                  py: 1.2,
+                  borderBottom: '1px solid #F1F5F9'
+                },
+                '& .MuiDataGrid-row': {
+                  minHeight: '56px !important'
+                },
+                '& .MuiDataGrid-row:hover': {
+                  bgcolor: 'rgba(15, 60, 100, 0.03)'
                 }
               }}
               slots={{ 
