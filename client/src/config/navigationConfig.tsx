@@ -34,7 +34,7 @@ export interface NavGroup {
 export const navigationGroups: NavGroup[] = [
   {
     id: 'operations_and_wizards',
-    title: 'Операции и Мастеры',
+    title: 'Операции',
     icon: <AutoAwesomeMotionIcon sx={{ fontSize: 20 }} />,
     defaultOpen: true,
     items: [
@@ -60,7 +60,7 @@ export const navigationGroups: NavGroup[] = [
   },
   {
     id: 'base_entities',
-    title: 'Базовые сущности (НСИ)',
+    title: 'Базовые данные',
     icon: <FolderSpecialIcon sx={{ fontSize: 20 }} />,
     defaultOpen: true,
     items: [
@@ -167,49 +167,49 @@ export const routeMetaMap: Record<string, RouteMeta> = {
   },
   '/checkout': {
     title: 'Оформление визита (Wizard)',
-    groupTitle: 'Операции и Мастеры',
+    groupTitle: 'Операции',
     groupId: 'operations_and_wizards',
     parentPath: '/'
   },
   '/scheduling': {
     title: 'Расписание и прием',
-    groupTitle: 'Операции и Мастеры',
+    groupTitle: 'Операции',
     groupId: 'operations_and_wizards',
     parentPath: '/'
   },
   '/reports': {
     title: 'Отчетность и документы',
-    groupTitle: 'Операции и Мастеры',
+    groupTitle: 'Операции',
     groupId: 'operations_and_wizards',
     parentPath: '/'
   },
   '/patients': {
     title: 'Пациенты (ЭМК картотека)',
-    groupTitle: 'Базовые сущности (НСИ)',
+    groupTitle: 'Базовые данные',
     groupId: 'base_entities',
     parentPath: '/'
   },
   '/staff': {
     title: 'Персонал и врачи',
-    groupTitle: 'Базовые сущности (НСИ)',
+    groupTitle: 'Базовые данные',
     groupId: 'base_entities',
     parentPath: '/'
   },
   '/operations': {
     title: 'Каталог операций и услуг',
-    groupTitle: 'Базовые сущности (НСИ)',
+    groupTitle: 'Базовые данные',
     groupId: 'base_entities',
     parentPath: '/'
   },
   '/inventory': {
     title: 'Склад материалов и медикаментов',
-    groupTitle: 'Базовые сущности (НСИ)',
+    groupTitle: 'Базовые данные',
     groupId: 'base_entities',
     parentPath: '/'
   },
   '/parameters': {
     title: 'Параметры клиники',
-    groupTitle: 'Базовые сущности (НСИ)',
+    groupTitle: 'Базовые данные',
     groupId: 'base_entities',
     parentPath: '/'
   },

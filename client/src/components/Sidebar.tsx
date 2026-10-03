@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Drawer,
   List,
-  ListItem,
+  ListItemButton,
   ListItemIcon,
   ListItemText,
   Toolbar,
@@ -11,15 +11,11 @@ import {
   Tooltip,
   TextField,
   InputAdornment,
-  Paper,
   IconButton,
   Collapse
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
-import StorageIcon from '@mui/icons-material/Storage';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
-import CircleIcon from '@mui/icons-material/Circle';
-import CodeIcon from '@mui/icons-material/Code';
 import ExpandLess from '@mui/icons-material/ExpandLess';
 import ExpandMore from '@mui/icons-material/ExpandMore';
 import KeyboardDoubleArrowDownIcon from '@mui/icons-material/KeyboardDoubleArrowDown';
@@ -75,8 +71,6 @@ export default function Sidebar() {
     });
     setOpenGroups(allClosed);
   };
-
-  const isDbActive = location.pathname === '/sqlite-studio' || location.pathname === '/db-studio';
 
   const handleItemClick = (item: { path: string; isExternal?: boolean }) => {
     if (item.isExternal || item.path.startsWith('http')) {
@@ -256,8 +250,7 @@ export default function Sidebar() {
             return (
               <Box key={group.id} sx={{ mb: 1 }}>
                 {/* Group Header / Collapsible Node */}
-                <ListItem
-                  button
+                <ListItemButton
                   onClick={() => toggleGroup(group.id)}
                   sx={{
                     borderRadius: '8px',
@@ -274,21 +267,26 @@ export default function Sidebar() {
                     {group.icon}
                   </ListItemIcon>
                   <ListItemText
-                    primary={group.title}
-                    primaryTypographyProps={{
-                      fontSize: '0.74rem',
-                      fontWeight: 800,
-                      textTransform: 'uppercase',
-                      color: '#0F3C64',
-                      letterSpacing: '0.4px'
-                    }}
+                    primary={
+                      <Typography
+                        sx={{
+                          fontSize: '0.74rem',
+                          fontWeight: 800,
+                          textTransform: 'uppercase',
+                          color: '#0F3C64',
+                          letterSpacing: '0.4px'
+                        }}
+                      >
+                        {group.title}
+                      </Typography>
+                    }
                   />
                   {isGroupOpen ? (
                     <ExpandLess sx={{ fontSize: 18, color: '#718096' }} />
                   ) : (
                     <ExpandMore sx={{ fontSize: 18, color: '#718096' }} />
                   )}
-                </ListItem>
+                </ListItemButton>
 
                 {/* Group Child Items */}
                 <Collapse in={isGroupOpen} timeout="auto" unmountOnExit>
@@ -298,8 +296,7 @@ export default function Sidebar() {
 
                       return (
                         <Tooltip title={item.tooltip} placement="right" key={item.text} arrow>
-                          <ListItem
-                            button
+                          <ListItemButton
                             onClick={() => handleItemClick(item)}
                             sx={{
                               cursor: 'pointer',
@@ -310,7 +307,6 @@ export default function Sidebar() {
                               py: 0.6,
                               bgcolor: isActive ? 'rgba(15, 60, 100, 0.08)' : 'transparent',
                               color: isActive ? '#0F3C64' : 'text.primary',
-                              fontWeight: isActive ? 700 : 500,
                               borderLeft: isActive ? '4px solid #0F3C64' : '4px solid transparent',
                               '&:hover': {
                                 bgcolor: 'rgba(15, 60, 100, 0.05)',
@@ -323,17 +319,22 @@ export default function Sidebar() {
                               {item.icon}
                             </ListItemIcon>
                             <ListItemText
-                              primary={item.text}
-                              primaryTypographyProps={{
-                                fontSize: '0.82rem',
-                                fontWeight: isActive ? 700 : 500,
-                                color: isActive ? '#0F3C64' : 'inherit'
-                              }}
+                              primary={
+                                <Typography
+                                  sx={{
+                                    fontSize: '0.82rem',
+                                    fontWeight: isActive ? 700 : 500,
+                                    color: isActive ? '#0F3C64' : 'inherit'
+                                  }}
+                                >
+                                  {item.text}
+                                </Typography>
+                              }
                             />
                             {item.isExternal && (
                               <OpenInNewIcon sx={{ fontSize: 13, color: '#A0AEC0', ml: 'auto' }} />
                             )}
-                          </ListItem>
+                          </ListItemButton>
                         </Tooltip>
                       );
                     })}
