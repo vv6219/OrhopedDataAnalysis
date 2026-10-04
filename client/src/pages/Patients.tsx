@@ -331,27 +331,45 @@ export default function Patients() {
     {
       field: 'mednum',
       headerName: '№ ЭМК',
-      width: 95,
-      minWidth: 90,
-      renderCell: (params: GridRenderCellParams) => (
-        <Chip
-          label={params.value ? `№ ${params.value}` : `ID ${params.row.id}`}
-          size="small"
-          sx={{
-            fontWeight: 700,
-            bgcolor: '#EBF8FF',
-            color: '#2B6CB0',
-            fontSize: '0.78rem',
-            borderRadius: 1.5
-          }}
-        />
-      )
+      width: 125,
+      minWidth: 115,
+      align: 'center',
+      headerAlign: 'center',
+      renderCell: (params: GridRenderCellParams) => {
+        const hasMednum = params.value != null && Number(params.value) > 0;
+        const displayLabel = hasMednum ? `№ ${params.value}` : (params.row.id ? `ID ${params.row.id}` : 'б/н');
+        const tooltipTitle = hasMednum
+          ? `Электронная медицинская карта № ${params.value} (ID в базе: ${params.row.id})`
+          : `ЭМК не присвоен (ID в базе: ${params.row.id})`;
+        return (
+          <Tooltip title={tooltipTitle} arrow enterDelay={200}>
+            <Chip
+              label={displayLabel}
+              size="small"
+              sx={{
+                fontWeight: 700,
+                bgcolor: hasMednum ? '#EBF8FF' : '#F8FAFC',
+                color: hasMednum ? '#2B6CB0' : '#64748B',
+                border: hasMednum ? '1px solid #BEE3F8' : '1px solid #E2E8F0',
+                fontSize: '0.8rem',
+                borderRadius: 1.5,
+                maxWidth: '100%',
+                '& .MuiChip-label': {
+                  px: 1,
+                  overflow: 'visible',
+                  whiteSpace: 'nowrap'
+                }
+              }}
+            />
+          </Tooltip>
+        );
+      }
     },
     {
       field: 'full_name',
       headerName: 'ФИО Пациента',
       flex: 2,
-      minWidth: 230,
+      minWidth: 220,
       renderCell: (params: GridRenderCellParams) => {
         const initials = `${params.row.surname?.[0] || ''}${params.row.name?.[0] || ''}`.toUpperCase();
         return (
@@ -439,7 +457,7 @@ export default function Patients() {
       field: 'city',
       headerName: 'Город / Адрес',
       flex: 1.4,
-      minWidth: 160,
+      minWidth: 150,
       renderCell: (params: GridRenderCellParams) => (
         <Typography variant="body2" sx={{ fontSize: '0.8rem', color: '#4A5568', whiteSpace: 'normal', wordBreak: 'break-word', lineHeight: 1.3, py: 0.5 }}>
           {params.value || params.row.address || 'г. Сочи'}
@@ -450,7 +468,7 @@ export default function Patients() {
       field: 'channel_name',
       headerName: 'Источник / Канал',
       flex: 1,
-      minWidth: 130,
+      minWidth: 120,
       renderCell: (params: GridRenderCellParams) => {
         if (!params.value) return <Typography variant="caption" sx={{ color: '#A0AEC0' }}>Не указан</Typography>;
         return (
@@ -1231,7 +1249,7 @@ export default function Patients() {
                 {selectedPatient?.full_name || 'Медицинская карта пациента'}
               </Typography>
               <Typography variant="caption" sx={{ color: '#718096', fontWeight: 600 }}>
-                ЭМК № {selectedPatient?.mednum} • ID: {selectedPatient?.id} • Регистрация: {selectedPatient?.rdate ? new Date(selectedPatient.rdate).toLocaleDateString('ru-RU') : 'Н/Д'}
+                {selectedPatient?.mednum && Number(selectedPatient.mednum) > 0 ? `ЭМК № ${selectedPatient.mednum}` : 'ЭМК: б/н'} • ID: {selectedPatient?.id} • Регистрация: {selectedPatient?.rdate ? new Date(selectedPatient.rdate).toLocaleDateString('ru-RU') : 'Н/Д'}
               </Typography>
             </Box>
           </Box>
