@@ -414,11 +414,11 @@ export default function Operations() {
   };
 
   const columns: GridColDef[] = [
-    { field: 'id', headerName: '№', width: 65, align: 'center', headerAlign: 'center' },
+    { field: 'id', headerName: '№', width: 55, minWidth: 45, align: 'center', headerAlign: 'center' },
     { 
       field: 'name', 
       headerName: 'Наименование медицинской процедуры / услуги', 
-      flex: 2, 
+      flex: 2.2, 
       minWidth: 260,
       filterOperators: customStringOperators,
       getApplyQuickFilterFn: (value) => {
@@ -435,16 +435,28 @@ export default function Operations() {
         const cat = params.row?.clinical_category || '';
 
         return (
-          <Box sx={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', py: 0.5 }}>
-            <Typography variant="body2" sx={{ fontWeight: 700, color: '#1E293B', lineHeight: 1.3 }}>
+          <Box sx={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', py: 0.8, width: '100%' }}>
+            <Typography
+              variant="body2"
+              sx={{
+                fontWeight: 700,
+                color: '#1E293B',
+                lineHeight: 1.35,
+                whiteSpace: 'normal',
+                wordBreak: 'break-word',
+                fontSize: '0.88rem'
+              }}
+            >
               {val}
             </Typography>
-            <Box sx={{ display: 'flex', gap: 0.5, mt: 0.3 }}>
-              <Chip
-                label={cat}
-                size="small"
-                sx={{ height: 18, fontSize: '0.65rem', bgcolor: '#F1F5F9', color: '#475569', fontWeight: 600 }}
-              />
+            <Box sx={{ display: 'flex', gap: 0.5, mt: 0.4, flexWrap: 'wrap' }}>
+              {cat && (
+                <Chip
+                  label={cat}
+                  size="small"
+                  sx={{ height: 18, fontSize: '0.65rem', bgcolor: '#F1F5F9', color: '#475569', fontWeight: 600 }}
+                />
+              )}
               {params.row?.null_materials > 0 && (
                 <Chip
                   label="Разрыв BOM"
@@ -460,7 +472,8 @@ export default function Operations() {
     { 
       field: 'price', 
       headerName: 'Тариф (₽)', 
-      width: 130, 
+      width: 125,
+      minWidth: 110,
       type: 'number',
       renderCell: (params: GridRenderCellParams) => (
         <Typography variant="body2" sx={{ fontWeight: 800, color: '#0F3C64' }}>
@@ -471,7 +484,8 @@ export default function Operations() {
     { 
       field: 'material_cost', 
       headerName: 'Себестоимость (₽)', 
-      width: 150, 
+      width: 145,
+      minWidth: 125,
       type: 'number',
       renderCell: (params: GridRenderCellParams) => {
         const cost = Number(params.value || 0);
@@ -494,7 +508,8 @@ export default function Operations() {
     { 
       field: 'margin', 
       headerName: 'Маржинальность', 
-      width: 160, 
+      width: 145,
+      minWidth: 130,
       type: 'number',
       renderCell: (params: GridRenderCellParams) => {
         const margin = Number(params.value || 0);
@@ -538,7 +553,8 @@ export default function Operations() {
     { 
       field: 'materials_count', 
       headerName: 'Карта BOM', 
-      width: 130, 
+      width: 115,
+      minWidth: 105,
       align: 'center', 
       headerAlign: 'center',
       renderCell: (params: GridRenderCellParams) => {
@@ -573,7 +589,8 @@ export default function Operations() {
       headerName: 'Действия',
       sortable: false,
       filterable: false,
-      width: 110,
+      width: 85,
+      minWidth: 80,
       renderCell: (params: GridRenderCellParams) => (
         <Box sx={{ display: 'flex', gap: 0.5 }}>
           <Tooltip title="Редактировать услугу и прейскурантный тариф" arrow enterDelay={200}>
@@ -592,7 +609,7 @@ export default function Operations() {
   ];
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', width: '100%', maxWidth: '1440px', margin: '0 auto', gap: 3, pb: 6 }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', width: '100%', gap: 3, pb: 6 }}>
       {/* Top Banner / Header */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 2 }}>
         <Box>
@@ -728,12 +745,14 @@ export default function Operations() {
 
             <DataGrid
               autoHeight
+              showToolbar
+              getRowHeight={() => 'auto'}
               loading={loading}
               rows={operations}
               columns={columns}
               initialState={{
                 pagination: {
-                  paginationModel: { page: 0, pageSize: 25 },
+                  paginationModel: { page: 0, pageSize: 10 },
                 },
               }}
               pageSizeOptions={[10, 25, 50, 100]}
@@ -747,7 +766,15 @@ export default function Operations() {
               localeText={ruRU.components.MuiDataGrid.defaultProps.localeText}
               sx={{
                 border: 0,
+                width: '100%',
+                '& .MuiDataGrid-main': { width: '100%' },
                 '& .MuiDataGrid-virtualScroller': { overflowX: 'hidden' },
+                '& .MuiDataGrid-columnHeaders': {
+                  position: 'sticky',
+                  top: 0,
+                  zIndex: 1,
+                  bgcolor: '#F8FAFC'
+                },
                 '& .MuiDataGrid-columnHeader': {
                   alignItems: 'flex-start',
                 },
@@ -761,8 +788,22 @@ export default function Operations() {
                   fontWeight: 700,
                   color: '#1E293B'
                 },
-                '& .MuiDataGrid-row': { cursor: 'pointer' },
-                '& .MuiDataGrid-row.Mui-selected': { bgcolor: 'rgba(15, 60, 100, 0.08) !important' }
+                '& .MuiDataGrid-cell': {
+                  display: 'flex',
+                  alignItems: 'center',
+                  py: 1,
+                  borderBottom: '1px solid #F1F5F9'
+                },
+                '& .MuiDataGrid-row': {
+                  cursor: 'pointer',
+                  minHeight: '52px !important'
+                },
+                '& .MuiDataGrid-row:hover': {
+                  bgcolor: 'rgba(15, 60, 100, 0.03)'
+                },
+                '& .MuiDataGrid-row.Mui-selected': {
+                  bgcolor: 'rgba(15, 60, 100, 0.08) !important'
+                }
               }}
               slots={{ 
                 toolbar: CustomToolbar,
