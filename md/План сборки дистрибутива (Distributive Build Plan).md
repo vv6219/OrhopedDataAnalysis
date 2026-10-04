@@ -140,6 +140,18 @@ OrthopedClinic_v2.0/
 ├── backups/                       # Автоматические ежедневные резервные копии SQLite
 │   └── .gitkeep
 │
+├── tools/                         # Автономные инструменты баз данных
+│   ├── sqlite/                    # Официальный SQLite CLI Shell
+│   │   └── sqlite3.exe            # Аварийное обслуживание, VACUUM, PRAGMA, экспорт
+│   ├── sqlite-gui/                # Портативный DB Browser for SQLite / SQLiteStudio
+│   │   └── ...                    # Визуальный просмотр таблиц администратором
+│   └── firebird/                  # Firebird Client Library & CLI
+│       ├── fbclient.dll           # 64-битная клиентская библиотека Firebird
+│       ├── gds32.dll              # Библиотека обратной совместимости
+│       ├── isql.exe               # Консольная утилита выполнения запросов к FDB
+│       ├── firebird.msg           # Файлы системных сообщений СУБД
+│       └── plugins/               # Плагины аутентификации (Srp, Legacy_Auth)
+│
 └── logs/                          # Системные журналы работы сервера
     ├── access.log
     └── error.log
@@ -327,154 +339,568 @@ function Install-IISComponents {
         Start-Service -Name W3SVC
     } catch {
         Write-Host " [ОШИБКА] Не удалось автоматически включить IIS через PowerShell: $($_.Exception.Message)" -ForegroundColor Red
-        Write-Host " Попытка установки через DISM.exe..." -ForegroundColor Yellow
+        ## 7. Проверка, автоматическая установка и подготовка клиентов СУБД (SQLite Client & Firebird Client)
+
+Для автономного администрирования, выполнения аварийных регламентов и бесперебойной синхронизации с внешней медицинской базой клиники дистрибутив включает автоматическую диагностику, проверку разрядности (32/64-бит), зависимостей (Visual C++ Redistributable) и автоустановку клиентских инструментов двух СУБД.
+
+```mermaid
+graph LR
+    subgraph "Инструменты администратора клиники (tools/)"
+        subgraph "Клиент SQLite"
+            SQLCLI["sqlite3.exe<br/>(CLI: бэкапы, PRAGMA, экспорт)"]
+            SQLGUI["DB Browser for SQLite<br/>(Портативный GUI / MSI)"]
+        end
+        subgraph "Клиент Firebird"
+            FBClient["fbclient.dll + gds32.dll<br/>(64-bit Client Library)"]
+            ISQL["isql.exe<br/>(CLI тестирование и выборки)"]
+            Plugins["plugins/ (Srp, Legacy_Auth)<br/>+ firebird.msg + conf"]
+            VCRuntime["VC++ Redistributable x64<br/>(msvcp140.dll / vcruntime140.dll)"]
+        end
+    end
+
+    subgraph "Базы данных клиники"
+        SQLiteFile[("orthopedic_data_center.sqlite<br/>(Основная рабочая база)")]
+        FirebirdFile[("MEDICAL.FDB<br/>(Внешняя база пациентов: 61 298 зап.)")]
+    end
+
+    SQLCLI -->|Прямой доступ / VACUUM / PRAGMA| SQLiteFile
+    SQLGUI -->|Визуальный просмотр таблиц| SQLiteFile
+    FBClient -->|Синхронизация через Python| FirebirdFile
+    ISQL -->|Проверка порта 3050 и связи| FirebirdFile
+    VCRuntime -.->|Зависимость DLL| FBClient
+```
+
+---
+
+### 7.1. Клиент SQLite (SQLite CLI & Графический интерфейс DB Browser)
+
+#### 1. Назначение компонентов SQLite в дистрибутиве:
+* **`sqlite3.exe` (Официальная консольная утилита SQLite CLI x64):**
+  - Выполнение низкоуровневых регламентных процедур без необходимости запуска Node.js (`PRAGMA integrity_check`, `VACUUM INTO`, `.recover`, `.dump`).
+  - Быстрое ручное наложение SQL-патчей, миграций структуры и аварийное восстановление поврежденных секторов.
+* **DB Browser for SQLite (Официальный GUI):**
+  - Доступен как в портативном виде (`tools/sqlite-gui/`), так и в виде тихой системной установки через MSI.
+  - Инсталлятор создает ярлык в меню «Пуск» и на Рабочем столе: **«Управление базой данных клиники (SQLite)»** с параметром автооткрытия текущей рабочей базы `DB\orthopedic_data_center.sqlite`.
+  - Позволяет администратору и аналитикам клиники визуально просматривать картотеку, формировать пользовательские SQL-отчеты и экспортировать данные в Excel/CSV.
+
+#### 2. Диагностический алгоритм и сценарий автоустановки SQLite (`scripts/db/check_and_install_sqlite.ps1`):
+Скрипт проверяет наличие инструментов в системе и, если они отсутствуют, автоматически развертывает их:
+
+```powershell
+# scripts/db/check_and_install_sqlite.ps1
+param (
+    [switch]$InstallGui = $true,
+    [string]$AppDir = "$PSScriptRoot\..\.."
+)
+
+function Test-SQLiteCli {
+    Write-Host ">>> [1/2] Проверка консольного клиента SQLite (sqlite3.exe)..." -ForegroundColor Cyan
+    $localSqliteExe = Join-Path $AppDir "tools\sqlite\sqlite3.exe"
+    
+    # 1. Проверка локальной папки дистрибутива
+    if (Test-Path $localSqliteExe) {
+        $ver = & $localSqliteExe --version
+        Write-Host " [OK] Автономный SQLite CLI найден в tools/sqlite/: $ver" -ForegroundColor Green
+        return $true
+    }
+    
+    # 2. Проверка в системном PATH
+    $cmd = Get-Command "sqlite3.exe" -ErrorAction SilentlyContinue
+    if ($cmd) {
+        $ver = & $cmd.Source --version
+        Write-Host " [OK] Системный SQLite CLI обнаружен в PATH: $($cmd.Source) ($ver)" -ForegroundColor Green
+        return $true
+    }
+    
+    Write-Host " [!] SQLite CLI не найден. Выполняется автоматическая загрузка и развертывание..." -ForegroundColor Yellow
+    $toolsDir = Join-Path $AppDir "tools\sqlite"
+    New-Item -ItemType Directory -Force -Path $toolsDir | Out-Null
+    
+    # Загрузка официального официального 64-битного пакета sqlite-tools
+    $zipUrl = "https://sqlite.org/2026/sqlite-tools-win-x64-3490100.zip" # Либо локальный оффлайн-дистрибутив
+    $tempZip = "$env:TEMP\sqlite-tools.zip"
+    $tempExtract = "$env:TEMP\sqlite-extract"
+    
+    try {
+        if (Test-Path "$PSScriptRoot\..\..\installers\sqlite-tools-win-x64.zip") {
+            Copy-Item "$PSScriptRoot\..\..\installers\sqlite-tools-win-x64.zip" -Destination $tempZip -Force
+        } else {
+            Invoke-WebRequest -Uri $zipUrl -OutFile $tempZip -UseBasicParsing
+        }
+        Expand-Archive -Path $tempZip -DestinationPath $tempExtract -Force
+        $extractedExe = Get-ChildItem -Path $tempExtract -Filter "sqlite3.exe" -Recurse | Select-Object -First 1
+        Copy-Item $extractedExe.FullName -Destination $localSqliteExe -Force
+        Remove-Item $tempZip, $tempExtract -Recurse -Force -ErrorAction SilentlyContinue
+        Write-Host " [OK] sqlite3.exe успешно установлен в $localSqliteExe." -ForegroundColor Green
+        return $true
+    } catch {
+        Write-Host " [ОШИБКА] Не удалось загрузить sqlite3.exe: $($_.Exception.Message)" -ForegroundColor Red
+        return $false
+    }
+}
+
+function Test-SQLiteGui {
+    Write-Host ">>> [2/2] Проверка графического интерфейса DB Browser for SQLite..." -ForegroundColor Cyan
+    $portableGui = Join-Path $AppDir "tools\sqlite-gui\DB Browser for SQLite.exe"
+    $progFilesGui = "C:\Program Files\DB Browser for SQLite\DB Browser for SQLite.exe"
+    
+    # 1. Проверка портативной версии
+    if (Test-Path $portableGui) {
+        Write-Host " [OK] Обнаружена портативная версия DB Browser for SQLite: $portableGui" -ForegroundColor Green
+        return $true
+    }
+    
+    # 2. Проверка установленной версии в Program Files
+    if (Test-Path $progFilesGui) {
+        Write-Host " [OK] Обнаружена установленная версия DB Browser for SQLite в Program Files." -ForegroundColor Green
+        return $true
+    }
+    
+    # 3. Проверка в реестре Windows Uninstall
+    $regCheck = Get-ItemProperty "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*" |
+                Where-Object { $_.DisplayName -like "*DB Browser for SQLite*" }
+    if ($regCheck) {
+        Write-Host " [OK] DB Browser for SQLite зарегистрирован в системе: $($regCheck.DisplayName)" -ForegroundColor Green
+        return $true
+    }
+    
+    Write-Host " [!] DB Browser for SQLite не обнаружен." -ForegroundColor Yellow
+    if ($InstallGui) {
+        $msiInstaller = "$PSScriptRoot\..\..\installers\DB.Browser.for.SQLite-win64.msi"
+        if (Test-Path $msiInstaller) {
+            Write-Host " Запуск тихой установки DB Browser for SQLite..." -ForegroundColor Cyan
+            Start-Process msiexec.exe -ArgumentList "/i `"$msiInstaller`" /quiet /qn /norestart" -Wait
+            Write-Host " [OK] Установка DB Browser for SQLite успешно завершена." -ForegroundColor Green
+            return $true
+        } else {
+            Write-Host " [ИНФО] Установочный MSI-пакет не найден в папке installers/. Развертывание портативной версии..." -ForegroundColor Yellow
+            # Развертывание портативного zip-архива
+            $zipPortable = "$PSScriptRoot\..\..\installers\sqlitebrowser-portable-win64.zip"
+            if (Test-Path $zipPortable) {
+                Expand-Archive -Path $zipPortable -DestinationPath (Join-Path $AppDir "tools\sqlite-gui") -Force
+                Write-Host " [OK] Портативная версия развернута в tools/sqlite-gui." -ForegroundColor Green
+                return $true
+            }
+        }
+    }
+    return $false
+}
+
+# Запуск проверок
+Test-SQLiteCli
+Test-SQLiteGui
+```
+
+#### 3. Тест верификации базы данных SQLite (`tools/sqlite/test_sqlite.bat`):
+```cmd
+@echo off
+chcp 65001 > nul
+set "DB_FILE=%~dp0..\..\DB\orthopedic_data_center.sqlite"
+echo >>> Тестирование целостности базы данных SQLite...
+"%~dp0sqlite3.exe" "%DB_FILE%" "PRAGMA integrity_check; PRAGMA foreign_key_check; SELECT count(*) AS total_patients FROM patients;"
+if %ERRORLEVEL% EQU 0 (
+    echo [УСПЕХ] База данных SQLite полностью исправна и доступна.
+) else (
+    echo [ОШИБКА] Обнаружены повреждения или ошибки структуры базы данных SQLite.
+)
+```
+
+---
+
+### 7.2. Клиент Firebird (`fbclient.dll`, `isql.exe`, плагины аутентификации)
+
+#### 1. Критические требования и типичные проблемы при интеграции с Firebird:
+* **Несовпадение разрядности (Bitness Mismatch / WinError 193):**
+  - Node.js и Python в дистрибутиве являются **64-битными (x64)**.
+  - Если на сервере клиники в `C:\Windows\System32` или `SysWOW64` зарегистрирована 32-битная библиотека `fbclient.dll` (оставшаяся от старых 32-битных медицинских программ), 64-битный Python/Node при попытке загрузки упадет с фатальной ошибкой `WinError 193: %1 не является допустимым приложением Win32`.
+  - **Решение:** Скрипт проверки обязан валидировать PE-заголовок (Machine Type `0x8664` = AMD64) и использовать изолированную 64-битную копию из каталога `tools/firebird/`.
+* **Зависимость от Microsoft Visual C++ Redistributable:**
+  - Клиентская библиотека Firebird скомпилирована с использованием Microsoft Visual C++.
+  - Для Firebird 3.0 / 4.0 / 5.0 требуется **Visual C++ 2015–2022 Redistributable x64** (`msvcp140.dll`, `vcruntime140.dll`).
+  - При отсутствии среды выполнения загрузка `fbclient.dll` завершается системной ошибкой Windows `Error 126: Не найден указанный модуль`.
+  - **Решение:** Проверка ключа реестра `HKLM:\SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\x64` и автоматическая фоновая установка `vc_redist.x64.exe /quiet /norestart`.
+* **Плагины аутентификации и конфигурация WireCrypt:**
+  - Начиная с Firebird 3.0, по умолчанию используется шифрование трафика (WireCrypt) и плагин аутентификации `Srp`. Если сервер клиники работает на Firebird 2.5, клиенту требуется плагин `Legacy_Auth` и директива `WireCrypt = Disabled` / `AuthServer = Srp, Legacy_Auth` в файле `firebird.conf`.
+  - **Решение:** В комплекте дистрибутива поставляется сконфигурированный `firebird.conf` и папка `plugins/` с библиотеками `Srp.dll` и `Legacy_Auth.dll`.
+
+#### 2. Диагностический алгоритм и сценарий автоустановки Firebird Client (`scripts/db/check_and_install_firebird.ps1`):
+
+```powershell
+# scripts/db/check_and_install_firebird.ps1
+param (
+    [string]$AppDir = "$PSScriptRoot\..\..",
+    [switch]$InstallSystemMsi = $false
+)
+
+function Test-VCRedistributableX64 {
+    Write-Host ">>> [1/4] Проверка наличия среды выполнения Visual C++ 2015-2022 x64..." -ForegroundColor Cyan
+    $vcKey = "HKLM:\SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\x64"
+    $installed = (Get-ItemProperty -Path $vcKey -ErrorAction SilentlyContinue).Installed
+    
+    if ($installed -eq 1) {
+        Write-Host " [OK] Visual C++ Redistributable x64 установлен в системе." -ForegroundColor Green
+        return $true
+    }
+    
+    Write-Host " [!] Visual C++ 2015-2022 x64 не обнаружен. Выполняется автоматическая установка..." -ForegroundColor Yellow
+    $vcInstaller = Join-Path $AppDir "installers\vc_redist.x64.exe"
+    if (Test-Path $vcInstaller) {
+        Start-Process $vcInstaller -ArgumentList "/quiet /norestart" -Wait
+        Write-Host " [OK] Visual C++ Redistributable x64 успешно установлен." -ForegroundColor Green
+        return $true
+    } else {
+        Write-Host " Загрузка vc_redist.x64.exe из репозитория Microsoft..." -ForegroundColor Yellow
+        $tempVc = "$env:TEMP\vc_redist.x64.exe"
+        Invoke-WebRequest -Uri "https://aka.ms/vs/17/release/vc_redist.x64.exe" -OutFile $tempVc -UseBasicParsing
+        Start-Process $tempVc -ArgumentList "/quiet /norestart" -Wait
+        Remove-Item $tempVc -Force -ErrorAction SilentlyContinue
+        Write-Host " [OK] Visual C++ Redistributable x64 загружен и установлен." -ForegroundColor Green
+        return $true
+    }
+}
+
+function Test-DllArchitectureX64 ([string]$dllPath) {
+    if (-not (Test-Path $dllPath)) { return $false }
+    try {
+        $bytes = [System.IO.File]::ReadAllBytes($dllPath)
+        # Поиск PE-заголовка
+        $peOffset = [System.BitConverter]::ToInt32($bytes, 0x3C)
+        $machineType = [System.BitConverter]::ToUInt16($bytes, $peOffset + 4)
+        # 0x8664 = IMAGE_FILE_MACHINE_AMD64 (64-бит)
+        # 0x014C = IMAGE_FILE_MACHINE_I386 (32-бит)
+        return ($machineType -eq 0x8664)
+    } catch {
+        return $false
+    }
+}
+
+function Test-FirebirdClient {
+    Write-Host ">>> [2/4] Диагностика и проверка разрядности библиотеки fbclient.dll..." -ForegroundColor Cyan
+    $localFbDir = Join-Path $AppDir "tools\firebird"
+    $localFbDll = Join-Path $localFbDir "fbclient.dll"
+    $sys32Dll   = "$env:SystemRoot\System32\fbclient.dll"
+    
+    # 1. Проверка встроенного изолированного комплекта в tools/firebird/
+    if (Test-Path $localFbDll) {
+        if (Test-DllArchitectureX64 $localFbDll) {
+            Write-Host " [OK] Встроенный Firebird Client 64-бит найден в tools/firebird/: $localFbDll" -ForegroundColor Green
+            return $localFbDir
+        } else {
+            Write-Host " [ВНИМАНИЕ] В tools/firebird обнаружена 32-битная версия fbclient.dll! Требуется замена на x64." -ForegroundColor Yellow
+        }
+    }
+    
+    # 2. Проверка системной папки System32
+    if (Test-Path $sys32Dll) {
+        if (Test-DllArchitectureX64 $sys32Dll) {
+            Write-Host " [OK] Системный fbclient.dll (64-бит) обнаружен в $sys32Dll." -ForegroundColor Green
+            return "$env:SystemRoot\System32"
+        }
+    }
+    
+    # 3. Развертывание автономного комплекта x64 из поставки
+    Write-Host " [!] Развертывание автономного 64-битного пакета Firebird Client в tools/firebird/..." -ForegroundColor Yellow
+    New-Item -ItemType Directory -Force -Path $localFbDir | Out-Null
+    
+    $fbZip = Join-Path $AppDir "installers\firebird-client-x64.zip"
+    if (Test-Path $fbZip) {
+        Expand-Archive -Path $fbZip -DestinationPath $localFbDir -Force
+        Write-Host " [OK] Комплект Firebird Client x64 успешно распакован в $localFbDir." -ForegroundColor Green
+        return $localFbDir
+    } else {
+        Write-Host " [ИНФО] Локальный архив firebird-client-x64.zip не найден. Загрузка минимального комплекта..." -ForegroundColor Yellow
+        # Загрузка или копирование из дистрибутива
+    }
+    
+    return $null
+}
+
+function Test-FirebirdServerNetworkConnection {
+    param (
+        [string]$HostName = "localhost",
+        [int]$Port = 3050
+    )
+    Write-Host ">>> [3/4] Проверка сетевой доступности сервера Firebird ($HostName:$Port)..." -ForegroundColor Cyan
+    try {
+        $tcp = Test-NetConnection -ComputerName $HostName -Port $Port -WarningAction SilentlyContinue
+        if ($tcp.TcpTestSucceeded) {
+            Write-Host " [OK] Порт Firebird $Port на хосте $HostName открыт и принимает соединения." -ForegroundColor Green
+            return $true
+        } else {
+            Write-Host " [ВНИМАНИЕ] Порт $Port на хосте $HostName недоступен. Убедитесь, что служба Firebird запущена." -ForegroundColor Yellow
+            return $false
+        }
+    } catch {
+        Write-Host " [!] Ошибка при сетевой проверке: $($_.Exception.Message)" -ForegroundColor Yellow
+        return $false
+    }
+}
+
+function Test-FirebirdDatabaseQuery {
+    param (
+        [string]$FbToolsDir,
+        [string]$FdbPath,
+        [string]$User = "SYSDBA",
+        [string]$Password = "masterkey"
+    )
+    Write-Host ">>> [4/4] Тестовый запрос к базе данных MEDICAL.FDB..." -ForegroundColor Cyan
+    $isqlExe = Join-Path $FbToolsDir "isql.exe"
+    
+    if (-not (Test-Path $isqlExe)) {
+        Write-Host " [ИНФО] isql.exe отсутствует в $FbToolsDir, проверка выполняется через Python модуль firebirdsql..." -ForegroundColor Cyan
+        $pyScript = Join-Path $AppDir "server\sync_patients_firebird.py"
+        $pyExe = Join-Path $AppDir "runtime\python\python.exe"
+        if (-not (Test-Path $pyExe)) { $pyExe = "python.exe" }
         
-        $dismArgs = "/Online /NoRestart /Enable-Feature /All " + (($requiredFeatures | ForEach-Object { "/FeatureName:$_" }) -join " ")
-        Start-Process -FilePath "dism.exe" -ArgumentList $dismArgs -Wait -NoNewWindow
+        $testResult = & $pyExe $pyScript --test $FdbPath $User $Password
+        Write-Host " Результат теста через Python: $testResult" -ForegroundColor Green
+        return $true
     }
-}
-```
-
----
-
-### 6.3. Проверка и автоматическая установка модулей URL Rewrite и ARR
-
-Для корректной работы Reverse Proxy и SPA History API требуются два официальных расширения Microsoft:
-1. **URL Rewrite Module 2.1 (`rewrite_amd64_ru-RU.msi` / `rewrite_amd64_en-US.msi`)**
-2. **Application Request Routing 3.0 (`requestRouter_amd64.msi`)**
-
-Сценарий проверки и тихой установки:
-```powershell
-# scripts/iis/install_url_rewrite.ps1
-function Install-UrlRewriteAndArr {
-    Write-Host ">>> Проверка модулей URL Rewrite и Application Request Routing..." -ForegroundColor Cyan
     
-    # Проверка URL Rewrite в реестре
-    $urlRewriteInstalled = (Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\IIS Extensions\URL Rewrite" -ErrorAction SilentlyContinue) -ne $null
-    if (-not $urlRewriteInstalled) {
-        Write-Host " Установка модуля Microsoft URL Rewrite 2.1..." -ForegroundColor Yellow
-        Start-Process msiexec.exe -ArgumentList "/i `"$PSScriptRoot\installers\rewrite_amd64.msi`" /quiet /qn /norestart" -Wait
+    # Создание временного SQL-запроса
+    $tempSql = "$env:TEMP\test_fb_check.sql"
+    "SELECT COUNT(*) AS PATIENTS_COUNT FROM PATIENTS;`nEXIT;" | Out-File -FilePath $tempSql -Encoding ascii
+    
+    $connectStr = "localhost:$FdbPath"
+    $isqlOutput = & $isqlExe -user $User -password $Password $connectStr -i $tempSql -q 2>&1
+    Remove-Item $tempSql -Force -ErrorAction SilentlyContinue
+    
+    if ($LASTEXITCODE -eq 0 -and ($isqlOutput -match "\d+")) {
+        Write-Host " [УСПЕХ] Запрос выполнен успешно! Данные картотеки Firebird доступны." -ForegroundColor Green
+        return $true
     } else {
-        Write-Host " [OK] Модуль URL Rewrite 2.1 уже установлен." -ForegroundColor Green
+        Write-Host " [ВНИМАНИЕ] Запрос к базе данных вернул предупреждение: $isqlOutput" -ForegroundColor Yellow
+        return $false
+    }
+}
+
+# Выполнение полного цикла
+$vcOk = Test-VCRedistributableX64
+$fbClientDir = Test-FirebirdClient
+if ($fbClientDir) {
+    # Настройка переменных окружения текущего сеанса
+    $env:FIREBIRD = $fbClientDir
+    $env:PATH = "$fbClientDir;$env:PATH"
+    
+    # Чтение настроек из appsettings.json
+    $settingsFile = Join-Path $AppDir "server\appsettings.json"
+    $fbPath = "C:\Users\vladimir\source\DB\Export\MEDICAL.FDB"
+    $fbHost = "localhost"
+    $fbPort = 3050
+    if (Test-Path $settingsFile) {
+        $json = Get-Content $settingsFile -Raw | ConvertFrom-Json
+        if ($json.ConnectionStrings.Firebird.DatabasePath) { $fbPath = $json.ConnectionStrings.Firebird.DatabasePath }
+        if ($json.ConnectionStrings.Firebird.Host) { $fbHost = $json.ConnectionStrings.Firebird.Host }
+        if ($json.ConnectionStrings.Firebird.Port) { $fbPort = [int]$json.ConnectionStrings.Firebird.Port }
     }
     
-    # Проверка ARR в реестре
-    $arrInstalled = (Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\IIS Extensions\Application Request Routing" -ErrorAction SilentlyContinue) -ne $null
-    if (-not $arrInstalled) {
-        Write-Host " Установка модуля Application Request Routing 3.0..." -ForegroundColor Yellow
-        Start-Process msiexec.exe -ArgumentList "/i `"$PSScriptRoot\installers\requestRouter_amd64.msi`" /quiet /qn /norestart" -Wait
-    } else {
-        Write-Host " [OK] Модуль Application Request Routing (ARR) уже установлен." -ForegroundColor Green
+    $netOk = Test-FirebirdServerNetworkConnection -HostName $fbHost -Port $fbPort
+    if ($netOk -and (Test-Path $fbPath)) {
+        Test-FirebirdDatabaseQuery -FbToolsDir $fbClientDir -FdbPath $fbPath
     }
-    
-    # Включение функции проксирования в ARR на уровне сервера
-    Write-Host " Активация функции Reverse Proxy в Application Request Routing..." -ForegroundColor Cyan
-    & "$env:SystemRoot\System32\inetsrv\appcmd.exe" set config -section:system.webServer/proxy /enabled:"True" /commit:apphost
 }
 ```
 
----
+#### 3. Содержимое автономного переносимого комплекта `tools/firebird/`:
+```
+tools/firebird/
+├── fbclient.dll          # 64-битная клиентская библиотека Firebird
+├── gds32.dll             # DLL обратной совместимости (псевдоним fbclient)
+├── isql.exe              # Консольная интерактивная утилита выполнения SQL
+├── firebird.msg          # Системные сообщения СУБД и тексты исключений
+├── firebird.conf         # Файл конфигурации (WireCrypt = Disabled, Auth = Srp, Legacy_Auth)
+├── test_connection.bat   # Пакетный скрипт быстрой проверки связи для инженера
+└── plugins/              # Плагины безопасности и аутентификации
+    ├── Srp.dll           # Современная криптографическая аутентификация Firebird 3+
+    ├── Legacy_Auth.dll   # Совместимость с протоколом Firebird 2.5
+    └── engine12.dll      # Движок выполнения встроенных процедур
+```
 
-### 6.4. Конфигурационный файл `web.config` для сайта в IIS
+#### 4. Пакетный сценарий тестирования для системного инженера клиники (`tools/firebird/test_connection.bat`):
+```cmd
+@echo off
+chcp 65001 > nul
+setlocal
 
-Файл `web.config` размещается в корне каталога скомпилированного React-клиента (`public/`):
+set "APP_DIR=%~dp0..\.."
+set "FB_DIR=%~dp0"
+set "PATH=%FB_DIR%;%PATH%"
+set "FIREBIRD=%FB_DIR%"
 
-```xml
-<?xml version="1.0" encoding="utf-8"?>
-<configuration>
-  <system.webServer>
-    <!-- 1. Настройка MIME-типов для шрифтов и современных форматов графики -->
-    <staticContent>
-      <remove fileExtension=".woff" />
-      <mimeMap fileExtension=".woff" mimeType="font/woff" />
-      <remove fileExtension=".woff2" />
-      <mimeMap fileExtension=".woff2" mimeType="font/woff2" />
-      <remove fileExtension=".json" />
-      <mimeMap fileExtension=".json" mimeType="application/json" />
-      <remove fileExtension=".webp" />
-      <mimeMap fileExtension=".webp" mimeType="image/webp" />
-    </staticContent>
+echo =========================================================================
+echo  ДИАГНОСТИКА ПОДКЛЮЧЕНИЯ К МЕДИЦИНСКОЙ БАЗЕ ДАННЫХ FIREBIRD (MEDICAL.FDB)
+echo =========================================================================
+echo.
 
-    <!-- 2. Правила маршрутизации URL Rewrite -->
-    <rewrite>
-      <rules>
-        <!-- ПРАВИЛО 1: Reverse Proxy для REST API на фоновый Node.js сервис -->
-        <rule name="API Reverse Proxy" stopProcessing="true">
-          <match url="^api/(.*)" />
-          <action type="Rewrite" url="http://127.0.0.1:5000/api/{R:1}" />
-        </rule>
+:: 1. Проверка наличия fbclient.dll
+if not exist "%FB_DIR%fbclient.dll" (
+    echo [ОШИБКА] Клиентская библиотека fbclient.dll не найдена в %FB_DIR%
+    goto :error
+)
 
-        <!-- ПРАВИЛО 2: Reverse Proxy для документации Swagger UI -->
-        <rule name="Swagger Reverse Proxy" stopProcessing="true">
-          <match url="^api-docs(.*)" />
-          <action type="Rewrite" url="http://127.0.0.1:5000/api-docs{R:1}" />
-        </rule>
+:: 2. Вызов тестового режима через Python скрипт синхронизации
+echo [1/2] Проверка протокола синхронизации через Python...
+if exist "%APP_DIR%\runtime\python\python.exe" (
+    "%APP_DIR%\runtime\python\python.exe" "%APP_DIR%\server\sync_patients_firebird.py" --test
+) else (
+    python "%APP_DIR%\server\sync_patients_firebird.py" --test
+)
 
-        <!-- ПРАВИЛО 3: React Router SPA History API Fallback -->
-        <!-- Если запрашиваемый путь не является реальным файлом или папкой, отдаем index.html -->
-        <rule name="React SPA Routing Fallback" stopProcessing="true">
-          <match url=".*" />
-          <conditions logicalGrouping="MatchAll">
-            <add input="{REQUEST_FILENAME}" matchType="IsFile" negate="true" />
-            <add input="{REQUEST_FILENAME}" matchType="IsDirectory" negate="true" />
-            <add input="{REQUEST_URI}" pattern="^/(api)" negate="true" />
-          </conditions>
-          <action type="Rewrite" url="/" />
-        </rule>
-      </rules>
-    </rewrite>
+echo.
+echo [2/2] Проверка прямого выполнения запроса через isql.exe...
+if exist "%FB_DIR%isql.exe" (
+    "%FB_DIR%isql.exe" -user SYSDBA -password masterkey "localhost:C:\Users\vladimir\source\DB\Export\MEDICAL.FDB" -q -i "%FB_DIR%test_query.sql"
+)
 
-    <!-- 3. Кэширование статических ресурсов (1 год для версионированных хэш-бандлов) -->
-    <httpProtocol>
-      <customHeaders>
-        <add name="X-Content-Type-Options" value="nosniff" />
-        <add name="X-Frame-Options" value="SAMEORIGIN" />
-      </customHeaders>
-    </httpProtocol>
-  </system.webServer>
-</configuration>
+echo.
+echo [ИНФО] Тестирование завершено.
+pause
+exit /b 0
+
+:error
+echo [ФАТАЛЬНАЯ ОШИБКА] Инструменты Firebird не настроены.
+pause
+exit /b 1
+```
+
+---�)"]
+            SQLGUI["DB Browser for SQLite<br/>(Портативный GUI)"]
+        end
+        subgraph "Клиент Firebird"
+            FBClient["fbclient.dll + gds32.dll<br/>(64-bit Client Library)"]
+            ISQL["isql.exe<br/>(CLI тестирование и выборки)"]
+            Plugins["plugins/ (Srp, Legacy_Auth)<br/>+ firebird.msg"]
+        end
+    end
+
+    subgraph "Базы данных клиники"
+        SQLiteFile[("orthopedic_data_center.sqlite<br/>(Основная рабочая база)")]
+        FirebirdFile[("MEDICAL.FDB<br/>(Внешняя база пациентов)")]
+    end
+
+    SQLCLI -->|Прямой доступ / VACUUM| SQLiteFile
+    SQLGUI -->|Визуальный просмотр таблиц| SQLiteFile
+    FBClient -->|Синхронизация через Python| FirebirdFile
+    ISQL -->|Проверка порта 3050 и связи| FirebirdFile
 ```
 
 ---
 
-### 6.5. Сценарий автоматического создания сайта и пула в IIS
+### 7.1. Клиент SQLite (SQLite CLI & Портативный GUI)
 
-Скрипт `scripts/iis/setup_iis_site.ps1` создает изолированный сайт и пул:
+#### 1. Назначение компонентов SQLite в дистрибутиве:
+* **`sqlite3.exe` (Официальная консольная утилита SQLite):**
+  - Выполнение низкоуровневых регламентных процедур без необходимости запуска Node.js (`PRAGMA integrity_check`, `VACUUM INTO`, `.recover`, `.dump`).
+  - Быстрое ручное наложение SQL-патчей и миграций структуры.
+* **DB Browser for SQLite (Portable Edition):**
+  - Готовый портативный графический интерфейс, вложенный в папку `tools/sqlite-gui/` (не требует прав администратора).
+  - Инсталлятор создает ярлык в меню «Пуск»: **«Управление базой данных клиники (SQLite)»**.
+  - Позволяет администратору и аналитикам клиники визуально просматривать картотеку, формировать пользовательские SQL-отчеты и экспортировать данные в Excel/CSV.
 
+#### 2. Сценарий проверки и подготовки SQLite Client:
 ```powershell
-Import-Module WebAdministration
-
-$siteName = "OrthopedClinic"
-$poolName = "OrthopedClinicAppPool"
-$appPath  = "C:\OrthopedClinic\public"
-$port     = 80
-
-# 1. Создание пула приложений (No Managed Code, 64-bit)
-if (-not (Test-Path "IIS:\AppPools\$poolName")) {
-    $pool = New-Item "IIS:\AppPools\$poolName"
-    $pool.managedRuntimeVersion = ""  # Без .NET CLR (чистая статика + proxy)
-    $pool.processModel.idleTimeout = [TimeSpan]::Zero # Без засыпания
-    $pool | Set-Item
+# scripts/db/check_sqlite_tools.ps1
+function Check-SQLiteClient {
+    Write-Host ">>> Проверка инструментов SQLite..." -ForegroundColor Cyan
+    $localSqliteExe = "$PSScriptRoot\..\..\tools\sqlite\sqlite3.exe"
+    
+    if (Test-Path $localSqliteExe) {
+        $ver = & $localSqliteExe --version
+        Write-Host " [OK] Автономный SQLite CLI готов к работе: $ver" -ForegroundColor Green
+    } else {
+        Write-Host " [!] Скачивание и размещение автономного sqlite3.exe в tools/sqlite/..." -ForegroundColor Yellow
+        New-Item -ItemType Directory -Force -Path "$PSScriptRoot\..\..\tools\sqlite" | Out-Null
+        Invoke-WebRequest -Uri "https://sqlite.org/2026/sqlite-tools-win-x64.zip" -OutFile "$env:TEMP\sqlite-tools.zip"
+        Expand-Archive -Path "$env:TEMP\sqlite-tools.zip" -DestinationPath "$env:TEMP\sqlite-extracted" -Force
+        Copy-Item "$env:TEMP\sqlite-extracted\*\sqlite3.exe" -Destination $localSqliteExe -Force
+        Remove-Item "$env:TEMP\sqlite*" -Recurse -Force
+        Write-Host " [OK] sqlite3.exe успешно установлен." -ForegroundColor Green
+    }
 }
-
-# 2. Создание или обновление веб-сайта
-if (Test-Path "IIS:\Sites\$siteName") {
-    Stop-WebSite -Name $siteName -ErrorAction SilentlyContinue
-    Remove-WebSite -Name $siteName
-}
-
-New-WebSite -Name $siteName `
-            -Port $port `
-            -PhysicalPath $appPath `
-            -ApplicationPool $poolName
-
-Start-WebSite -Name $siteName
-Write-Host " [OK] Веб-сайт $siteName успешно опубликован в IIS на порту $port." -ForegroundColor Green
 ```
 
 ---
 
-## 7. Конфигурация дистрибутива: `appsettings.json`
+### 7.2. Клиент Firebird (`fbclient.dll`, `isql.exe`, библиотеки аутентификации)
+
+#### 1. Зачем клинике необходим Firebird Client:
+* Внешняя историческая база клиники хранится в формате СУБД Firebird (`MEDICAL.FDB`).
+* Для сетевого подключения скрипта синхронизации ([server/sync_patients_firebird.py](file:///c:/Users/vladimir/source/repos/Data%20Analysis/server/sync_patients_firebird.py)), проверки доступности порта `3050` и выгрузки 61 298 пациентов необходима клиентская библиотека **`fbclient.dll`** (версии 2.5 или 3.0 x64) и плагины шифрования паролей (`Srp.dll`, `Legacy_Auth.dll`).
+* При отсутствии клиентской библиотеки подключение завершается системной ошибкой Windows `Unable to load fbclient.dll / Client library not found`.
+
+#### 2. Алгоритм проверки наличия Firebird Client в системе:
+```powershell
+# scripts/db/check_firebird_client.ps1
+function Test-FirebirdClientInstallation {
+    Write-Host ">>> Диагностика наличия клиентской библиотеки Firebird (fbclient.dll)..." -ForegroundColor Cyan
+    
+    # 1. Проверка системной папки System32
+    $sys32Client = "$env:SystemRoot\System32\fbclient.dll"
+    
+    # 2. Проверка в системном реестре Windows
+    $fbReg64 = Get-ItemProperty "HKLM:\SOFTWARE\Firebird Project\Firebird Server\Instances" -ErrorAction SilentlyContinue
+    $fbReg32 = Get-ItemProperty "HKLM:\SOFTWARE\WOW6432Node\Firebird Project\Firebird Server\Instances" -ErrorAction SilentlyContinue
+    
+    # 3. Проверка локальной переносимой папки дистрибутива
+    $localBundle = "$PSScriptRoot\..\..\tools\firebird\fbclient.dll"
+    
+    if (Test-Path $localBundle) {
+        Write-Host " [OK] Обнаружен встроенный автономный Firebird Client: $localBundle" -ForegroundColor Green
+        return $true
+    } elseif (Test-Path $sys32Client) {
+        Write-Host " [OK] Обнаружена системная библиотека Firebird: $sys32Client" -ForegroundColor Green
+        return $true
+    } elseif ($fbReg64 -or $fbReg32) {
+        Write-Host " [OK] Обнаружен установленный сервер/клиент Firebird в реестре Windows." -ForegroundColor Green
+        return $true
+    } else {
+        Write-Host " [!] Клиент Firebird не обнаружен на целевой машине." -ForegroundColor Yellow
+        return $false
+    }
+}
+```
+
+#### 3. Автоматическая подготовка и развертывание Firebird Client:
+
+Применяется **гибридный подход (Два уровня надежности)**:
+
+* **Уровень 1: Встроенный переносимый клиент (Portable Bundle — по умолчанию в дистрибутиве):**
+  - В дистрибутив вкладывается готовый комплект клиентских файлов в папку `tools/firebird/`:
+    ```
+    tools/firebird/
+    ├── fbclient.dll          # Основная библиотека клиента (64-бит)
+    ├── gds32.dll             # Псевдоним обратной совместимости
+    ├── isql.exe              # Интерактивная утилита выполнения SQL
+    ├── firebird.msg          # Файлы локализованных сообщений об ошибках
+    ├── firebird.conf         # Конфигурация клиента (WireCrypt, Auth)
+    └── plugins/              # Плагины авторизации
+        ├── Srp.dll
+        └── Legacy_Auth.dll
+    ```
+  - **Преимущество:** Полная автономия — скрипты синхронизации автоматически добавляют каталог `tools/firebird` в переменные окружения `PATH` и `FIREBIRD` процесса. Это работает **без прав локального администратора** и без засорения папки `System32`.
+
+* **Уровень 2: Системная тихая установка через MSI (для серверов с ODBC):**
+  - Если администратор клиники выбирает системную регистрацию Firebird Client (для подключения внешних аналитических инструментов через ODBC/OLEDB), инсталлятор запускает тихий пакет:
+    ```cmd
+    msiexec.exe /i "%PSScriptRoot%\installers\FirebirdClient-3.0.x-x64.msi" /quiet /qn /norestart
+    ```
+
+#### 4. Автоматическая проверка связи с базой `MEDICAL.FDB`:
+Инсталлятор включает проверочный тест перед первым запуском синхронизации:
+```cmd
+@echo off
+:: tools/firebird/test_connection.bat
+"%~dp0isql.exe" -user SYSDBA -password masterkey "localhost:C:\Users\vladimir\source\DB\Export\MEDICAL.FDB" -q -i "%~dp0test_query.sql"
+if %ERRORLEVEL% EQU 0 (
+    echo [УСПЕХ] Сетевое подключение к Firebird MEDICAL.FDB подтверждено!
+) else (
+    echo [ВНИМАНИЕ] Не удалось подключиться к Firebird. Проверьте службу Firebird Server на порту 3050.
+)
+```
+
+---
+
+## 8. Конфигурация дистрибутива: `appsettings.json`
 
 Файл конфигурации выносится в корень дистрибутива для легкой настройки системным администратором клиники:
 
@@ -500,7 +926,8 @@ Write-Host " [OK] Веб-сайт $siteName успешно опубликова�
       "DatabasePath": "C:\\Users\\vladimir\\source\\DB\\Export\\MEDICAL.FDB",
       "User": "SYSDBA",
       "Password": "masterkey",
-      "Charset": "WIN1251"
+      "Charset": "WIN1251",
+      "ClientLibraryPath": "tools/firebird/fbclient.dll"
     }
   },
   "BackupSettings": {
@@ -513,7 +940,7 @@ Write-Host " [OK] Веб-сайт $siteName успешно опубликова�
 
 ---
 
-## 8. План резервного копирования и отказоустойчивости (Backup Strategy)
+## 9. План резервного копирования и отказоустойчивости (Backup Strategy)
 
 Медицинские данные требуют строгого соблюдения правил сохранности:
 1. **Горячий бэкап при старте сервера:**
@@ -527,15 +954,17 @@ Write-Host " [OK] Веб-сайт $siteName успешно опубликова�
 
 ---
 
-## 9. Пошаговый план реализации (Action Plan)
+## 10. Пошаговый план реализации (Action Plan)
 
 | № | Этап | Задачи | Результат |
 |---|---|---|---|
 | **1** | **Рефакторинг путей API клиента** | • Создать `client/src/config/apiConfig.ts`<br/>• Заменить хардкод `http://localhost:5000` и `http://127.0.0.1:5000` на `API_BASE_URL`<br/>• Добавить прокси в `client/vite.config.ts` | Клиент работает одинаково в Vite dev-сервере и при раздаче из Express/IIS |
 | **2** | **Интеграция статики в Express** | • Добавить в [server/index.js](file:///c:/Users/vladimir/source/repos/Data%20Analysis/server/index.js) раздачу статики `client/dist`<br/>• Реализовать SPA маршрутизацию (отдача `index.html` для неизвестных путей, кроме `/api`) | Автономная работа бэкенда без внешних веб-серверов |
 | **3** | **Скрипты IIS и Reverse Proxy** | • Разработать `scripts/iis/check_and_install_iis.ps1`<br/>• Подготовить дистрибутивы `rewrite_amd64.msi` и `requestRouter_amd64.msi`<br/>• Создать шаблоны `public/web.config` и `scripts/iis/setup_iis_site.ps1` | Автоматическая проверка, установка IIS и публикация сайта на порту 80/443 |
-| **4** | **Скрипт горячего резервного копирования** | • Реализовать endpoint `/api/admin/backup` и автоматический бэкап SQLite при старте через `VACUUM INTO` | Гарантия сохранности данных 61 000+ пациентов |
-| **5** | **Скрипт автоматизированной сборки дистрибутива** | • Написать `scripts/build_dist.ps1`<br/>• Автоматическая компиляция клиента (`npm run build`)<br/>• Сборка чистой папки `dist_app/` со всеми зависимостями | Формирование готовой папки приложения одной командой |
-| **6** | **Лаунчеры и сценарии запуска** | • Создать `start.bat`, `install_service.bat`, `stop.bat`<br/>• Настроить автоматическое открытие браузера при запуске | Запуск клиники двойным кликом мыши |
-| **7** | **Inno Setup Installer скрипт** | • Разработать `installer/setup_script.iss`<br/>• Добавить опцию выбора «Установить IIS Reverse Proxy»<br/>• Настроить создание иконок, прописывание в реестр и брандмауэр | Единый файл установки `Setup_OrthopedClinic.exe` |
+| **4** | **Клиентские инструменты SQLite** | • Подготовить `tools/sqlite/sqlite3.exe`<br/>• Добавить портативную версию `tools/sqlite-gui/` (DB Browser for SQLite)<br/>• Настроить ярлык запуска для администратора | Возможность визуального и консольного обслуживания базы данных клиники |
+| **5** | **Клиентские инструменты Firebird** | • Сформировать комплект `tools/firebird/` (`fbclient.dll`, `gds32.dll`, `isql.exe`, `plugins/`)<br/>• Добавить автоопределение пути к `fbclient.dll` в [sync_patients_firebird.py](file:///c:/Users/vladimir/source/repos/Data%20Analysis/server/sync_patients_firebird.py)<br/>• Написать скрипт тестирования соединения `test_connection.bat` | Гарантированное подключение к `MEDICAL.FDB` на любом ПК без предварительной установки Firebird |
+| **6** | **Скрипт горячего резервного копирования** | • Реализовать endpoint `/api/admin/backup` и автоматический бэкап SQLite при старте через `VACUUM INTO` | Гарантия сохранности данных 61 000+ пациентов |
+| **7** | **Скрипт автоматизированной сборки дистрибутива** | • Написать `scripts/build_dist.ps1`<br/>• Автоматическая компиляция клиента (`npm run build`)<br/>• Сборка чистой папки `dist_app/` со всеми зависимостями и инструментами | Формирование готовой папки приложения одной командой |
+| **8** | **Лаунчеры и сценарии запуска** | • Создать `start.bat`, `install_service.bat`, `stop.bat`<br/>• Настроить автоматическое открытие браузера при запуске | Запуск клиники двойным кликом мыши |
+| **9** | **Inno Setup Installer скрипт** | • Разработать `installer/setup_script.iss`<br/>• Добавить опции выбора: «Установить IIS Reverse Proxy», «Установить инструменты СУБД SQLite/Firebird»<br/>• Настроить создание иконок, прописывание в реестр и брандмауэр | Единый файл установки `Setup_OrthopedClinic.exe` |
 

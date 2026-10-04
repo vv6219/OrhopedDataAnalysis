@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { API_BASE_URL } from '../config/apiConfig';
 import { 
   Typography,
   Box,
@@ -115,10 +116,10 @@ const customStringOperators = getGridStringOperators().map((operator) => {
   if (operator.value === 'contains') {
     return {
       ...operator,
-      getApplyFilterFn: (filterItem) => {
+      getApplyFilterFn: (filterItem: any) => {
         if (!filterItem.value) return null;
         const normalizedSearch = filterItem.value.replace(/[- ]+/g, '').toLowerCase();
-        return (value) => {
+        return (value: any) => {
           if (value == null) return false;
           const normalizedCell = String(value).replace(/[- ]+/g, '').toLowerCase();
           return normalizedCell.includes(normalizedSearch);
@@ -189,7 +190,7 @@ export default function Operations() {
         return Array.from(model.ids).map(Number).filter((n) => !isNaN(n));
       }
       if (Array.isArray(model.ids)) {
-        return model.ids.map(Number).filter((n) => !isNaN(n));
+        return model.ids.map((n: any) => Number(n)).filter((n: any) => !isNaN(n));
       }
     }
     return [];
@@ -211,7 +212,7 @@ export default function Operations() {
     
     setIsPrinting(true);
     try {
-      const res = await fetch(`http://localhost:5000/api/operations/materials-bulk?ids=${targetIds.join(',')}`);
+      const res = await fetch(`${API_BASE_URL}/api/operations/materials-bulk?ids=${targetIds.join(',')}`);
       if (res.ok) {
         const data = await res.json();
         setBulkMaterials(data);
@@ -230,7 +231,7 @@ export default function Operations() {
   const fetchOperations = async (filterKey = qualityFilter) => {
     setLoading(true);
     try {
-      let url = 'http://localhost:5000/api/operations';
+      let url = `${API_BASE_URL}/api/operations`;
       if (filterKey === 'negative_margin') {
         url += '?negative_margin=true';
       } else if (filterKey === 'broken_bom') {
@@ -255,7 +256,7 @@ export default function Operations() {
   const fetchAnalytics = async () => {
     setLoadingAnalytics(true);
     try {
-      const res = await fetch('http://localhost:5000/api/operations/analytics-overview');
+      const res = await fetch(`${API_BASE_URL}/api/operations/analytics-overview`);
       if (res.ok) {
         const json = await res.json();
         setAnalytics(json);
@@ -272,13 +273,13 @@ export default function Operations() {
     fetchAnalytics();
       
     // Fetch all materials for dropdown
-    fetch('http://localhost:5000/api/materials')
+    fetch(`${API_BASE_URL}/api/materials`)
       .then(res => res.json())
       .then(data => setMaterials(data))
       .catch(err => console.error('Error fetching materials:', err));
       
     // Fetch calculation parameters
-    fetch('http://localhost:5000/api/parameters')
+    fetch(`${API_BASE_URL}/api/parameters`)
       .then(res => res.json())
       .then(data => setParameters(data))
       .catch(err => console.error('Error fetching parameters:', err));
@@ -287,7 +288,7 @@ export default function Operations() {
   // Fetch materials for selected operation
   useEffect(() => {
     if (selectedOperationId) {
-      fetch(`http://localhost:5000/api/operations/${selectedOperationId}/materials`)
+      fetch(`${API_BASE_URL}/api/operations/${selectedOperationId}/materials`)
         .then(res => res.json())
         .then(data => setOperationMaterials(data))
         .catch(err => console.error('Error fetching operation materials:', err));
@@ -323,7 +324,7 @@ export default function Operations() {
   const handleSave = async () => {
     const isEditing = !!operations.find(m => m.id === editingItem.id);
     const method = isEditing ? 'PUT' : 'POST';
-    const url = isEditing ? `http://localhost:5000/api/operations/${editingItem.id}` : 'http://localhost:5000/api/operations';
+    const url = isEditing ? `${API_BASE_URL}/api/operations/${editingItem.id}` : `${API_BASE_URL}/api/operations`;
     
     try {
       const response = await fetch(url, {
@@ -351,7 +352,7 @@ export default function Operations() {
   const handleDelete = async (id: number) => {
     if (!window.confirm('Вы уверены, что хотите удалить эту операцию из каталога?')) return;
     try {
-      await fetch(`http://localhost:5000/api/operations/${id}`, { method: 'DELETE' });
+      await fetch(`${API_BASE_URL}/api/operations/${id}`, { method: 'DELETE' });
       setOperations(operations.filter(m => m.id !== id));
       if (selectedOperationId === id) setSelectedOperationId(null);
       fetchAnalytics();
@@ -377,8 +378,8 @@ export default function Operations() {
     const isEditing = !!operationMaterials.find(m => m.id === editingDetailItem.id);
     const method = isEditing ? 'PUT' : 'POST';
     const url = isEditing 
-      ? `http://localhost:5000/api/operations/${selectedOperationId}/materials/${editingDetailItem.id}` 
-      : `http://localhost:5000/api/operations/${selectedOperationId}/materials`;
+      ? `${API_BASE_URL}/api/operations/${selectedOperationId}/materials/${editingDetailItem.id}` 
+      : `${API_BASE_URL}/api/operations/${selectedOperationId}/materials`;
       
     try {
       await fetch(url, {
@@ -390,7 +391,7 @@ export default function Operations() {
         })
       });
       
-      const res = await fetch(`http://localhost:5000/api/operations/${selectedOperationId}/materials`);
+      const res = await fetch(`${API_BASE_URL}/api/operations/${selectedOperationId}/materials`);
       const data = await res.json();
       setOperationMaterials(data);
       fetchOperations();
@@ -404,7 +405,7 @@ export default function Operations() {
   const handleDeleteDetail = async (omId: number) => {
     if (!selectedOperationId) return;
     try {
-      await fetch(`http://localhost:5000/api/operations/${selectedOperationId}/materials/${omId}`, { method: 'DELETE' });
+      await fetch(`${API_BASE_URL}/api/operations/${selectedOperationId}/materials/${omId}`, { method: 'DELETE' });
       setOperationMaterials(operationMaterials.filter(m => m.id !== omId));
       fetchOperations();
       fetchAnalytics();

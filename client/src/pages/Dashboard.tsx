@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { API_BASE_URL } from '../config/apiConfig';
 import {
   Box,
   Typography,
@@ -12,7 +13,6 @@ import {
   CircularProgress,
   Tabs,
   Tab,
-  Alert,
   LinearProgress
 } from '@mui/material';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
@@ -21,14 +21,12 @@ import PeopleAltIcon from '@mui/icons-material/PeopleAlt';
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
 import MedicalServicesIcon from '@mui/icons-material/MedicalServices';
 import RefreshIcon from '@mui/icons-material/Refresh';
-import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import LightbulbIcon from '@mui/icons-material/Lightbulb';
 import VerifiedUserIcon from '@mui/icons-material/VerifiedUser';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import BarChartIcon from '@mui/icons-material/BarChart';
-import PieChartIcon from '@mui/icons-material/PieChart';
 import GroupIcon from '@mui/icons-material/Group';
 import PsychologyIcon from '@mui/icons-material/Psychology';
 import DateRangeIcon from '@mui/icons-material/DateRange';
@@ -144,7 +142,7 @@ export default function Dashboard() {
   const fetchDashboardData = async (selectedPeriod = period) => {
     setLoading(true);
     try {
-      const res = await fetch(`http://localhost:5000/api/dashboard/overview?period=${selectedPeriod}`);
+      const res = await fetch(`${API_BASE_URL}/api/dashboard/overview?period=${selectedPeriod}`);
       const json = await res.json();
       if (json && json.success) {
         setData(json);

@@ -29,6 +29,11 @@ const defaultConfig = {
   Server: {
     Port: 5000,
     Host: '0.0.0.0'
+  },
+  BackupSettings: {
+    AutoBackupOnStartup: true,
+    BackupDirectory: '../backups',
+    KeepLastNBackups: 7
   }
 };
 
@@ -80,11 +85,20 @@ function getSqliteConfig() {
   return settings?.ConnectionStrings?.SQLite || defaultConfig.ConnectionStrings.SQLite;
 }
 
+/**
+ * Dynamically resolves Backup configuration
+ */
+function getBackupConfig() {
+  const settings = getAppSettings();
+  return settings?.BackupSettings || defaultConfig.BackupSettings;
+}
+
 module.exports = {
   getAppSettings,
   saveAppSettings,
   getSqliteDbPath,
   getFirebirdConfig,
   getSqliteConfig,
+  getBackupConfig,
   configPath
 };

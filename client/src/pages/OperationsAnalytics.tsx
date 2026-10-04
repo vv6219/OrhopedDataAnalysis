@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { API_BASE_URL } from '../config/apiConfig';
 import {
   Box,
   Typography,
@@ -144,7 +145,7 @@ export default function OperationsAnalytics() {
       if (doctorId && doctorId !== 'all') params.append('doctorId', doctorId);
       if (search) params.append('search', search);
 
-      const res = await fetch(`http://localhost:5000/api/analytics/operations?${params.toString()}`);
+      const res = await fetch(`${API_BASE_URL}/api/analytics/operations?${params.toString()}`);
       if (res.ok) {
         const json = await res.json();
         setData(json);
@@ -165,7 +166,7 @@ export default function OperationsAnalytics() {
     setDrawerOpen(true);
     setDrawerLoading(true);
     try {
-      const res = await fetch(`http://localhost:5000/api/analytics/operations/${opId}/details`);
+      const res = await fetch(`${API_BASE_URL}/api/analytics/operations/${opId}/details`);
       if (res.ok) {
         const json = await res.json();
         setDrawerData(json);
@@ -961,7 +962,7 @@ export default function OperationsAnalytics() {
                   </Typography>
                   <Tooltip title="Материалоемкость клиники: показывает, какой процент от выручки уходит поставщикам за медикаменты и расходники" arrow>
                     <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-                      Доля: {simulatedData?.summary.totalRevenue > 0
+                      Доля: {simulatedData && simulatedData.summary.totalRevenue > 0
                         ? Math.round((simulatedData.summary.totalBomCost / simulatedData.summary.totalRevenue) * 1000) / 10
                         : 0}%
                     </Typography>
@@ -1476,7 +1477,7 @@ export default function OperationsAnalytics() {
             localeText={ruRU.components.MuiDataGrid.defaultProps.localeText}
             slots={{
               toolbar: AnalyticsGridToolbar,
-              footer: AnalyticsGridFooter
+              footer: AnalyticsGridFooter as any
             }}
             slotProps={{
               toolbar: {

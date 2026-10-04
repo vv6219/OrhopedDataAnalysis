@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { API_BASE_URL } from '../config/apiConfig';
 import {
   Box,
   Paper,
@@ -6,7 +7,6 @@ import {
   Button,
   Tabs,
   Tab,
-  Chip,
   LinearProgress,
   Tooltip,
   IconButton,
@@ -21,7 +21,6 @@ import AssessmentIcon from '@mui/icons-material/Assessment';
 import AddCircleIcon from '@mui/icons-material/AddCircle';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
-import HowToRegIcon from '@mui/icons-material/HowToReg';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
@@ -57,7 +56,7 @@ export default function Scheduling() {
 
   // Fetch doctors once
   useEffect(() => {
-    fetch('http://127.0.0.1:5000/api/scheduling/doctors')
+    fetch(`${API_BASE_URL}/api/scheduling/doctors`)
       .then((res) => res.json())
       .then((data) => {
         if (data.success && data.doctors) {
@@ -70,9 +69,9 @@ export default function Scheduling() {
   // Fetch data for date
   const loadData = useCallback(() => {
     setLoading(true);
-    const fetchCalendar = fetch(`http://127.0.0.1:5000/api/scheduling/calendar?date=${currentDate}`)
+    const fetchCalendar = fetch(`${API_BASE_URL}/api/scheduling/calendar?date=${currentDate}`)
       .then((r) => r.json());
-    const fetchSummary = fetch(`http://127.0.0.1:5000/api/scheduling/summary?date=${currentDate}`)
+    const fetchSummary = fetch(`${API_BASE_URL}/api/scheduling/summary?date=${currentDate}`)
       .then((r) => r.json());
 
     Promise.all([fetchCalendar, fetchSummary])

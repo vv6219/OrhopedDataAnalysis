@@ -1,4 +1,5 @@
 import { useRef, useState, useEffect, forwardRef } from 'react';
+import { API_BASE_URL } from '../../config/apiConfig';
 import {
   Box,
   Paper,
@@ -508,7 +509,7 @@ export default function SchedulingReports({ appointments, doctors, currentDate }
   );
 
   useEffect(() => {
-    fetch('http://127.0.0.1:5000/api/scheduling/clinic-info')
+    fetch(`${API_BASE_URL}/api/scheduling/clinic-info`)
       .then((res) => res.json())
       .then((data) => {
         if (data.success && data.clinicInfo) {

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { API_BASE_URL } from '../config/apiConfig';
 import {
   Box,
   Typography,
@@ -115,7 +116,7 @@ export default function SqliteStudio() {
 
   const fetchStats = async () => {
     try {
-      const res = await fetch('http://localhost:5000/api/db/stats');
+      const res = await fetch(`${API_BASE_URL}/api/db/stats`);
       if (res.ok) {
         const data = await res.json();
         setStats(data);
@@ -127,7 +128,7 @@ export default function SqliteStudio() {
 
   const fetchTables = async () => {
     try {
-      const res = await fetch('http://localhost:5000/api/db/tables');
+      const res = await fetch(`${API_BASE_URL}/api/db/tables`);
       if (res.ok) {
         const data: TableMeta[] = await res.json();
         setTables(data);
@@ -145,7 +146,7 @@ export default function SqliteStudio() {
   const loadTableData = async (tableName: string) => {
     setLoadingData(true);
     try {
-      const res = await fetch(`http://localhost:5000/api/db/tables/${tableName}/data?pageSize=1000`);
+      const res = await fetch(`${API_BASE_URL}/api/db/tables/${tableName}/data?pageSize=1000`);
       if (res.ok) {
         const data = await res.json();
         setTotalRows(data.total);
@@ -225,7 +226,7 @@ export default function SqliteStudio() {
     setQueryResult(null);
 
     try {
-      const res = await fetch('http://localhost:5000/api/db/query', {
+      const res = await fetch(`${API_BASE_URL}/api/db/query`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sql: sqlQuery })
@@ -274,11 +275,11 @@ export default function SqliteStudio() {
       const pkCol = activeMeta.columns.find(c => c.pk)?.name || 'id';
       const rowId = editingRow[pkCol] || editingRow._rowid;
 
-      let url = `http://localhost:5000/api/db/tables/${selectedTable}/row`;
+      let url = `${API_BASE_URL}/api/db/tables/${selectedTable}/row`;
       let method = 'POST';
 
       if (!isNewRow) {
-        url = `http://localhost:5000/api/db/tables/${selectedTable}/row/${rowId}`;
+        url = `${API_BASE_URL}/api/db/tables/${selectedTable}/row/${rowId}`;
         method = 'PUT';
       }
 
@@ -309,7 +310,7 @@ export default function SqliteStudio() {
       const pkCol = activeMeta?.columns.find(c => c.pk)?.name || 'id';
       const rowId = rowToDelete[pkCol] || rowToDelete._rowid;
 
-      const res = await fetch(`http://localhost:5000/api/db/tables/${selectedTable}/row/${rowId}`, {
+      const res = await fetch(`${API_BASE_URL}/api/db/tables/${selectedTable}/row/${rowId}`, {
         method: 'DELETE'
       });
 
@@ -378,7 +379,7 @@ export default function SqliteStudio() {
               variant="outlined"
               size="small"
               startIcon={<OpenInNewIcon />}
-              onClick={() => window.open('http://localhost:5000/api-docs', '_blank')}
+              onClick={() => window.open(`${API_BASE_URL}/api-docs`, '_blank')}
               sx={{
                 color: '#FFFFFF',
                 borderColor: 'rgba(255, 255, 255, 0.4)',

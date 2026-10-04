@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
+import { API_BASE_URL } from '../../config/apiConfig';
 import {
   Box,
   Paper,
@@ -7,8 +8,6 @@ import {
   Tabs,
   Tab,
   Button,
-  IconButton,
-  Tooltip,
   TextField,
   InputAdornment,
   Table,
@@ -37,8 +36,8 @@ interface NotificationCenterProps {
 export default function NotificationCenter({ onRefreshParent }: NotificationCenterProps) {
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [loading, setLoading] = useState(false);
-  const [selectedChannel, setSelectedChannel] = useState<'all' | 'telegram' | 'max' | 'whatsapp' | 'sms'>('all');
-  const [activePreviewChannel, setActivePreviewChannel] = useState<'telegram' | 'max' | 'whatsapp' | 'sms'>('telegram');
+  const [selectedChannel, setSelectedChannel] = useState<'all' | 'telegram' | 'max' | 'whatsapp' | 'sms' | 'email'>('all');
+  const [activePreviewChannel, setActivePreviewChannel] = useState<'telegram' | 'max' | 'whatsapp' | 'sms' | 'email'>('telegram');
   const [selectedNotif, setSelectedNotif] = useState<NotificationItem | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [actionSuccessMsg, setActionSuccessMsg] = useState<string | null>(null);
@@ -48,8 +47,8 @@ export default function NotificationCenter({ onRefreshParent }: NotificationCent
     setLoading(true);
     const url =
       selectedChannel === 'all'
-        ? 'http://127.0.0.1:5000/api/scheduling/notifications'
-        : `http://127.0.0.1:5000/api/scheduling/notifications?channel=${selectedChannel}`;
+        ? `${API_BASE_URL}/api/scheduling/notifications`
+        : `${API_BASE_URL}/api/scheduling/notifications?channel=${selectedChannel}`;
 
     fetch(url)
       .then((res) => res.json())
@@ -75,7 +74,7 @@ export default function NotificationCenter({ onRefreshParent }: NotificationCent
     setActionLoading(true);
     setActionSuccessMsg(null);
     try {
-      const res = await fetch(`http://127.0.0.1:5000/api/scheduling/notifications/${notifId}/simulate-action`, {
+      const res = await fetch(`${API_BASE_URL}/api/scheduling/notifications/${notifId}/simulate-action`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action })

@@ -1,11 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
+import { API_BASE_URL } from '../../config/apiConfig';
 import {
   Box,
   Paper,
   Typography,
   Chip,
   Button,
-  IconButton,
   Tooltip,
   Alert,
   CircularProgress
@@ -18,7 +18,6 @@ import MeetingRoomIcon from '@mui/icons-material/MeetingRoom';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import HowToRegIcon from '@mui/icons-material/HowToReg';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
-import BadgeIcon from '@mui/icons-material/Badge';
 import { useNavigate } from 'react-router-dom';
 import type { Appointment, AppointmentStatus } from './SchedulingTypes';
 
@@ -43,7 +42,6 @@ export default function LiveQueueMonitor({ appointments, onRefresh }: LiveQueueM
   const waitingList = appointments.filter((a) => a.status === 'waiting');
   const inProgressList = appointments.filter((a) => a.status === 'in_progress');
   const upcomingList = appointments.filter((a) => a.status === 'scheduled' || a.status === 'confirmed');
-  const completedToday = appointments.filter((a) => a.status === 'completed');
 
   // Compute wait duration in minutes from arrival_time ('HH:MM:SS')
   const getElapsedWaitMinutes = (arrivalTimeStr?: string | null) => {
@@ -61,7 +59,7 @@ export default function LiveQueueMonitor({ appointments, onRefresh }: LiveQueueM
     setActionLoadingId(appId);
     setErrorMsg(null);
     try {
-      const res = await fetch(`http://127.0.0.1:5000/api/scheduling/appointments/${appId}/status`, {
+      const res = await fetch(`${API_BASE_URL}/api/scheduling/appointments/${appId}/status`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus })

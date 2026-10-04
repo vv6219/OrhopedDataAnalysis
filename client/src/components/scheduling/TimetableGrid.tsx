@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { API_BASE_URL } from '../../config/apiConfig';
 import {
   Box,
   Paper,
@@ -68,7 +69,7 @@ export default function TimetableGrid({
     setActionLoading(true);
     setActionError(null);
     try {
-      const res = await fetch(`http://127.0.0.1:5000/api/scheduling/appointments/${appId}/status`, {
+      const res = await fetch(`${API_BASE_URL}/api/scheduling/appointments/${appId}/status`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus })

@@ -1,4 +1,5 @@
 import React from 'react';
+import { API_BASE_URL } from './apiConfig';
 import DashboardIcon from '@mui/icons-material/Dashboard';
 import LocalHospitalIcon from '@mui/icons-material/LocalHospital';
 import EventIcon from '@mui/icons-material/Event';
@@ -136,7 +137,7 @@ export const navigationGroups: NavGroup[] = [
       },
       {
         text: 'OpenAPI (Swagger)',
-        path: 'http://localhost:5000/api-docs',
+        path: `${API_BASE_URL}/api-docs`,
         icon: <CodeIcon sx={{ fontSize: 20 }} />,
         tooltip: 'Интерактивная REST API документация Swagger UI (в новой вкладке)',
         isExternal: true

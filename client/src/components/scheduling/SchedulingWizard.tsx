@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { API_BASE_URL } from '../../config/apiConfig';
 import {
   Dialog,
   DialogTitle,
@@ -130,7 +131,7 @@ export default function SchedulingWizard({
 
   // Fetch doctors on mount
   useEffect(() => {
-    fetch('http://127.0.0.1:5000/api/scheduling/doctors')
+    fetch(`${API_BASE_URL}/api/scheduling/doctors`)
       .then((res) => res.json())
       .then((data) => {
         if (data.success && data.doctors) {
@@ -145,7 +146,7 @@ export default function SchedulingWizard({
     if (selectedDoctorId && appointmentDate) {
       setSlotsLoading(true);
       fetch(
-        `http://127.0.0.1:5000/api/scheduling/available-slots?doctorId=${selectedDoctorId}&date=${appointmentDate}&duration=${customDuration}`
+        `${API_BASE_URL}/api/scheduling/available-slots?doctorId=${selectedDoctorId}&date=${appointmentDate}&duration=${customDuration}`
       )
         .then((res) => res.json())
         .then((data) => {
@@ -172,7 +173,7 @@ export default function SchedulingWizard({
     }
     const timer = setTimeout(() => {
       setPatientSearching(true);
-      fetch(`http://127.0.0.1:5000/api/scheduling/patients/search?q=${encodeURIComponent(patientSearchTerm)}`)
+      fetch(`${API_BASE_URL}/api/scheduling/patients/search?q=${encodeURIComponent(patientSearchTerm)}`)
         .then((res) => res.json())
         .then((data) => {
           if (data.success && data.patients) {
@@ -194,7 +195,7 @@ export default function SchedulingWizard({
     setQuickCreateLoading(true);
     setFormError(null);
     try {
-      const res = await fetch('http://127.0.0.1:5000/api/scheduling/patients/quick-create', {
+      const res = await fetch(`${API_BASE_URL}/api/scheduling/patients/quick-create`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -244,7 +245,7 @@ export default function SchedulingWizard({
       .join(' | ');
 
     try {
-      const res = await fetch('http://127.0.0.1:5000/api/scheduling/appointments', {
+      const res = await fetch(`${API_BASE_URL}/api/scheduling/appointments`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

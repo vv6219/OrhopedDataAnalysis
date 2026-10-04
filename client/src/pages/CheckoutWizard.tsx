@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { API_BASE_URL } from '../config/apiConfig';
 import { 
   Typography, Box, Paper, Button, Stepper, Step, StepLabel, 
   TextField, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, 
@@ -110,10 +111,10 @@ export default function CheckoutWizard() {
       setLoadingInitial(true);
       try {
         const [opsRes, patientsRes, staffRes, matRes] = await Promise.all([
-          fetch('http://localhost:5000/api/operations'),
-          fetch('http://localhost:5000/api/patients'),
-          fetch('http://localhost:5000/api/staff'),
-          fetch('http://localhost:5000/api/materials')
+          fetch(`${API_BASE_URL}/api/operations`),
+          fetch(`${API_BASE_URL}/api/patients`),
+          fetch(`${API_BASE_URL}/api/staff`),
+          fetch(`${API_BASE_URL}/api/materials`)
         ]);
 
         if (opsRes.ok) {
@@ -162,7 +163,7 @@ export default function CheckoutWizard() {
     const fetchOperationBOM = async () => {
       setMaterialsLoading(true);
       try {
-        const res = await fetch(`http://localhost:5000/api/operations/${selectedOperation.id}/materials`);
+        const res = await fetch(`${API_BASE_URL}/api/operations/${selectedOperation.id}/materials`);
         if (res.ok) {
           const bomData = await res.json();
           if (bomData && bomData.length > 0) {
@@ -261,7 +262,7 @@ export default function CheckoutWizard() {
     };
 
     try {
-      const res = await fetch('http://localhost:5000/api/transactions', {
+      const res = await fetch(`${API_BASE_URL}/api/transactions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -504,7 +505,7 @@ export default function CheckoutWizard() {
                                   size="small"
                                   value={row.actual_qty}
                                   onChange={(e) => handleQtyChange(row.material_id, Number(e.target.value))}
-                                  inputProps={{ min: 0, step: 0.1 }}
+                                  slotProps={{ htmlInput: { min: 0, step: 0.1 } }}
                                   sx={{ width: 100 }}
                                 />
                               </TableCell>

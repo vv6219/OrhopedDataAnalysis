@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
+import { API_BASE_URL } from '../config/apiConfig';
 import { 
   Typography,
   Box,
@@ -43,7 +44,6 @@ import RefreshIcon from '@mui/icons-material/Refresh';
 import LocalHospitalIcon from '@mui/icons-material/LocalHospital';
 import MonetizationOnIcon from '@mui/icons-material/MonetizationOn';
 import ShoppingBagIcon from '@mui/icons-material/ShoppingBag';
-import CategoryIcon from '@mui/icons-material/Category';
 import {
   ResponsiveContainer,
   BarChart,
@@ -118,10 +118,10 @@ const customStringOperators = getGridStringOperators().map((operator) => {
   if (operator.value === 'contains') {
     return {
       ...operator,
-      getApplyFilterFn: (filterItem) => {
+      getApplyFilterFn: (filterItem: any) => {
         if (!filterItem.value) return null;
         const normalizedSearch = filterItem.value.replace(/[- ]+/g, '').toLowerCase();
-        return (value) => {
+        return (value: any) => {
           if (value == null) return false;
           const normalizedCell = String(value).replace(/[- ]+/g, '').toLowerCase();
           return normalizedCell.includes(normalizedSearch);
@@ -150,7 +150,7 @@ export default function Inventory() {
   const fetchMaterials = async (filterKey = qualityFilter) => {
     setLoading(true);
     try {
-      let url = 'http://localhost:5000/api/materials';
+      let url = `${API_BASE_URL}/api/materials`;
       if (filterKey === 'zero_cost') {
         url += '?zero_cost=true';
       } else if (filterKey === 'is_invoice') {
@@ -175,7 +175,7 @@ export default function Inventory() {
   const fetchAnalytics = async () => {
     setLoadingAnalytics(true);
     try {
-      const res = await fetch('http://localhost:5000/api/materials/analytics-overview');
+      const res = await fetch(`${API_BASE_URL}/api/materials/analytics-overview`);
       if (res.ok) {
         const json = await res.json();
         setAnalytics(json);
@@ -218,7 +218,7 @@ export default function Inventory() {
   const handleSave = async () => {
     const isEditing = !!materials.find(m => m.id === editingItem.id);
     const method = isEditing ? 'PUT' : 'POST';
-    const url = isEditing ? `http://localhost:5000/api/materials/${editingItem.id}` : 'http://localhost:5000/api/materials';
+    const url = isEditing ? `${API_BASE_URL}/api/materials/${editingItem.id}` : `${API_BASE_URL}/api/materials`;
     
     try {
       const response = await fetch(url, {
@@ -243,7 +243,7 @@ export default function Inventory() {
   const handleDelete = async (id: number) => {
     if (!window.confirm('Вы уверены, что хотите удалить эту позицию со склада?')) return;
     try {
-      await fetch(`http://localhost:5000/api/materials/${id}`, { method: 'DELETE' });
+      await fetch(`${API_BASE_URL}/api/materials/${id}`, { method: 'DELETE' });
       setMaterials(materials.filter(m => m.id !== id));
       fetchAnalytics();
     } catch (err) {

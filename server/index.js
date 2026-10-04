@@ -6,7 +6,7 @@ const { exec } = require('child_process');
 const swaggerUi = require('swagger-ui-express');
 const swaggerJsdoc = require('swagger-jsdoc');
 const db = require('./database');
-const { getAppSettings, saveAppSettings, getSqliteDbPath, getFirebirdConfig, getSqliteConfig } = require('./config');
+const { getAppSettings, saveAppSettings, getSqliteDbPath, getFirebirdConfig, getSqliteConfig, getBackupConfig } = require('./config');
 
 const app = express();
 app.use(cors());
@@ -3690,7 +3690,186 @@ app.post('/api/admin/firebird/sync', (req, res) => {
 });
 
 const PORT = process.env.PORT || 5000;
+
+// ============================================================================
+// Database Hot Backup Utility & Endpoints (VACUUM INTO)
+// ============================================================================
+
+/**
+ * Performs atomic online hot backup of SQLite database via VACUUM INTO
+ */
+function performSqliteBackup() {
+  return new Promise((resolve, reject) => {
+    const backupCfg = getBackupConfig();
+    const backupDirRel = backupCfg.BackupDirectory || '../backups';
+    const backupDir = path.isAbsolute(backupDirRel) ? backupDirRel : path.resolve(__dirname, backupDirRel);
+
+    if (!fs.existsSync(backupDir)) {
+      fs.mkdirSync(backupDir, { recursive: true });
+    }
+
+    const now = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    const timestamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+    const backupFilename = `orthopedic_backup_${timestamp}.sqlite`;
+    const backupFilePath = path.join(backupDir, backupFilename);
+
+    const safeBackupPath = backupFilePath.replace(/\\/g, '/').replace(/'/g, "''");
+
+    const startTime = Date.now();
+    const sqlite3 = require('sqlite3').verbose();
+    const sourceDbPath = getSqliteDbPath();
+
+    const snapshotDb = new sqlite3.Database(sourceDbPath, sqlite3.OPEN_READONLY, (openErr) => {
+      if (openErr) {
+        console.error('[BACKUP ERROR] Failed to open database for backup:', openErr.message);
+        return reject(openErr);
+      }
+
+      snapshotDb.run(`VACUUM INTO '${safeBackupPath}'`, function(vacErr) {
+        snapshotDb.close();
+
+        if (vacErr) {
+          console.error('[BACKUP ERROR] Failed to perform hot backup:', vacErr.message);
+          return reject(vacErr);
+        }
+
+        const durationMs = Date.now() - startTime;
+        let sizeBytes = 0;
+        try {
+          const stats = fs.statSync(backupFilePath);
+          sizeBytes = stats.size;
+        } catch (statErr) {
+          console.warn('Could not read backup file stats:', statErr.message);
+        }
+
+        console.log(`[BACKUP SUCCESS] Hot backup created: ${backupFilename} (${(sizeBytes / (1024 * 1024)).toFixed(2)} MB in ${durationMs}ms)`);
+
+      // Cleanup old backups if KeepLastNBackups is set
+      try {
+        const keepCount = Number(backupCfg.KeepLastNBackups) || 7;
+        const files = fs.readdirSync(backupDir)
+          .filter(f => f.startsWith('orthopedic_backup_') && f.endsWith('.sqlite'))
+          .map(f => ({
+            name: f,
+            path: path.join(backupDir, f),
+            time: fs.statSync(path.join(backupDir, f)).mtimeMs
+          }))
+          .sort((a, b) => b.time - a.time);
+
+        if (files.length > keepCount) {
+          const toDelete = files.slice(keepCount);
+          for (const item of toDelete) {
+            fs.unlinkSync(item.path);
+            console.log(`[BACKUP CLEANUP] Removed old backup: ${item.name}`);
+          }
+        }
+      } catch (cleanupErr) {
+        console.warn('[BACKUP CLEANUP WARNING] Could not prune old backups:', cleanupErr.message);
+      }
+
+        resolve({
+          backupFile: backupFilename,
+          backupPath: backupFilePath,
+          sizeBytes,
+          durationMs,
+          createdAt: now.toISOString()
+        });
+      });
+    });
+  });
+}
+
+/**
+ * @openapi
+ * /api/admin/backup:
+ *   post:
+ *     summary: Выполнить горячий бэкап базы данных SQLite (VACUUM INTO)
+ *     tags:
+ *       - SQLite Studio & Database
+ *     responses:
+ *       200:
+ *         description: Бэкап успешно создан
+ */
+app.post('/api/admin/backup', async (req, res) => {
+  try {
+    const result = await performSqliteBackup();
+    res.json({ success: true, ...result });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * @openapi
+ * /api/admin/backups:
+ *   get:
+ *     summary: Получить список существующих резервных копий
+ *     tags:
+ *       - SQLite Studio & Database
+ *     responses:
+ *       200:
+ *         description: Список файлов бэкапов
+ */
+app.get('/api/admin/backups', (req, res) => {
+  try {
+    const backupCfg = getBackupConfig();
+    const backupDirRel = backupCfg.BackupDirectory || '../backups';
+    const backupDir = path.isAbsolute(backupDirRel) ? backupDirRel : path.resolve(__dirname, backupDirRel);
+
+    if (!fs.existsSync(backupDir)) {
+      return res.json({ success: true, backups: [] });
+    }
+
+    const backups = fs.readdirSync(backupDir)
+      .filter(f => f.startsWith('orthopedic_backup_') && f.endsWith('.sqlite'))
+      .map(f => {
+        const fullPath = path.join(backupDir, f);
+        const stats = fs.statSync(fullPath);
+        return {
+          filename: f,
+          sizeBytes: stats.size,
+          sizeMb: (stats.size / (1024 * 1024)).toFixed(2),
+          createdAt: stats.mtime
+        };
+      })
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+    res.json({ success: true, backups });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ============================================================================
+// Static Files & React SPA Routing (Stage 2)
+// ============================================================================
+const clientDistPath = path.resolve(__dirname, '../client/dist');
+if (fs.existsSync(clientDistPath)) {
+  console.log(`[STATIC] Serving React SPA from ${clientDistPath}`);
+  app.use(express.static(clientDistPath));
+
+  // SPA fallback for React Router (HTML5 History API - Express 5 compatible)
+  app.use((req, res, next) => {
+    if (req.method !== 'GET') {
+      return next();
+    }
+    if (req.path.startsWith('/api') || req.path.startsWith('/api-docs')) {
+      return next();
+    }
+    res.sendFile(path.join(clientDistPath, 'index.html'));
+  });
+}
+
 app.listen(PORT, () => {
   console.log(`Backend Server running on port ${PORT}`);
   console.log(`Swagger documentation available at http://localhost:${PORT}/api-docs`);
+
+  // Run startup backup in background if enabled
+  const backupCfg = getBackupConfig();
+  if (backupCfg && backupCfg.AutoBackupOnStartup) {
+    performSqliteBackup().catch((err) => {
+      console.warn('[STARTUP BACKUP WARNING] Failed startup backup:', err.message);
+    });
+  }
 });

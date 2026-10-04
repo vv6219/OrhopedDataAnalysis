@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { API_BASE_URL } from '../config/apiConfig';
 import {
   Box,
   Typography,
@@ -199,7 +200,7 @@ export default function Staff() {
   const fetchStaff = async (filterKey = qualityFilter) => {
     setLoading(true);
     try {
-      let url = 'http://localhost:5000/api/staff';
+      let url = `${API_BASE_URL}/api/staff`;
       if (filterKey === 'missing_contacts') {
         url += '?missing_contacts=true';
       } else if (filterKey === 'informal_name') {
@@ -222,7 +223,7 @@ export default function Staff() {
   const fetchAnalytics = async () => {
     setLoadingAnalytics(true);
     try {
-      const res = await fetch('http://localhost:5000/api/staff/analytics-overview');
+      const res = await fetch(`${API_BASE_URL}/api/staff/analytics-overview`);
       if (res.ok) {
         const json = await res.json();
         setAnalytics(json);
@@ -278,11 +279,11 @@ export default function Staff() {
     }
 
     try {
-      let url = 'http://localhost:5000/api/staff';
+      let url = `${API_BASE_URL}/api/staff`;
       let method = 'POST';
 
       if (isEditing && currentStaff.id) {
-        url = `http://localhost:5000/api/staff/${currentStaff.id}`;
+        url = `${API_BASE_URL}/api/staff/${currentStaff.id}`;
         method = 'PUT';
       }
 
@@ -309,7 +310,7 @@ export default function Staff() {
   const handleDelete = async () => {
     if (!staffToDelete) return;
     try {
-      const res = await fetch(`http://localhost:5000/api/staff/${staffToDelete.id}`, {
+      const res = await fetch(`${API_BASE_URL}/api/staff/${staffToDelete.id}`, {
         method: 'DELETE'
       });
       if (res.ok) {

@@ -1,4 +1,3 @@
-import React from 'react';
 import { Box, Typography, Divider, Tooltip } from '@mui/material';
 import { GridFooterContainer, GridPagination } from '@mui/x-data-grid';
 

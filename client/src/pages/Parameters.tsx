@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { API_BASE_URL } from '../config/apiConfig';
 import { 
   Typography, Box, Paper, Button, IconButton,
   Dialog, DialogTitle, DialogContent, DialogActions, TextField, Tooltip
@@ -14,10 +15,10 @@ const customStringOperators = getGridStringOperators().map((operator) => {
   if (operator.value === 'contains') {
     return {
       ...operator,
-      getApplyFilterFn: (filterItem) => {
+      getApplyFilterFn: (filterItem: any) => {
         if (!filterItem.value) return null;
         const normalizedSearch = filterItem.value.replace(/[- ]+/g, '').toLowerCase();
-        return (value) => {
+        return (value: any) => {
           if (value == null) return false;
           const normalizedCell = String(value).replace(/[- ]+/g, '').toLowerCase();
           return normalizedCell.includes(normalizedSearch);
@@ -34,7 +35,7 @@ export default function Parameters() {
   const [editingItem, setEditingItem] = useState<any>(null);
   
   useEffect(() => {
-    fetch('http://localhost:5000/api/parameters-admin')
+    fetch(`${API_BASE_URL}/api/parameters-admin`)
       .then(res => res.json())
       .then(data => setParameters(data))
       .catch(err => console.error('Error fetching parameters:', err));
@@ -56,8 +57,8 @@ export default function Parameters() {
     const isEditing = !!parameters.find(p => p.id === editingItem.id);
     const method = isEditing ? 'PUT' : 'POST';
     const url = isEditing 
-      ? `http://localhost:5000/api/parameters-admin/${editingItem.id}` 
-      : 'http://localhost:5000/api/parameters-admin';
+      ? `${API_BASE_URL}/api/parameters-admin/${editingItem.id}` 
+      : `${API_BASE_URL}/api/parameters-admin`;
     
     try {
       const response = await fetch(url, {
@@ -83,7 +84,7 @@ export default function Parameters() {
 
   const handleDelete = async (id: string) => {
     try {
-      await fetch(`http://localhost:5000/api/parameters-admin/${id}`, { method: 'DELETE' });
+      await fetch(`${API_BASE_URL}/api/parameters-admin/${id}`, { method: 'DELETE' });
       setParameters(parameters.filter(p => p.id !== id));
     } catch (err) {
       console.error('Failed to delete parameter', err);

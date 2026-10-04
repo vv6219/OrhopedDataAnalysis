@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { API_BASE_URL } from '../config/apiConfig';
 import {
   Typography,
   Box,
@@ -193,7 +194,7 @@ export default function Patients() {
   const fetchPatients = async (filterKey = qualityFilter) => {
     setLoading(true);
     try {
-      let url = 'http://localhost:5000/api/patients?limit=2500';
+      let url = `${API_BASE_URL}/api/patients?limit=2500`;
       if (filterKey === 'fake_phone') {
         url += '&fake_phone=true';
       } else if (filterKey === 'no_passport_visits') {
@@ -216,7 +217,7 @@ export default function Patients() {
   const fetchAnalytics = async () => {
     setLoadingAnalytics(true);
     try {
-      const res = await fetch('http://localhost:5000/api/patients/analytics-overview');
+      const res = await fetch(`${API_BASE_URL}/api/patients/analytics-overview`);
       if (res.ok) {
         const json = await res.json();
         setAnalytics(json);
@@ -250,7 +251,7 @@ export default function Patients() {
     setEmrDialogOpen(true);
     setLoadingDetails(true);
     try {
-      const res = await fetch(`http://localhost:5000/api/patients/${patientId}`);
+      const res = await fetch(`${API_BASE_URL}/api/patients/${patientId}`);
       if (res.ok) {
         const data = await res.json();
         setSelectedPatient(data);
@@ -272,7 +273,7 @@ export default function Patients() {
     setSavingNew(true);
 
     try {
-      const res = await fetch('http://localhost:5000/api/patients', {
+      const res = await fetch(`${API_BASE_URL}/api/patients`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -691,7 +692,7 @@ export default function Patients() {
               localeText={ruRU.components.MuiDataGrid.defaultProps.localeText}
               slots={{
                 toolbar: CustomToolbar,
-                footer: PatientsGridFooter
+                footer: PatientsGridFooter as any
               }}
               slotProps={{
                 toolbar: {

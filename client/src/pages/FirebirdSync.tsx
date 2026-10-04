@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { API_BASE_URL } from '../config/apiConfig';
 import {
   Box,
   Typography,
@@ -116,7 +117,7 @@ export default function FirebirdSync() {
   const fetchConfigAndStatus = async () => {
     setIsLoadingSqliteStats(true);
     try {
-      const res = await fetch('http://localhost:5000/api/admin/firebird/status');
+      const res = await fetch(`${API_BASE_URL}/api/admin/firebird/status`);
       if (res.ok) {
         const data = await res.json();
         setSqliteStats(data.sqliteStats);
@@ -148,7 +149,7 @@ export default function FirebirdSync() {
     setIsSavingConfig(true);
     setConfigSaveSuccess(null);
     try {
-      const res = await fetch('http://localhost:5000/api/admin/config', {
+      const res = await fetch(`${API_BASE_URL}/api/admin/config`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -207,7 +208,7 @@ export default function FirebirdSync() {
     setTestResult(null);
     const start = performance.now();
     try {
-      const res = await fetch('http://localhost:5000/api/admin/firebird/test', {
+      const res = await fetch(`${API_BASE_URL}/api/admin/firebird/test`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ dbPath, user, password, host, port: Number(port) || 3050, charset })
@@ -238,7 +239,7 @@ export default function FirebirdSync() {
     setSyncOutput((prev) => prev + `[${new Date().toLocaleTimeString()}] Запуск Python engine (sync_patients_firebird.py)...\n\n`);
 
     try {
-      const res = await fetch('http://localhost:5000/api/admin/firebird/sync', {
+      const res = await fetch(`${API_BASE_URL}/api/admin/firebird/sync`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ dbPath, user, password, host, port: Number(port) || 3050, charset })
@@ -1105,7 +1106,7 @@ export default function FirebirdSync() {
               startIcon={<RefreshIcon />}
               onClick={() => {
                 setActiveStep(0);
-                fetchSqliteStatus();
+                fetchConfigAndStatus();
               }}
               sx={{ color: '#718096', fontWeight: 600 }}
             >
