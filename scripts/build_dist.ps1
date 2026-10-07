@@ -83,7 +83,10 @@ Write-Host "`n[4/6] Copying application assets..." -ForegroundColor Yellow
 $clientDist = Join-Path $clientDir "dist"
 if (Test-Path $clientDist) {
     Copy-Item -Path "$clientDist\*" -Destination (Join-Path $OutputDir "client") -Recurse -Force
-    Write-Host "  -> Copied client SPA assets to dist_app/client" -ForegroundColor Gray
+    $clientDistSubdir = Join-Path $OutputDir "client\dist"
+    New-Item -ItemType Directory -Path $clientDistSubdir -Force | Out-Null
+    Copy-Item -Path "$clientDist\*" -Destination $clientDistSubdir -Recurse -Force
+    Write-Host "  -> Copied client SPA assets to client and client\dist" -ForegroundColor Gray
 } else {
     Write-Host "  [WARNING] client/dist was not found!" -ForegroundColor Red
 }
@@ -92,14 +95,14 @@ if (Test-Path $clientDist) {
 $webConfig = Join-Path $publicDir "web.config"
 if (Test-Path $webConfig) {
     Copy-Item -Path $webConfig -Destination (Join-Path $OutputDir "client\web.config") -Force
-    Write-Host "  -> Copied IIS web.config to dist_app/client/web.config" -ForegroundColor Gray
+    Write-Host "  -> Copied IIS web.config to client/web.config" -ForegroundColor Gray
 }
 
 # 4.3 Server files
 Get-ChildItem -Path $serverDir -Exclude "node_modules", "package-lock.json", ".git*" | ForEach-Object {
     Copy-Item -Path $_.FullName -Destination (Join-Path $OutputDir "server") -Recurse -Force
 }
-Write-Host "  -> Copied Express API server files to dist_app/server" -ForegroundColor Gray
+Write-Host "  -> Copied Express API server files to server" -ForegroundColor Gray
 
 # 4.4 SQLite Database
 $sourceDb = Join-Path $dbDir "orthopedic_data_center.sqlite"
@@ -107,33 +110,44 @@ $destDb = Join-Path $OutputDir "db\orthopedic_data_center.sqlite"
 if ($backupDbTemp -and (Test-Path $backupDbTemp)) {
     Copy-Item -Path $backupDbTemp -Destination $destDb -Force
     Remove-Item $backupDbTemp -Force -ErrorAction SilentlyContinue
-    Write-Host "  -> Preserved and restored existing database from dist_app/db" -ForegroundColor Green
+    Write-Host "  -> Preserved and restored existing database" -ForegroundColor Green
 } elseif (Test-Path $sourceDb) {
     Copy-Item -Path $sourceDb -Destination $destDb -Force
-    Write-Host "  -> Copied master SQLite database (61k+ records) to dist_app/db" -ForegroundColor Gray
+    Write-Host "  -> Copied master SQLite database (61k+ records) to db" -ForegroundColor Gray
 }
 
 # 4.5 Configuration files
 Copy-Item -Path (Join-Path $serverDir "appsettings.json") -Destination (Join-Path $OutputDir "appsettings.json") -Force
 Copy-Item -Path (Join-Path $serverDir "appsettings.json") -Destination (Join-Path $OutputDir "server\appsettings.json") -Force
 
-# 4.6 Tools (SQLite & Firebird)
+# 4.6 Tools (SQLite, Firebird & Portable Node.js)
 if (Test-Path $toolsDir) {
     Copy-Item -Path "$toolsDir\*" -Destination (Join-Path $OutputDir "tools") -Recurse -Force
-    Write-Host "  -> Copied tools (SQLite & Firebird) to dist_app/tools" -ForegroundColor Gray
+    Write-Host "  -> Copied tools (SQLite, Firebird & Portable Node.js) to tools" -ForegroundColor Gray
 }
 
-# 4.7 IIS Scripts
-Copy-Item -Path (Join-Path $PSScriptRoot "iis\*") -Destination (Join-Path $OutputDir "scripts\iis") -Force
-Write-Host "  -> Copied IIS automation scripts to dist_app/scripts/iis" -ForegroundColor Gray
+# 4.7 Offline System Installers (VC++, Node.js MSI, IIS modules)
+$installersDir = Join-Path $rootDir "installers"
+if (Test-Path $installersDir) {
+    $destInstallers = Join-Path $OutputDir "installers"
+    New-Item -ItemType Directory -Path $destInstallers -Force | Out-Null
+    Copy-Item -Path "$installersDir\*" -Destination $destInstallers -Recurse -Force
+    Write-Host "  -> Copied offline system installers to installers" -ForegroundColor Gray
+}
 
-# 4.8 Launchers & Guides
+# 4.8 IIS Scripts
+Copy-Item -Path (Join-Path $PSScriptRoot "iis\*") -Destination (Join-Path $OutputDir "scripts\iis") -Force
+Write-Host "  -> Copied IIS automation scripts to scripts\iis" -ForegroundColor Gray
+
+# 4.9 Launchers & Guides
 Copy-Item -Path (Join-Path $rootDir "start.bat") -Destination (Join-Path $OutputDir "start.bat") -Force
 Copy-Item -Path (Join-Path $rootDir "stop.bat") -Destination (Join-Path $OutputDir "stop.bat") -Force
 Copy-Item -Path (Join-Path $rootDir "install_service.bat") -Destination (Join-Path $OutputDir "install_service.bat") -Force
 Copy-Item -Path (Join-Path $rootDir "setup_iis.bat") -Destination (Join-Path $OutputDir "setup_iis.bat") -Force
+Copy-Item -Path (Join-Path $rootDir "install_prerequisites.bat") -Destination (Join-Path $OutputDir "install_prerequisites.bat") -Force
+Copy-Item -Path (Join-Path $rootDir "create_desktop_shortcut.bat") -Destination (Join-Path $OutputDir "create_desktop_shortcut.bat") -Force
 Copy-Item -Path (Join-Path $rootDir "README_INSTALL.txt") -Destination (Join-Path $OutputDir "README_INSTALL.txt") -Force
-Write-Host "  -> Copied launchers (start.bat, stop.bat, install_service.bat, setup_iis.bat, README_INSTALL.txt) to distributive root" -ForegroundColor Gray
+Write-Host "  -> Copied launchers (start, stop, service, iis, prerequisites, shortcut, README) to root" -ForegroundColor Gray
 
 # 5. Server node_modules dependencies
 Write-Host "`n[5/6] Preparing Node.js backend dependencies..." -ForegroundColor Yellow
@@ -150,7 +164,12 @@ if (-not $SkipNodeModulesInstall) {
     Write-Host "  -> Copying existing node_modules from server/node_modules..." -ForegroundColor Gray
     $sourceNodeModules = Join-Path $serverDir "node_modules"
     if (Test-Path $sourceNodeModules) {
-        Copy-Item -Path $sourceNodeModules -Destination (Join-Path $OutputDir "server\node_modules") -Recurse -Force
+        $destNodeModules = Join-Path $OutputDir "server\node_modules"
+        & robocopy $sourceNodeModules $destNodeModules /E /NFL /NDL /NJH /NJS /nc /ns /np
+        if ($LASTEXITCODE -ge 8) {
+            Write-Host "  -> Robocopy fallback to Copy-Item..." -ForegroundColor Yellow
+            Copy-Item -Path $sourceNodeModules -Destination $destNodeModules -Recurse -Force
+        }
         Write-Host "  [OK] node_modules copied." -ForegroundColor Green
     }
 }
@@ -165,7 +184,7 @@ Write-Host "====================================================================
 Write-Host ("Distributive Path: " + $OutputDir) -ForegroundColor White
 Write-Host ("Total Package Size: " + [Math]::Round($distSize, 2) + " MB") -ForegroundColor White
 Write-Host "`nNext steps:" -ForegroundColor Yellow
-Write-Host " 1. Run Standalone: Launch start.bat in dist_app" -ForegroundColor White
+Write-Host " 1. Run Standalone: Launch start.bat in $OutputDir" -ForegroundColor White
 Write-Host " 2. Publish to IIS: Run scripts\iis\setup_iis_site.ps1 as Administrator" -ForegroundColor White
 Write-Host " 3. Firebird Test: Run tools\firebird\test_connection.bat" -ForegroundColor White
 Write-Host " 4. Build Installer: Compile installer\setup_script.iss with Inno Setup" -ForegroundColor White

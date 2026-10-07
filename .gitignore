@@ -14,3 +14,6 @@ backups/
 *.zip
 **/*.sqlite-wal
 **/*.sqlite-shm
+MEDICAL/
+installers/
+tools/node/

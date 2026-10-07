@@ -3844,8 +3844,15 @@ app.get('/api/admin/backups', (req, res) => {
 // ============================================================================
 // Static Files & React SPA Routing (Stage 2)
 // ============================================================================
-const clientDistPath = path.resolve(__dirname, '../client/dist');
-if (fs.existsSync(clientDistPath)) {
+let clientDistPath = path.resolve(__dirname, '../client/dist');
+if (!fs.existsSync(path.join(clientDistPath, 'index.html'))) {
+  const altPath = path.resolve(__dirname, '../client');
+  if (fs.existsSync(path.join(altPath, 'index.html'))) {
+    clientDistPath = altPath;
+  }
+}
+
+if (fs.existsSync(clientDistPath) && fs.existsSync(path.join(clientDistPath, 'index.html'))) {
   console.log(`[STATIC] Serving React SPA from ${clientDistPath}`);
   app.use(express.static(clientDistPath));
 
