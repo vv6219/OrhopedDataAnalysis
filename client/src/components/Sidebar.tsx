@@ -380,7 +380,7 @@ export default function Sidebar() {
           </Typography>
         </Box>
         <Typography variant="caption" sx={{ color: '#A0AEC0', fontSize: '0.68rem', fontWeight: 600 }}>
-          v1.2.0
+          v1.3.0
         </Typography>
       </Box>
     </Drawer>

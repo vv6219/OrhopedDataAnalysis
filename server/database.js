@@ -373,6 +373,14 @@ const db = new sqlite3.Database(dbPath, (err) => {
           });
         }
       });
+
+      // Initialize Staff Payouts module schema, views, and default seed data
+      try {
+        const initPayoutSchema = require('./initPayoutSchema');
+        initPayoutSchema(db);
+      } catch (err) {
+        console.error('Error initializing Staff Payout schema:', err.message);
+      }
     });
   }
 });

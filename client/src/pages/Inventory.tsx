@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { API_BASE_URL } from '../config/apiConfig';
 import { 
   Typography,
@@ -24,6 +24,7 @@ import {
   DataGrid, 
   type GridColDef, 
   type GridRenderCellParams, 
+  type GridFilterModel,
   GridFooterContainer, 
   GridPagination, 
   getGridStringOperators 
@@ -132,6 +133,42 @@ const customStringOperators = getGridStringOperators().map((operator) => {
   return operator;
 });
 
+interface InventoryFooterProps {
+  totalCount?: number;
+  totalCost?: number;
+  avgCost?: number;
+}
+
+function InventoryGridFooter(props: InventoryFooterProps) {
+  const totalCount = props.totalCount || 0;
+  const totalCost = props.totalCost || 0;
+  const avgCost = props.avgCost || 0;
+
+  return (
+    <GridFooterContainer sx={{ p: 1.5, borderTop: '2px solid #E2E8F0', bgcolor: '#F8FAFC', flexWrap: 'wrap', gap: 2 }}>
+      <Box sx={{ px: 1, display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+        <Typography variant="body2" sx={{ fontWeight: 700, color: '#0F3C64' }}>
+          Номенклатурных позиций: {totalCount}
+        </Typography>
+        <Typography variant="body2" sx={{ color: '#64748B' }}>
+          •
+        </Typography>
+        <Typography variant="body2" sx={{ fontWeight: 600, color: '#334155' }}>
+          Общая балансовая сумма: {totalCost.toLocaleString('ru-RU')} ₽
+        </Typography>
+        <Typography variant="body2" sx={{ color: '#64748B' }}>
+          •
+        </Typography>
+        <Typography variant="body2" sx={{ fontWeight: 600, color: '#334155' }}>
+          Средняя цена единицы: {avgCost.toLocaleString('ru-RU', { maximumFractionDigits: 1 })} ₽
+        </Typography>
+      </Box>
+      <Box sx={{ flexGrow: 1 }} />
+      <GridPagination />
+    </GridFooterContainer>
+  );
+}
+
 export default function Inventory() {
   const [materials, setMaterials] = useState<MaterialItem[]>([]);
   const [loading, setLoading] = useState(false);
@@ -143,22 +180,34 @@ export default function Inventory() {
   const [qualityFilter, setQualityFilter] = useState<string>('all');
   const [qualityFilterLabel, setQualityFilterLabel] = useState<string>('');
 
+  // Search State
+  const [quickSearch, setQuickSearch] = useState<string>('');
+  const searchTimeoutRef = useRef<any>(null);
+
   // Analytics State
   const [analytics, setAnalytics] = useState<MaterialsAnalyticsData | null>(null);
   const [loadingAnalytics, setLoadingAnalytics] = useState<boolean>(true);
 
-  const fetchMaterials = async (filterKey = qualityFilter) => {
+  const fetchMaterials = async (filterKey = qualityFilter, search = quickSearch) => {
     setLoading(true);
     try {
       let url = `${API_BASE_URL}/api/materials`;
+      const queryParams = new URLSearchParams();
+      if (search && search.trim()) {
+        queryParams.append('search', search.trim());
+      }
       if (filterKey === 'zero_cost') {
-        url += '?zero_cost=true';
+        queryParams.append('zero_cost', 'true');
       } else if (filterKey === 'is_invoice') {
-        url += '?is_invoice=true';
+        queryParams.append('is_invoice', 'true');
       } else if (filterKey === 'invalid_uom') {
-        url += '?invalid_uom=true';
+        queryParams.append('invalid_uom', 'true');
       } else if (filterKey === 'unlinked') {
-        url += '?unlinked=true';
+        queryParams.append('unlinked', 'true');
+      }
+      const qs = queryParams.toString();
+      if (qs) {
+        url += `?${qs}`;
       }
       const res = await fetch(url);
       if (res.ok) {
@@ -251,6 +300,19 @@ export default function Inventory() {
     }
   };
 
+  const materialsTotals = useMemo(() => {
+    let totalCost = 0;
+    materials.forEach((m) => {
+      totalCost += Number(m.current_unit_cost || 0);
+    });
+    const avgCost = materials.length > 0 ? totalCost / materials.length : 0;
+    return {
+      totalCount: materials.length,
+      totalCost,
+      avgCost
+    };
+  }, [materials]);
+
   const columns: GridColDef[] = [
     { 
       field: 'id', 
@@ -270,11 +332,12 @@ export default function Inventory() {
       filterOperators: customStringOperators,
       getApplyQuickFilterFn: (value) => {
         if (!value) return null;
-        const normalizedSearch = value.replace(/[- ]+/g, '').toLowerCase();
+        const normalizedSearch = value.toLowerCase().replace(/[-_ \[\]]+/g, ' ').trim();
+        const searchWords = normalizedSearch.split(/\s+/).filter(Boolean);
         return (cellValue) => {
           if (cellValue == null) return false;
-          const normalizedCell = String(cellValue).replace(/[- ]+/g, '').toLowerCase();
-          return normalizedCell.includes(normalizedSearch);
+          const normalizedCell = String(cellValue).toLowerCase().replace(/[-_ \[\]]+/g, ' ');
+          return searchWords.every((word: string) => normalizedCell.includes(word));
         };
       },
       renderCell: (params: GridRenderCellParams) => {
@@ -420,6 +483,12 @@ export default function Inventory() {
         </Box>
 
         <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center' }}>
+          <Chip
+            icon={<Inventory2Icon sx={{ fontSize: '15px !important' }} />}
+            label={quickSearch ? `Найдено на складе: ${materials.length} поз.` : `Всего на складе: ${materials.length} поз.`}
+            size="small"
+            sx={{ bgcolor: '#F0F6FA', color: '#0F3C64', fontWeight: 600, border: '1px solid #D6E4F0' }}
+          />
           <Tooltip title="Обновить складские показатели и данные из базы" arrow enterDelay={200}>
             <Button
               variant="outlined"
@@ -519,9 +588,22 @@ export default function Inventory() {
 
             <DataGrid
               autoHeight
+              showToolbar
               loading={loading}
               rows={materials}
               columns={columns}
+              onFilterModelChange={(model: GridFilterModel) => {
+                const searchStr = (model.quickFilterValues || []).join(' ').trim();
+                if (searchStr !== quickSearch) {
+                  setQuickSearch(searchStr);
+                  if (searchTimeoutRef.current) {
+                    clearTimeout(searchTimeoutRef.current);
+                  }
+                  searchTimeoutRef.current = setTimeout(() => {
+                    fetchMaterials(qualityFilter, searchStr);
+                  }, 300);
+                }
+              }}
               initialState={{
                 pagination: {
                   paginationModel: { page: 0, pageSize: 25 },
@@ -550,23 +632,14 @@ export default function Inventory() {
               }}
               slots={{ 
                 toolbar: CustomToolbar,
-                footer: () => (
-                  <GridFooterContainer sx={{ p: 1 }}>
-                    <Box sx={{ px: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <Typography variant="body2" sx={{ fontWeight: 700, color: '#0F3C64' }}>
-                        Всего позиций в текущем виде: {materials.length}
-                      </Typography>
-                    </Box>
-                    <Box sx={{ flexGrow: 1 }} />
-                    <GridPagination />
-                  </GridFooterContainer>
-                )
+                footer: InventoryGridFooter as any
               }}
               slotProps={{
                 toolbar: {
                   showQuickFilter: true,
                   quickFilterProps: { debounceMs: 400 },
                 },
+                footer: materialsTotals as any
               }}
             />
           </Box>

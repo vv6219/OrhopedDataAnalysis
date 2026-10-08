@@ -15,6 +15,9 @@ app.use(express.json());
 const schedulingRoutes = require('./schedulingRoutes');
 app.use('/api/scheduling', schedulingRoutes);
 
+const payoutRoutes = require('./payoutRoutes');
+app.use('/api/payouts', payoutRoutes);
+
 // ============================================================================
 // Swagger OpenAPI 3.0 Configuration
 // ============================================================================
@@ -23,7 +26,7 @@ const swaggerOptions = {
     openapi: '3.0.0',
     info: {
       title: 'Центр Ортопедии Добрушкина — ОртоERP REST API & SQLite Studio',
-      version: '1.2.0',
+      version: '1.3.0',
       description: `
 Интерактивная OpenAPI спецификация серверного API для автоматизации Центра Ортопедии и Травматологии Добрушкина (г. Сочи).
 
@@ -258,9 +261,15 @@ app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpecs, {
  *               $ref: '#/components/schemas/ErrorResponse'
  */
 app.get('/api/materials', (req, res) => {
-  const { zero_cost, is_invoice, invalid_uom, unlinked } = req.query;
+  const { zero_cost, is_invoice, invalid_uom, unlinked, search } = req.query;
   const whereClauses = [];
   const params = [];
+
+  if (search && search.trim()) {
+    const q = `%${search.trim()}%`;
+    whereClauses.push('(material_name LIKE ? OR unit_of_measure LIKE ? OR CAST(id AS TEXT) LIKE ?)');
+    params.push(q, q, q);
+  }
 
   if (zero_cost === 'true') {
     whereClauses.push('(current_unit_cost IS NULL OR current_unit_cost = 0)');
@@ -285,7 +294,7 @@ app.get('/api/materials', (req, res) => {
   }
 
   const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
-  const sql = `SELECT * FROM materials_catalog ${whereSql} ORDER BY id ASC`;
+  const sql = `SELECT * FROM materials_catalog ${whereSql} ORDER BY CASE WHEN material_name LIKE '%[TEST_DAEMON]%' THEN 0 ELSE 1 END, id ASC`;
 
   db.all(sql, params, (err, rows) => {
     if (err) return res.status(500).json({ error: err.message });
@@ -615,8 +624,8 @@ app.get('/api/patients', (req, res) => {
     sql += " WHERE " + conditions.join(" AND ");
   }
 
-  // Prioritize active patients with visits, then recent registrations
-  sql += " ORDER BY CASE WHEN last_visit_date IS NOT NULL THEN 0 ELSE 1 END, last_visit_date DESC, id DESC";
+  // Prioritize test daemon records, then active patients with visits, then recent registrations
+  sql += " ORDER BY CASE WHEN full_name LIKE '%[TEST_DAEMON]%' THEN 0 ELSE 1 END, CASE WHEN last_visit_date IS NOT NULL THEN 0 ELSE 1 END, last_visit_date DESC, id DESC";
 
   if (all !== 'true') {
     const numLimit = limit ? parseInt(limit) : 1000;
@@ -2944,7 +2953,20 @@ app.get('/api/parameters', (req, res) => {
  *                 $ref: '#/components/schemas/CalculationParameter'
  */
 app.get('/api/parameters-admin', (req, res) => {
-  db.all("SELECT param_name AS id, param_name, param_value FROM calculation_parameters", [], (err, rows) => {
+  const { search } = req.query;
+  const whereClauses = [];
+  const params = [];
+
+  if (search && search.trim()) {
+    const q = `%${search.trim()}%`;
+    whereClauses.push('(param_name LIKE ? OR CAST(param_value AS TEXT) LIKE ?)');
+    params.push(q, q);
+  }
+
+  const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
+  const sql = `SELECT param_name AS id, param_name, param_value FROM calculation_parameters ${whereSql} ORDER BY CASE WHEN param_name LIKE '%[TEST_DAEMON]%' THEN 0 ELSE 1 END, param_name ASC`;
+
+  db.all(sql, params, (err, rows) => {
     if (err) return res.status(500).json({ error: err.message });
     res.json(rows);
   });

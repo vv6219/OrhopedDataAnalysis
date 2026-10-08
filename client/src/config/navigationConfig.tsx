@@ -15,6 +15,12 @@ import SyncAltIcon from '@mui/icons-material/SyncAlt';
 import StorageIcon from '@mui/icons-material/Storage';
 import CodeIcon from '@mui/icons-material/Code';
 import BarChartIcon from '@mui/icons-material/BarChart';
+import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
+import SmartToyIcon from '@mui/icons-material/SmartToy';
+import AddCircleIcon from '@mui/icons-material/AddCircle';
+import DeleteForeverIcon from '@mui/icons-material/DeleteForever';
+import PlayCircleFilledWhiteIcon from '@mui/icons-material/PlayCircleFilledWhite';
+import MenuBookIcon from '@mui/icons-material/MenuBook';
 
 export interface NavItem {
   text: string;
@@ -52,10 +58,22 @@ export const navigationGroups: NavGroup[] = [
         tooltip: 'Календарь записей и расписание врачей'
       },
       {
+        text: 'Выплаты сотрудникам',
+        path: '/staff-payouts',
+        icon: <AccountBalanceWalletIcon sx={{ fontSize: 20 }} />,
+        tooltip: 'Расчет и ведомости выплат врачам и медсестрам на основе визитов и операций'
+      },
+      {
         text: 'Отчетность и документы',
         path: '/reports',
         icon: <AssessmentIcon sx={{ fontSize: 20 }} />,
         tooltip: 'Печать протоколов и аналитических отчетов'
+      },
+      {
+        text: 'Инструкция пользователя',
+        path: '/user-guide',
+        icon: <MenuBookIcon sx={{ fontSize: 20, color: '#0F3C64' }} />,
+        tooltip: 'Интерактивное руководство пользователя, архитектура сущностей, параметры и регламент расчетов'
       }
     ]
   },
@@ -141,6 +159,30 @@ export const navigationGroups: NavGroup[] = [
         icon: <CodeIcon sx={{ fontSize: 20 }} />,
         tooltip: 'Интерактивная REST API документация Swagger UI (в новой вкладке)',
         isExternal: true
+      },
+      {
+        text: 'Демо-данные [TEST_DAEMON]',
+        path: '/admin/daemon-data',
+        icon: <SmartToyIcon sx={{ fontSize: 20 }} />,
+        tooltip: 'Панель управления демо-данными: создание, очистка и запуск тестов'
+      },
+      {
+        text: 'Заполнить демо-данные',
+        path: '/admin/daemon-data?action=seed',
+        icon: <AddCircleIcon sx={{ fontSize: 20, color: '#16A34A' }} />,
+        tooltip: 'Заполнить БД тестовыми демо-данными (3 периода, PRP, сторно)'
+      },
+      {
+        text: 'Удалить демо-данные',
+        path: '/admin/daemon-data?action=purge',
+        icon: <DeleteForeverIcon sx={{ fontSize: 20, color: '#DC2626' }} />,
+        tooltip: 'Удалить все тестовые данные с маркером [TEST_DAEMON]'
+      },
+      {
+        text: 'Запуск тестов потока',
+        path: '/admin/daemon-data?action=run-tests',
+        icon: <PlayCircleFilledWhiteIcon sx={{ fontSize: 20, color: '#2563EB' }} />,
+        tooltip: 'Запустить автоматическое тестирование потока FL-01 — FL-14 (27 проверок)'
       }
     ]
   }
@@ -180,6 +222,18 @@ export const routeMetaMap: Record<string, RouteMeta> = {
   },
   '/reports': {
     title: 'Отчетность и документы',
+    groupTitle: 'Операции',
+    groupId: 'operations_and_wizards',
+    parentPath: '/'
+  },
+  '/staff-payouts': {
+    title: 'Выплаты сотрудникам',
+    groupTitle: 'Операции',
+    groupId: 'operations_and_wizards',
+    parentPath: '/'
+  },
+  '/user-guide': {
+    title: 'Инструкция пользователя МИС',
     groupTitle: 'Операции',
     groupId: 'operations_and_wizards',
     parentPath: '/'
@@ -228,6 +282,12 @@ export const routeMetaMap: Record<string, RouteMeta> = {
   },
   '/db-studio': {
     title: 'SQLite Studio (БД)',
+    groupTitle: 'Администратор',
+    groupId: 'administrator',
+    parentPath: '/'
+  },
+  '/admin/daemon-data': {
+    title: 'Управление демо-данными [TEST_DAEMON]',
     groupTitle: 'Администратор',
     groupId: 'administrator',
     parentPath: '/'

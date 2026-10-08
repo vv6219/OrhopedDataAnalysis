@@ -4,7 +4,7 @@
 ; =====================================================================
 
 #define MyAppName "Центр Ортопедии Добрушкина"
-#define MyAppVersion "1.2.0"
+#define MyAppVersion "1.3.0"
 #define MyAppPublisher "Центр Ортопедии и Травматологии Добрушкина"
 #define MyAppURL "http://localhost:5000"
 #define MyAppExeName "start.bat"

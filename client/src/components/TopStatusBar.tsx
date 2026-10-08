@@ -13,6 +13,7 @@ import NavigateNextIcon from '@mui/icons-material/NavigateNext';
 import CircleIcon from '@mui/icons-material/Circle';
 import StorageIcon from '@mui/icons-material/Storage';
 import LocalHospitalIcon from '@mui/icons-material/LocalHospital';
+import MenuBookIcon from '@mui/icons-material/MenuBook';
 import { routeMetaMap } from '../config/navigationConfig';
 
 export default function TopStatusBar() {
@@ -137,8 +138,36 @@ export default function TopStatusBar() {
         </Breadcrumbs>
       </Box>
 
-      {/* Right side: System Status Indicators */}
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+      {/* Right side: System Status Indicators & Guide */}
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.2 }}>
+        {/* User Guide Link */}
+        <Tooltip title="Инструкция пользователя (регламенты, формулы, поиск, печать PDF)">
+          <Chip
+            icon={<MenuBookIcon sx={{ fontSize: '15px !important', color: location.pathname === '/user-guide' ? '#0F3C64 !important' : '#334155 !important' }} />}
+            label="Инструкция"
+            clickable
+            onClick={() => navigate('/user-guide')}
+            size="small"
+            sx={{
+              bgcolor: location.pathname === '/user-guide' ? '#EBF5FA' : '#FFFFFF',
+              border: '1px solid',
+              borderColor: location.pathname === '/user-guide' ? '#0F3C64' : '#CBD5E1',
+              fontWeight: 700,
+              color: '#0F3C64',
+              fontSize: '0.75rem',
+              height: 28,
+              cursor: 'pointer',
+              boxShadow: location.pathname === '/user-guide' ? '0 1px 3px rgba(15, 60, 100, 0.2)' : '0 1px 2px rgba(0,0,0,0.04)',
+              transition: 'all 0.2s ease',
+              '&:hover': {
+                bgcolor: '#EBF5FA',
+                borderColor: '#0F3C64',
+                boxShadow: '0 2px 4px rgba(15, 60, 100, 0.15)'
+              }
+            }}
+          />
+        </Tooltip>
+
         {/* DB Connection Status Badge */}
         <Chip
           icon={<StorageIcon sx={{ fontSize: '15px !important', color: '#2B6CB0 !important' }} />}

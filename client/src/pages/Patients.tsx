@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { API_BASE_URL } from '../config/apiConfig';
 import {
   Typography,
@@ -31,7 +31,7 @@ import {
   LinearProgress,
   Alert
 } from '@mui/material';
-import { DataGrid, type GridColDef, type GridRenderCellParams } from '@mui/x-data-grid';
+import { DataGrid, type GridColDef, type GridRenderCellParams, type GridFilterModel } from '@mui/x-data-grid';
 import CustomToolbar from '../components/CustomToolbar';
 import PatientsGridFooter from '../components/PatientsGridFooter';
 import { ruRU } from '@mui/x-data-grid/locales';
@@ -190,11 +190,16 @@ export default function Patients() {
   const [newCity, setNewCity] = useState('г. Сочи');
   const [newAddress, setNewAddress] = useState('');
   const [savingNew, setSavingNew] = useState(false);
+  const [quickSearch, setQuickSearch] = useState('');
+  const searchTimeoutRef = useRef<any>(null);
 
-  const fetchPatients = async (filterKey = qualityFilter) => {
+  const fetchPatients = async (filterKey = qualityFilter, search = quickSearch) => {
     setLoading(true);
     try {
       let url = `${API_BASE_URL}/api/patients?limit=2500`;
+      if (search && search.trim()) {
+        url += `&search=${encodeURIComponent(search.trim())}`;
+      }
       if (filterKey === 'fake_phone') {
         url += '&fake_phone=true';
       } else if (filterKey === 'no_passport_visits') {
@@ -593,7 +598,7 @@ export default function Patients() {
         <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
           <Chip
             icon={<LocalHospitalIcon sx={{ fontSize: '15px !important' }} />}
-            label={`В кэше: ${patients.length} карт`}
+            label={quickSearch ? `Найдено в базе: ${patients.length} карт` : `В кэше: ${patients.length} карт`}
             size="small"
             sx={{ bgcolor: '#F0F6FA', color: '#0F3C64', fontWeight: 600, border: '1px solid #D6E4F0' }}
           />
@@ -699,6 +704,18 @@ export default function Patients() {
               rows={patients}
               columns={columns}
               loading={loading}
+              onFilterModelChange={(model: GridFilterModel) => {
+                const searchStr = (model.quickFilterValues || []).join(' ').trim();
+                if (searchStr !== quickSearch) {
+                  setQuickSearch(searchStr);
+                  if (searchTimeoutRef.current) {
+                    clearTimeout(searchTimeoutRef.current);
+                  }
+                  searchTimeoutRef.current = setTimeout(() => {
+                    fetchPatients(qualityFilter, searchStr);
+                  }, 300);
+                }
+              }}
               initialState={{
                 pagination: {
                   paginationModel: { page: 0, pageSize: 25 },

@@ -14,6 +14,9 @@ import Staff from './pages/Staff';
 import FirebirdSync from './pages/FirebirdSync';
 import OperationsAnalytics from './pages/OperationsAnalytics';
 import Scheduling from './pages/Scheduling';
+import StaffPayouts from './pages/StaffPayouts';
+import DaemonTestDataManager from './pages/DaemonTestDataManager';
+import UserGuide from './pages/UserGuide';
 
 const theme = createTheme({
   palette: {
@@ -184,6 +187,10 @@ function App() {
                 <Route path="/analytics/operations" element={<OperationsAnalytics />} />
                 <Route path="/checkout" element={<CheckoutWizard />} />
                 <Route path="/scheduling" element={<Scheduling />} />
+                <Route path="/staff-payouts" element={<StaffPayouts />} />
+                <Route path="/payouts" element={<StaffPayouts />} />
+                <Route path="/user-guide" element={<UserGuide />} />
+                <Route path="/guide" element={<UserGuide />} />
                 <Route path="/patients" element={<Patients />} />
                 <Route path="/staff" element={<Staff />} />
                 <Route path="/operations" element={<Operations />} />
@@ -191,6 +198,7 @@ function App() {
                 <Route path="/inventory" element={<Inventory />} />
                 <Route path="/parameters" element={<Parameters />} />
                 <Route path="/admin/firebird-sync" element={<FirebirdSync />} />
+                <Route path="/admin/daemon-data" element={<DaemonTestDataManager />} />
                 <Route path="/sqlite-studio" element={<SqliteStudio />} />
                 <Route path="/db-studio" element={<SqliteStudio />} />
                 {/* Fallback to BI Dashboard */}
