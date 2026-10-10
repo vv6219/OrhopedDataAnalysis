@@ -21,6 +21,7 @@ import AddCircleIcon from '@mui/icons-material/AddCircle';
 import DeleteForeverIcon from '@mui/icons-material/DeleteForever';
 import PlayCircleFilledWhiteIcon from '@mui/icons-material/PlayCircleFilledWhite';
 import MenuBookIcon from '@mui/icons-material/MenuBook';
+import QueryStatsIcon from '@mui/icons-material/QueryStats';
 
 export interface NavItem {
   text: string;
@@ -132,6 +133,12 @@ export const navigationGroups: NavGroup[] = [
         path: '/analytics/operations',
         icon: <AssessmentIcon sx={{ fontSize: 20 }} />,
         tooltip: 'Глубокий финансовый и маржинальный анализ сервисов'
+      },
+      {
+        text: 'BI Сервисы и Выплаты',
+        path: '/analytics/services-bi',
+        icon: <QueryStatsIcon sx={{ fontSize: 20 }} />,
+        tooltip: 'Глубокая аналитика сервисов, выплат и доходности'
       }
     ]
   },
@@ -204,6 +211,12 @@ export const routeMetaMap: Record<string, RouteMeta> = {
   },
   '/analytics/operations': {
     title: 'Анализ сервисов',
+    groupTitle: 'Аналитика',
+    groupId: 'bi',
+    parentPath: '/'
+  },
+  '/analytics/services-bi': {
+    title: 'BI Сервисы и Выплаты',
     groupTitle: 'Аналитика',
     groupId: 'bi',
     parentPath: '/'

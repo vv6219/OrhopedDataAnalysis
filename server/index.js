@@ -18,6 +18,9 @@ app.use('/api/scheduling', schedulingRoutes);
 const payoutRoutes = require('./payoutRoutes');
 app.use('/api/payouts', payoutRoutes);
 
+const servicesBiRoutes = require('./servicesBiRoutes');
+app.use('/api/analytics/services-bi', servicesBiRoutes);
+
 // ============================================================================
 // Swagger OpenAPI 3.0 Configuration
 // ============================================================================

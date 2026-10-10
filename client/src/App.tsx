@@ -17,6 +17,7 @@ import Scheduling from './pages/Scheduling';
 import StaffPayouts from './pages/StaffPayouts';
 import DaemonTestDataManager from './pages/DaemonTestDataManager';
 import UserGuide from './pages/UserGuide';
+import ServicesBiAnalytics from './pages/ServicesBiAnalytics';
 
 const theme = createTheme({
   palette: {
@@ -185,6 +186,8 @@ function App() {
                 {/* Default start on BI Dashboard */}
                 <Route path="/" element={<Dashboard />} />
                 <Route path="/analytics/operations" element={<OperationsAnalytics />} />
+                <Route path="/analytics/services-bi" element={<ServicesBiAnalytics />} />
+                <Route path="/services-bi" element={<ServicesBiAnalytics />} />
                 <Route path="/checkout" element={<CheckoutWizard />} />
                 <Route path="/scheduling" element={<Scheduling />} />
                 <Route path="/staff-payouts" element={<StaffPayouts />} />
