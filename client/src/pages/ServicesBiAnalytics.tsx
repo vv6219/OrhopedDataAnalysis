@@ -66,6 +66,8 @@ import PetsIcon from '@mui/icons-material/Pets';
 import HelpOutlineIcon from '@mui/icons-material/Help';
 import BlockIcon from '@mui/icons-material/Block';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
+import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
+import DateRangeIcon from '@mui/icons-material/DateRange';
 
 // Custom Subcomponents
 import { ServicesBiGridToolbar } from '../components/analytics/ServicesBiGridToolbar';
@@ -537,56 +539,119 @@ export default function ServicesBiAnalytics() {
           border: '1px solid #E2E8F0'
         }}
       >
-        <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 2, mb: 2 }}>
-          <Typography variant="subtitle2" sx={{ fontWeight: 700, color: '#334155' }}>
-            Быстрый период:
-          </Typography>
-          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-            {[
-              { id: 'today', label: 'Сегодня' },
-              { id: 'week', label: 'Неделя' },
-              { id: 'month', label: 'Месяц' },
-              { id: 'quarter', label: 'Квартал' },
-              { id: '2026', label: '2026' },
-              { id: 'all', label: 'Все время' }
-            ].map(p => (
-              <Chip
-                key={p.id}
-                label={p.label}
-                clickable
-                onClick={() => setPeriod(p.id)}
-                sx={{
-                  fontWeight: period === p.id ? 700 : 500,
-                  bgcolor: period === p.id ? '#0F3C64' : '#F1F5F9',
-                  color: period === p.id ? 'white' : '#475569',
-                  '&:hover': { bgcolor: period === p.id ? '#0A2540' : '#E2E8F0' }
-                }}
-              />
-            ))}
+        {/* ROW 1: Period Presets & Date Range */}
+        <Box
+          sx={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 2,
+            mb: 2.5,
+            pb: 2,
+            borderBottom: '1px solid #F1F5F9'
+          }}
+        >
+          {/* Quick Period Pills */}
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1.5 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+              <DateRangeIcon sx={{ color: '#0F3C64', fontSize: 20 }} />
+              <Typography variant="subtitle2" sx={{ fontWeight: 700, color: '#334155' }}>
+                Быстрый период:
+              </Typography>
+            </Box>
+            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
+              {[
+                { id: 'today', label: 'Сегодня', start: '2026-10-10', end: '2026-10-10' },
+                { id: 'week', label: 'Неделя', start: '2026-10-04', end: '2026-10-10' },
+                { id: 'month', label: 'Месяц (Октябрь)', start: '2026-10-01', end: '2026-10-31' },
+                { id: 'quarter', label: 'III Квартал', start: '2026-07-01', end: '2026-09-30' },
+                { id: '2026', label: 'Весь 2026', start: '2026-01-01', end: '2026-12-31' },
+                { id: 'all', label: 'Все время', start: '', end: '' }
+              ].map(p => (
+                <Chip
+                  key={p.id}
+                  label={p.label}
+                  clickable
+                  onClick={() => {
+                    setPeriod(p.id);
+                    setStartDate(p.start);
+                    setEndDate(p.end);
+                  }}
+                  sx={{
+                    fontWeight: period === p.id ? 700 : 500,
+                    bgcolor: period === p.id ? '#0F3C64' : '#F1F5F9',
+                    color: period === p.id ? 'white' : '#475569',
+                    fontSize: '0.82rem',
+                    transition: 'all 0.15s ease',
+                    '&:hover': { bgcolor: period === p.id ? '#0A2540' : '#E2E8F0' }
+                  }}
+                />
+              ))}
+            </Box>
+          </Box>
+
+          {/* Dedicated Calendar Date Range Box */}
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1.5,
+              bgcolor: '#F8FAFC',
+              px: 2,
+              py: 1,
+              borderRadius: 2,
+              border: '1px solid #CBD5E1'
+            }}
+          >
+            <CalendarMonthIcon sx={{ color: '#0F3C64', fontSize: 20 }} />
+            <Typography variant="body2" sx={{ fontWeight: 700, color: '#475569', whiteSpace: 'nowrap' }}>
+              Интервал дат:
+            </Typography>
+
+            <TextField
+              label="С даты"
+              type="date"
+              size="small"
+              value={startDate}
+              onChange={(e) => {
+                setStartDate(e.target.value);
+                setPeriod('custom');
+              }}
+              slotProps={{ inputLabel: { shrink: true } }}
+              sx={{
+                width: 170,
+                bgcolor: 'white',
+                '& .MuiInputBase-root': { fontSize: '0.85rem' }
+              }}
+            />
+
+            <Typography variant="body2" sx={{ color: '#94A3B8', fontWeight: 700 }}>
+              —
+            </Typography>
+
+            <TextField
+              label="По дату"
+              type="date"
+              size="small"
+              value={endDate}
+              onChange={(e) => {
+                setEndDate(e.target.value);
+                setPeriod('custom');
+              }}
+              slotProps={{ inputLabel: { shrink: true } }}
+              sx={{
+                width: 170,
+                bgcolor: 'white',
+                '& .MuiInputBase-root': { fontSize: '0.85rem' }
+              }}
+            />
           </Box>
         </Box>
 
+        {/* ROW 2: Clinical Filters & Reset */}
         <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 2 }}>
-          <TextField
-            label="С даты"
-            type="date"
-            size="small"
-            value={startDate}
-            onChange={(e) => setStartDate(e.target.value)}
-            InputLabelProps={{ shrink: true }}
-            sx={{ width: 155 }}
-          />
-          <TextField
-            label="По дату"
-            type="date"
-            size="small"
-            value={endDate}
-            onChange={(e) => setEndDate(e.target.value)}
-            InputLabelProps={{ shrink: true }}
-            sx={{ width: 155 }}
-          />
-
-          <FormControl size="small" sx={{ minWidth: 220 }}>
+          <FormControl size="small" sx={{ minWidth: 260, flex: { xs: '1 1 100%', sm: '1 1 240px', md: 'initial' } }}>
             <InputLabel>Категория сервиса</InputLabel>
             <Select
               value={category}
@@ -599,7 +664,7 @@ export default function ServicesBiAnalytics() {
             </Select>
           </FormControl>
 
-          <FormControl size="small" sx={{ minWidth: 200 }}>
+          <FormControl size="small" sx={{ minWidth: 240, flex: { xs: '1 1 100%', sm: '1 1 220px', md: 'initial' } }}>
             <InputLabel>Сотрудник / Врач</InputLabel>
             <Select
               value={doctorId}
@@ -613,7 +678,7 @@ export default function ServicesBiAnalytics() {
             </Select>
           </FormControl>
 
-          <FormControl size="small" sx={{ minWidth: 180 }}>
+          <FormControl size="small" sx={{ minWidth: 200, flex: { xs: '1 1 100%', sm: '1 1 180px', md: 'initial' } }}>
             <InputLabel>Когорта пациентов</InputLabel>
             <Select
               value={cohort}
@@ -629,13 +694,21 @@ export default function ServicesBiAnalytics() {
           </FormControl>
 
           <Button
-            variant="text"
+            variant="outlined"
             size="small"
             startIcon={<FilterAltOffIcon />}
             onClick={handleResetFilters}
-            sx={{ color: '#64748B', textTransform: 'none', fontWeight: 600 }}
+            sx={{
+              color: '#64748B',
+              borderColor: '#CBD5E1',
+              textTransform: 'none',
+              fontWeight: 600,
+              height: 40,
+              px: 2,
+              '&:hover': { bgcolor: '#F1F5F9', borderColor: '#94A3B8' }
+            }}
           >
-            Сбросить
+            Сбросить фильтры
           </Button>
         </Box>
       </Paper>
