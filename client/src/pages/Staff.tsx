@@ -578,7 +578,7 @@ export default function Staff() {
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 2 }}>
         <Box>
           <Typography variant="h4" sx={{ fontWeight: 800, color: '#0F3C64', letterSpacing: '-0.5px' }}>
-            Медицинский персонал и врачи
+            Сотрудники клиники и врачи
           </Typography>
           <Typography variant="body2" sx={{ color: '#64748B', mt: 0.5 }}>
             Кадровый реестр клиники, анализ консультативной нагрузки врачей-ортопедов и контроль качества учетных карточек
@@ -634,7 +634,7 @@ export default function Staff() {
               '& .MuiTabs-indicator': { bgcolor: '#0F3C64', height: 3 }
             }}
           >
-            <Tab icon={<PeopleIcon fontSize="small" />} iconPosition="start" label="Реестр персонала" />
+            <Tab icon={<PeopleIcon fontSize="small" />} iconPosition="start" label="Реестр сотрудников" />
             <Tab icon={<BarChartIcon fontSize="small" />} iconPosition="start" label="Нагрузка и аналитика приёма" />
             <Tab 
               icon={<HealthAndSafetyIcon fontSize="small" />} 
@@ -917,7 +917,7 @@ export default function Staff() {
                   <Paper elevation={0} sx={{ p: 2.5, borderRadius: 2.5, border: '1px solid #E2E8F0' }}>
                     <Box sx={{ mb: 2 }}>
                       <Typography variant="subtitle1" sx={{ fontWeight: 700, color: '#0F3C64' }}>
-                        Кадровая структура по категориям персонала
+                        Кадровая структура по категориям сотрудников
                       </Typography>
                       <Typography variant="caption" sx={{ color: '#64748B' }}>
                         Соотношение врачебного, сестринского и административного блоков
@@ -1030,7 +1030,7 @@ export default function Staff() {
                           Сводный индекс качества кадрового реестра: {analytics?.dataQuality?.score || 82} из 100 баллов
                         </Typography>
                         <Typography variant="body2" sx={{ color: '#475569' }}>
-                          Хороший уровень заполнения. Все 100% сотрудников активны в штате. Ключевые точки контроля — заполнение контактов административного персонала и русификация наименований должностей.
+                          Хороший уровень заполнения. Все 100% сотрудников активны в штате. Ключевые точки контроля — заполнение контактов административных сотрудников и русификация наименований должностей.
                         </Typography>
                       </Box>
                     </Box>

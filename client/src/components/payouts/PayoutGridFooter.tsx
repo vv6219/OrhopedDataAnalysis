@@ -22,7 +22,13 @@ export function PayoutGridFooter({
   viewMode = 'procedures'
 }: PayoutGridFooterProps) {
   const formatCurrency = (val: number) => {
-    return Math.round(val || 0).toLocaleString('ru-RU') + ' ₽';
+    if (val === undefined || val === null || isNaN(val)) return '0 ₽';
+    const num = Number(val);
+    const hasFraction = Math.abs(num % 1) > 0.001;
+    return num.toLocaleString('ru-RU', {
+      minimumFractionDigits: hasFraction ? 1 : 0,
+      maximumFractionDigits: 2
+    }) + ' ₽';
   };
 
   const fotPercentage = totalMargin > 0 ? ((totalPayout / totalMargin) * 100).toFixed(1) : '0.0';
@@ -58,7 +64,7 @@ export function PayoutGridFooter({
             ИТОГИ ВЫБОРКИ:
           </Typography>
           <Typography variant="body2" sx={{ fontWeight: 600, color: '#4A5568' }}>
-            {viewMode === 'procedures' ? 'Процедур:' : 'Начислений:'} <strong>{totalCount}</strong>
+            {viewMode === 'procedures' ? 'Сервисов:' : 'Начислений:'} <strong>{totalCount}</strong>
           </Typography>
         </Box>
 
@@ -85,7 +91,7 @@ export function PayoutGridFooter({
           </Box>
 
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-            <Typography variant="caption" sx={{ color: '#64748B' }}>Выплаты персоналу (ФОТ):</Typography>
+            <Typography variant="caption" sx={{ color: '#64748B' }}>Выплаты сотрудникам (ФОТ):</Typography>
             <Typography variant="body2" sx={{ fontWeight: 800, color: '#0F3C64', bgcolor: '#E2E8F0', px: 1, py: 0.2, borderRadius: 1 }}>
               {formatCurrency(totalPayout)} ({fotPercentage}%)
             </Typography>

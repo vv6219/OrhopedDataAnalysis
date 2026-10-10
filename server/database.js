@@ -145,6 +145,20 @@ const db = new sqlite3.Database(dbPath, (err) => {
         FOREIGN KEY(material_id) REFERENCES materials_catalog(id)
       )`);
 
+      db.run(`CREATE TABLE IF NOT EXISTS operation_transaction_items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        transaction_id INTEGER NOT NULL,
+        operation_id INTEGER NOT NULL,
+        quantity INTEGER NOT NULL DEFAULT 1,
+        unit_price REAL NOT NULL,
+        subtotal REAL NOT NULL,
+        notes TEXT,
+        FOREIGN KEY(transaction_id) REFERENCES operation_transactions(id) ON DELETE CASCADE,
+        FOREIGN KEY(operation_id) REFERENCES operations(id)
+      )`);
+      db.run(`CREATE INDEX IF NOT EXISTS idx_oti_trans ON operation_transaction_items(transaction_id)`);
+      db.run(`CREATE INDEX IF NOT EXISTS idx_oti_op ON operation_transaction_items(operation_id)`);
+
       db.run(`CREATE TABLE IF NOT EXISTS appointments (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         patient_id INTEGER NOT NULL,

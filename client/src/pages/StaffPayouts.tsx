@@ -34,8 +34,16 @@ import BarChartIcon from '@mui/icons-material/BarChart';
 import SettingsIcon from '@mui/icons-material/Settings';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
+import BlockIcon from '@mui/icons-material/Block';
+import RestoreIcon from '@mui/icons-material/Restore';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
+import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
+import PaymentsIcon from '@mui/icons-material/Payments';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import PrintIcon from '@mui/icons-material/Print';
+import DescriptionIcon from '@mui/icons-material/Description';
+import CheckIcon from '@mui/icons-material/Check';
 
 // Subcomponents
 import { PayoutGridToolbar } from '../components/payouts/PayoutGridToolbar';
@@ -65,6 +73,23 @@ export default function StaffPayouts() {
 
   // Notification
   const [snackbarMessage, setSnackbarMessage] = useState<string | null>(null);
+
+  // Sheets Registry State
+  const [sheets, setSheets] = useState<any[]>([]);
+  const [sheetsLoading, setSheetsLoading] = useState(false);
+
+  // Status Filter for Accruals
+  const [statusFilter, setStatusFilter] = useState<'all' | 'accrued' | 'approved' | 'in_sheet' | 'paid' | 'storno'>('all');
+
+  // Sheet Creation Dialog State
+  const [sheetDialogOpen, setSheetDialogOpen] = useState(false);
+  const [sheetNotes, setSheetNotes] = useState('');
+  const [creatingSheet, setCreatingSheet] = useState(false);
+
+  // Sheet Payment Order Dialog
+  const [payOrderDialogOpen, setPayOrderDialogOpen] = useState(false);
+  const [targetSheetForPay, setTargetSheetForPay] = useState<any | null>(null);
+  const [paymentOrderNum, setPaymentOrderNum] = useState('');
 
   // Print Template State
   const printRef = useRef<HTMLDivElement>(null);
@@ -102,9 +127,26 @@ export default function StaffPayouts() {
     }
   };
 
+  const fetchSheets = async () => {
+    setSheetsLoading(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/payouts/sheets`);
+      if (res.ok) {
+        const json = await res.json();
+        setSheets(json.sheets || []);
+      }
+    } catch (err) {
+      console.error('Failed to load sheets', err);
+    } finally {
+      setSheetsLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (activeTab === 0) {
       fetchAccruals();
+    } else if (activeTab === 1) {
+      fetchSheets();
     }
   }, [activeTab, viewMode]);
 
@@ -116,7 +158,13 @@ export default function StaffPayouts() {
   };
 
   const formatCurrency = (val: number) => {
-    return Math.round(val || 0).toLocaleString('ru-RU') + ' ₽';
+    if (val === undefined || val === null || isNaN(val)) return '0 ₽';
+    const num = Number(val);
+    const hasFraction = Math.abs(num % 1) > 0.001;
+    return num.toLocaleString('ru-RU', {
+      minimumFractionDigits: hasFraction ? 1 : 0,
+      maximumFractionDigits: 2
+    }) + ' ₽';
   };
 
   // Convert row selection to array of IDs
@@ -163,12 +211,230 @@ export default function StaffPayouts() {
     }
   };
 
+  // Bulk Annul handler
+  const handleBulkAnnul = async () => {
+    if (selectedIdsArray.length === 0) return;
+    if (!confirm(`Аннулировать выбранные начисления (${selectedIdsArray.length} шт.)?`)) return;
+    try {
+      let idsToAnnul: number[] = [];
+      if (viewMode === 'staff') {
+        idsToAnnul = selectedIdsArray.map(Number);
+      } else {
+        selectedIdsArray.forEach(procId => {
+          const proc = accruals.find(a => a.id === procId);
+          if (proc && Array.isArray(proc.brigade_details)) {
+            proc.brigade_details.forEach((b: any) => {
+              if (b.accrual_id) idsToAnnul.push(b.accrual_id);
+            });
+          }
+        });
+      }
+
+      if (idsToAnnul.length === 0) return;
+
+      const res = await fetch(`${API_BASE_URL}/api/payouts/accruals/bulk-annul`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accrualIds: idsToAnnul })
+      });
+
+      if (res.ok) {
+        setSnackbarMessage(`Успешно аннулировано начислений: ${idsToAnnul.length}`);
+        fetchAccruals();
+      }
+    } catch (err: any) {
+      alert('Ошибка при аннулировании: ' + err.message);
+    }
+  };
+
+  // Bulk Mark as Paid handler
+  const handleBulkPay = async () => {
+    if (selectedIdsArray.length === 0) return;
+    if (!confirm(`Отметить как выплаченные (${selectedIdsArray.length} начислений)?`)) return;
+    try {
+      let idsToPay: number[] = [];
+      if (viewMode === 'staff') {
+        idsToPay = selectedIdsArray.map(Number);
+      } else {
+        selectedIdsArray.forEach(procId => {
+          const proc = accruals.find(a => a.id === procId);
+          if (proc && Array.isArray(proc.brigade_details)) {
+            proc.brigade_details.forEach((b: any) => {
+              if (b.accrual_id) idsToPay.push(b.accrual_id);
+            });
+          }
+        });
+      }
+
+      if (idsToPay.length === 0) return;
+
+      const res = await fetch(`${API_BASE_URL}/api/payouts/accruals/bulk-pay`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accrualIds: idsToPay })
+      });
+
+      if (res.ok) {
+        setSnackbarMessage(`Успешно отмечено как выплачено: ${idsToPay.length}`);
+        fetchAccruals();
+      }
+    } catch (err: any) {
+      alert('Ошибка при выплате: ' + err.message);
+    }
+  };
+
+  // Open Create Sheet Dialog
+  const handleOpenCreateSheet = () => {
+    if (selectedIdsArray.length === 0) return;
+    setSheetNotes('');
+    setSheetDialogOpen(true);
+  };
+
+  // Confirm Sheet Creation
+  const handleConfirmCreateSheet = async () => {
+    try {
+      setCreatingSheet(true);
+      let idsToInclude: number[] = [];
+      if (viewMode === 'staff') {
+        idsToInclude = selectedIdsArray.map(Number);
+      } else {
+        selectedIdsArray.forEach(procId => {
+          const proc = accruals.find(a => a.id === procId);
+          if (proc && Array.isArray(proc.brigade_details)) {
+            proc.brigade_details.forEach((b: any) => {
+              if (b.accrual_id) idsToInclude.push(b.accrual_id);
+            });
+          }
+        });
+      }
+
+      const today = new Date().toISOString().slice(0, 10);
+      const res = await fetch(`${API_BASE_URL}/api/payouts/sheets`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          period_start: today.slice(0, 7) + '-01',
+          period_end: today,
+          accrual_ids: idsToInclude,
+          notes: sheetNotes
+        })
+      });
+
+      if (res.ok) {
+        const json = await res.json();
+        setSheetDialogOpen(false);
+        const countCreated = json.sheets?.length || 1;
+        setSnackbarMessage(`Ведомость успешно сформирована (${countCreated > 1 ? `создано ${countCreated} ведомостей` : json.sheetNumber})`);
+        fetchAccruals();
+        fetchSheets();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        alert('Ошибка: ' + (err.error || res.statusText));
+      }
+    } catch (err: any) {
+      alert('Ошибка при создании ведомости: ' + err.message);
+    } finally {
+      setCreatingSheet(false);
+    }
+  };
+
+  // Sheet status update (Approve / Pay)
+  const handleUpdateSheetStatus = async (sheetId: number, status: 'approved' | 'paid', paymentOrder?: string) => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/payouts/sheets/${sheetId}/status`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status,
+          approved_by: 'Администратор клиники',
+          payment_order_number: paymentOrder
+        })
+      });
+      if (res.ok) {
+        setSnackbarMessage(status === 'paid' ? 'Ведомость выплачена' : 'Ведомость утверждена');
+        fetchSheets();
+        fetchAccruals();
+      }
+    } catch (err: any) {
+      alert('Ошибка при обновлении ведомости: ' + err.message);
+    }
+  };
+
+  // Print full Sheet
+  const handlePrintSheet = async (sheetId: number) => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/payouts/sheets/${sheetId}`);
+      if (res.ok) {
+        const data = await res.json();
+        const sh = data.sheet;
+        const itms = data.items || [];
+        setPrintData({
+          sheet_number: sh.sheet_number,
+          staff_name: sh.staff_name,
+          staff_role: sh.staff_role,
+          specialization: sh.specialization,
+          period_start: sh.period_start,
+          period_end: sh.period_end,
+          total_operations_count: sh.total_operations_count,
+          total_margin_base: sh.total_margin_base,
+          total_payout_amount: sh.total_payout_amount,
+          tax_rate_percent: sh.tax_rate_percent,
+          payout_account_info: sh.payout_account_info,
+          items: itms.map((i: any) => ({
+            accrual_id: i.accrual_id,
+            service_date: i.service_date,
+            role_in_procedure: i.role_in_procedure,
+            patient_name: i.patient_name,
+            operation_name: i.operation_name,
+            revenue: i.revenue,
+            materials_cost: i.materials_cost,
+            material_cost_factor: i.material_cost_factor,
+            margin_base: i.margin_base,
+            payout_percent: i.payout_percent,
+            calculated_payout: i.calculated_payout,
+            applied_min_guarantee: i.applied_min_guarantee,
+            manual_adjustment: i.manual_adjustment,
+            final_payout: i.final_payout,
+            notes: i.notes
+          }))
+        });
+
+        setTimeout(() => {
+          handlePrintTrigger();
+        }, 150);
+      }
+    } catch (err: any) {
+      alert('Ошибка при загрузке ведомости для печати: ' + err.message);
+    }
+  };
+
+  // Counts for status filter tabs
+  const statusCounts = useMemo(() => {
+    const counts = { all: accruals.length, accrued: 0, approved: 0, in_sheet: 0, paid: 0, storno: 0 };
+    accruals.forEach(a => {
+      if (a.status === 'accrued') counts.accrued++;
+      else if (a.status === 'approved') counts.approved++;
+      else if (a.status === 'in_sheet') counts.in_sheet++;
+      else if (a.status === 'paid') counts.paid++;
+      else if (a.status === 'storno' || a.status === 'cancelled') counts.storno++;
+    });
+    return counts;
+  }, [accruals]);
+
+  const filteredAccruals = useMemo(() => {
+    if (statusFilter === 'all') return accruals;
+    return accruals.filter(a => {
+      if (statusFilter === 'storno') return a.status === 'storno' || a.status === 'cancelled';
+      return a.status === statusFilter;
+    });
+  }, [accruals, statusFilter]);
+
   // Prepare and trigger PDF Print
   const handlePrint = async () => {
     if (selectedIdsArray.length === 0) return;
 
     let printItems: any[] = [];
-    let staffName = 'Медицинский персонал клиники';
+    let staffName = 'Сотрудники клиники';
     let staffRole = 'Врач / Операционная медсестра';
 
     if (viewMode === 'staff') {
@@ -246,7 +512,7 @@ export default function StaffPayouts() {
   const handleExportCsv = () => {
     if (accruals.length === 0) return;
 
-    let headers = ['ID', 'Дата', 'Пациент', 'Операция', 'Выручка (руб)', 'Расходники*1.15', 'Маржа (руб)'];
+    let headers = ['ID', 'Дата', 'Пациент', 'Сервис', 'Выручка (руб)', 'Расходники*1.15', 'Маржа (руб)'];
     if (viewMode === 'staff') {
       headers.push('Сотрудник', 'Роль', 'Ставка (%)', 'Выплата (руб)', 'Статус');
     } else {
@@ -295,17 +561,22 @@ export default function StaffPayouts() {
     document.body.removeChild(link);
   };
 
-  // Delete accrual handler
-  const handleDeleteAccrual = async (accrualId: number) => {
-    if (!confirm('Вы уверены, что хотите аннулировать данное начисление?')) return;
+  // Annul / Cancel accrual handler
+  const handleToggleAnnulAccrual = async (accrualId: number, isCurrentlyCancelled: boolean) => {
+    const actionText = isCurrentlyCancelled ? 'восстановить данное начисление' : 'аннулировать данное начисление';
+    if (!confirm(`Вы уверены, что хотите ${actionText}?`)) return;
     try {
       const res = await fetch(`${API_BASE_URL}/api/payouts/accruals/${accrualId}`, { method: 'DELETE' });
       if (res.ok) {
-        setSnackbarMessage('Начисление успешно аннулировано');
+        const data = await res.json();
+        setSnackbarMessage(data.status === 'cancelled' ? 'Начисление успешно аннулировано' : 'Начисление успешно восстановлено');
         fetchAccruals();
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        alert('Ошибка: ' + (errData.error || res.statusText));
       }
     } catch (err: any) {
-      alert('Ошибка при удалении: ' + err.message);
+      alert('Ошибка при изменении статуса: ' + err.message);
     }
   };
 
@@ -400,7 +671,7 @@ export default function StaffPayouts() {
     },
     {
       field: 'operation_name',
-      headerName: 'Медицинская услуга / операция',
+      headerName: 'Сервис',
       flex: 2,
       minWidth: 220,
       renderCell: (params) => (
@@ -548,7 +819,7 @@ export default function StaffPayouts() {
     },
     {
       field: 'operation_name',
-      headerName: 'Медицинская услуга',
+      headerName: 'Сервис',
       flex: 2,
       minWidth: 200,
       renderCell: (params) => (
@@ -589,50 +860,244 @@ export default function StaffPayouts() {
       )
     },
     {
+      field: 'sheet_number',
+      headerName: 'Ведомость',
+      flex: 1.2,
+      minWidth: 150,
+      renderCell: (params) => params.value ? (
+        <Chip
+          size="small"
+          icon={<ReceiptLongIcon style={{ fontSize: 16 }} />}
+          label={params.value}
+          sx={{ bgcolor: '#EFF6FF', color: '#1D4ED8', fontWeight: 600, border: '1px solid #BFDBFE' }}
+        />
+      ) : (
+        <Typography variant="body2" sx={{ color: '#94A3B8' }}>—</Typography>
+      )
+    },
+    {
       field: 'status',
       headerName: 'Статус',
-      flex: 1,
-      minWidth: 110,
+      flex: 1.1,
+      minWidth: 135,
       align: 'center',
       headerAlign: 'center',
       renderCell: (params) => {
         let label = 'Начислено';
-        let color: 'default' | 'info' | 'success' | 'warning' = 'info';
+        let color: 'default' | 'info' | 'success' | 'warning' | 'error' = 'info';
         if (params.value === 'approved') { label = 'Утверждено'; color = 'warning'; }
+        if (params.value === 'in_sheet') { label = 'В ведомости'; color = 'primary'; }
         if (params.value === 'paid') { label = 'Выплачено'; color = 'success'; }
-        if (params.value === 'in_sheet') { label = 'В ведомости'; color = 'info'; }
-        return <Chip size="small" label={label} color={color} variant="outlined" />;
+        if (params.value === 'storno' || params.value === 'cancelled' || params.value === 'annulled') {
+          label = 'Аннулировано';
+          color = 'error';
+        }
+        const isAnnulled = params.value === 'storno' || params.value === 'cancelled';
+        return (
+          <Chip
+            size="small"
+            label={label}
+            color={color}
+            variant={isAnnulled ? 'filled' : 'outlined'}
+            sx={{ fontWeight: 700 }}
+          />
+        );
       }
     },
     {
       field: 'actions',
       headerName: 'Действия',
-      width: 100,
+      width: 105,
       sortable: false,
       filterable: false,
+      renderCell: (params) => {
+        const isCancelled = params.row.status === 'storno' || params.row.status === 'cancelled';
+        return (
+          <Box sx={{ display: 'flex', gap: 0.5 }}>
+            <IconButton
+              size="small"
+              color="primary"
+              onClick={() => {
+                setEditingAccrual(params.row);
+                setEditDialogOpen(true);
+              }}
+              title="Редактировать"
+            >
+              <EditIcon fontSize="small" />
+            </IconButton>
+            <IconButton
+              size="small"
+              color={isCancelled ? "warning" : "error"}
+              onClick={() => handleToggleAnnulAccrual(params.row.id, isCancelled)}
+              title={isCancelled ? "Восстановить начисление" : "Аннулировать"}
+            >
+              {isCancelled ? <RestoreIcon fontSize="small" /> : <BlockIcon fontSize="small" />}
+            </IconButton>
+          </Box>
+        );
+      }
+    }
+  ];
+
+  // COLUMNS: Sheets Tab DataGrid
+  const sheetColumns: GridColDef[] = [
+    {
+      field: 'sheet_number',
+      headerName: 'Номер ведомости',
+      flex: 1.2,
+      minWidth: 160,
       renderCell: (params) => (
-        <Box sx={{ display: 'flex', gap: 0.5 }}>
-          <IconButton
-            size="small"
-            color="primary"
-            onClick={() => {
-              setEditingAccrual(params.row);
-              setEditDialogOpen(true);
-            }}
-            title="Редактировать"
-          >
-            <EditIcon fontSize="small" />
-          </IconButton>
-          <IconButton
-            size="small"
-            color="error"
-            onClick={() => handleDeleteAccrual(params.row.id)}
-            title="Аннулировать"
-          >
-            <DeleteIcon fontSize="small" />
-          </IconButton>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <ReceiptLongIcon sx={{ color: '#0284C7', fontSize: 20 }} />
+          <Typography variant="body2" sx={{ fontWeight: 700, color: '#0F3C64' }}>
+            {params.value}
+          </Typography>
         </Box>
       )
+    },
+    {
+      field: 'staff_name',
+      headerName: 'Сотрудник / Специалист',
+      flex: 1.5,
+      minWidth: 180,
+      renderCell: (params) => (
+        <Box sx={{ py: 1 }}>
+          <Typography variant="body2" sx={{ fontWeight: 700, color: '#0F3C64' }}>
+            {params.value}
+          </Typography>
+          <Typography variant="caption" sx={{ color: '#64748B' }}>
+            {params.row.specialization || params.row.staff_role || 'Специалист'}
+          </Typography>
+        </Box>
+      )
+    },
+    {
+      field: 'period',
+      headerName: 'Период',
+      flex: 1.2,
+      minWidth: 160,
+      valueGetter: (_, row) => `${row.period_start || ''} — ${row.period_end || ''}`,
+      renderCell: (params) => (
+        <Typography variant="body2" sx={{ color: '#334155' }}>
+          {params.value}
+        </Typography>
+      )
+    },
+    {
+      field: 'total_operations_count',
+      headerName: 'Операций',
+      flex: 0.8,
+      minWidth: 90,
+      align: 'center',
+      headerAlign: 'center',
+      renderCell: (params) => <strong>{params.value || 0}</strong>
+    },
+    {
+      field: 'total_margin_base',
+      headerName: 'Маржа базы',
+      flex: 1.1,
+      minWidth: 120,
+      align: 'right',
+      headerAlign: 'right',
+      renderCell: (params) => formatCurrency(params.value)
+    },
+    {
+      field: 'total_payout_amount',
+      headerName: 'К выплате (₽)',
+      flex: 1.2,
+      minWidth: 130,
+      align: 'right',
+      headerAlign: 'right',
+      renderCell: (params) => (
+        <Typography variant="body2" sx={{ fontWeight: 800, color: '#0F3C64', bgcolor: '#F0FDF4', px: 1, py: 0.4, borderRadius: 1 }}>
+          {formatCurrency(params.value)}
+        </Typography>
+      )
+    },
+    {
+      field: 'status',
+      headerName: 'Статус',
+      flex: 1.1,
+      minWidth: 130,
+      align: 'center',
+      headerAlign: 'center',
+      renderCell: (params) => {
+        let label = 'Черновик';
+        let color: 'default' | 'info' | 'success' | 'warning' = 'default';
+        if (params.value === 'approved') { label = 'Утверждена'; color = 'warning'; }
+        if (params.value === 'paid') { label = 'Выплачена'; color = 'success'; }
+        return (
+          <Chip
+            size="small"
+            label={label}
+            color={color}
+            variant={params.value === 'paid' ? 'filled' : 'outlined'}
+            sx={{ fontWeight: 700 }}
+          />
+        );
+      }
+    },
+    {
+      field: 'payment_order_number',
+      headerName: 'ПП / Выплата',
+      flex: 1.1,
+      minWidth: 130,
+      renderCell: (params) => (
+        <Typography variant="caption" sx={{ color: params.value ? '#16A34A' : '#94A3B8', fontWeight: params.value ? 700 : 400 }}>
+          {params.value || 'Не выплачено'}
+        </Typography>
+      )
+    },
+    {
+      field: 'sheet_actions',
+      headerName: 'Действия',
+      flex: 1.4,
+      minWidth: 170,
+      sortable: false,
+      filterable: false,
+      renderCell: (params) => {
+        const sh = params.row;
+        return (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
+            {sh.status === 'draft' && (
+              <Button
+                size="small"
+                variant="outlined"
+                color="warning"
+                startIcon={<CheckCircleIcon />}
+                onClick={() => handleUpdateSheetStatus(sh.id, 'approved')}
+                sx={{ fontSize: '0.72rem', py: 0.2, px: 0.8 }}
+              >
+                Утвердить
+              </Button>
+            )}
+            {sh.status !== 'paid' && (
+              <Button
+                size="small"
+                variant="contained"
+                color="success"
+                startIcon={<PaymentsIcon />}
+                onClick={() => {
+                  setTargetSheetForPay(sh);
+                  setPaymentOrderNum(`ПП-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}`);
+                  setPayOrderDialogOpen(true);
+                }}
+                sx={{ fontSize: '0.72rem', py: 0.2, px: 0.8 }}
+              >
+                Выплатить
+              </Button>
+            )}
+            <IconButton
+              size="small"
+              color="primary"
+              onClick={() => handlePrintSheet(sh.id)}
+              title="Печать ведомости"
+            >
+              <PrintIcon fontSize="small" />
+            </IconButton>
+          </Box>
+        );
+      }
     }
   ];
 
@@ -643,17 +1108,17 @@ export default function StaffPayouts() {
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 2, mb: 2 }}>
           <Box>
             <Typography variant="h5" sx={{ fontWeight: 800, color: '#0F3C64' }}>
-              Расчет выплат медицинскому персоналу
+              Расчет выплат сотрудникам
             </Typography>
             <Typography variant="body2" sx={{ color: '#64748B' }}>
-              Индивидуальное вознаграждение врачей и операционных медсестер на базе маржинального дохода процедур
+              Индивидуальное вознаграждение врачей и операционных медсестер на базе маржинального дохода сервисов
             </Typography>
           </Box>
 
           <Button
             variant="contained"
             startIcon={<AutoFixHighIcon />}
-            onClick={() => setActiveTab(1)}
+            onClick={() => setActiveTab(2)}
             sx={{
               bgcolor: '#0F3C64',
               fontWeight: 700,
@@ -675,6 +1140,7 @@ export default function StaffPayouts() {
           }}
         >
           <Tab icon={<AccountBalanceWalletIcon />} iconPosition="start" label="Реестр начислений (DataGrid)" />
+          <Tab icon={<ReceiptLongIcon />} iconPosition="start" label={`Ведомости выплат (${sheets.length})`} />
           <Tab icon={<AutoFixHighIcon />} iconPosition="start" label="Мастер расчета (Wizard)" />
           <Tab icon={<BarChartIcon />} iconPosition="start" label="BI Аналитика выплат" />
           <Tab icon={<SettingsIcon />} iconPosition="start" label="Схемы и персональные ставки" />
@@ -685,13 +1151,13 @@ export default function StaffPayouts() {
       {activeTab === 0 && (
         <Paper sx={{ borderRadius: 3, border: '1px solid #E2E8F0', bgcolor: '#FFFFFF', overflow: 'hidden' }}>
           {/* View Mode Toggle Bar */}
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', p: 2, bgcolor: '#FFFFFF', borderBottom: '1px solid #E2E8F0' }}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', p: 2, bgcolor: '#FFFFFF', borderBottom: '1px solid #E2E8F0', flexWrap: 'wrap', gap: 1 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <Typography variant="body2" sx={{ fontWeight: 700, color: '#0F3C64', mr: 1 }}>
                 Разрез отображения:
               </Typography>
               <Chip
-                label="По процедурам (Бригадный вид)"
+                label="По сервисам (Бригадный вид)"
                 color={viewMode === 'procedures' ? 'primary' : 'default'}
                 onClick={() => setViewMode('procedures')}
                 sx={{ fontWeight: 600, cursor: 'pointer', bgcolor: viewMode === 'procedures' ? '#0F3C64' : undefined }}
@@ -705,15 +1171,70 @@ export default function StaffPayouts() {
             </Box>
 
             <Typography variant="caption" sx={{ color: '#64748B' }}>
-              Всего строк: <strong>{accruals.length}</strong>
+              Отображается: <strong>{filteredAccruals.length}</strong> из <strong>{accruals.length}</strong>
             </Typography>
+          </Box>
+
+          {/* Quick Status Filter Pills Bar */}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 2, py: 1.5, bgcolor: '#F8FAFC', borderBottom: '1px solid #E2E8F0', flexWrap: 'wrap' }}>
+            <Typography variant="body2" sx={{ fontWeight: 700, color: '#0F3C64', mr: 0.5 }}>
+              Статус:
+            </Typography>
+            <Chip
+              label={`Все (${statusCounts.all})`}
+              size="small"
+              color={statusFilter === 'all' ? 'primary' : 'default'}
+              variant={statusFilter === 'all' ? 'filled' : 'outlined'}
+              onClick={() => setStatusFilter('all')}
+              sx={{ fontWeight: 600, cursor: 'pointer', ...(statusFilter === 'all' ? { bgcolor: '#0F3C64' } : {}) }}
+            />
+            <Chip
+              label={`Начислено (${statusCounts.accrued})`}
+              size="small"
+              color={statusFilter === 'accrued' ? 'info' : 'default'}
+              variant={statusFilter === 'accrued' ? 'filled' : 'outlined'}
+              onClick={() => setStatusFilter('accrued')}
+              sx={{ fontWeight: 600, cursor: 'pointer' }}
+            />
+            <Chip
+              label={`Утверждено (${statusCounts.approved})`}
+              size="small"
+              color={statusFilter === 'approved' ? 'warning' : 'default'}
+              variant={statusFilter === 'approved' ? 'filled' : 'outlined'}
+              onClick={() => setStatusFilter('approved')}
+              sx={{ fontWeight: 600, cursor: 'pointer' }}
+            />
+            <Chip
+              label={`В ведомости (${statusCounts.in_sheet})`}
+              size="small"
+              color={statusFilter === 'in_sheet' ? 'primary' : 'default'}
+              variant={statusFilter === 'in_sheet' ? 'filled' : 'outlined'}
+              onClick={() => setStatusFilter('in_sheet')}
+              sx={{ fontWeight: 600, cursor: 'pointer' }}
+            />
+            <Chip
+              label={`Выплачено (${statusCounts.paid})`}
+              size="small"
+              color={statusFilter === 'paid' ? 'success' : 'default'}
+              variant={statusFilter === 'paid' ? 'filled' : 'outlined'}
+              onClick={() => setStatusFilter('paid')}
+              sx={{ fontWeight: 600, cursor: 'pointer' }}
+            />
+            <Chip
+              label={`Аннулировано (${statusCounts.storno})`}
+              size="small"
+              color={statusFilter === 'storno' ? 'error' : 'default'}
+              variant={statusFilter === 'storno' ? 'filled' : 'outlined'}
+              onClick={() => setStatusFilter('storno')}
+              sx={{ fontWeight: 600, cursor: 'pointer' }}
+            />
           </Box>
 
           {/* MUI X DataGrid with Strict grid-improvements Standards */}
           <DataGrid
             autoHeight
             showToolbar
-            rows={accruals}
+            rows={filteredAccruals}
             columns={viewMode === 'procedures' ? procedureColumns : staffColumns}
             loading={loading}
             checkboxSelection
@@ -731,11 +1252,17 @@ export default function StaffPayouts() {
             }}
             slotProps={{
               toolbar: {
-                onResetFilters: () => fetchAccruals(),
-                onOpenWizard: () => setActiveTab(1),
+                onResetFilters: () => {
+                  setStatusFilter('all');
+                  fetchAccruals();
+                },
+                onOpenWizard: () => setActiveTab(2),
                 onPrint: handlePrint,
                 onExportCsv: handleExportCsv,
                 onBulkApprove: handleBulkApprove,
+                onBulkCreateSheet: handleOpenCreateSheet,
+                onBulkPay: handleBulkPay,
+                onBulkAnnul: handleBulkAnnul,
                 selectedCount: selectedIdsArray.length
               } as any,
               footer: {
@@ -770,8 +1297,64 @@ export default function StaffPayouts() {
         </Paper>
       )}
 
-      {/* TAB 1: WIZARD */}
+      {/* TAB 1: SHEETS REGISTRY */}
       {activeTab === 1 && (
+        <Paper sx={{ borderRadius: 3, border: '1px solid #E2E8F0', bgcolor: '#FFFFFF', overflow: 'hidden' }}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', p: 2.5, borderBottom: '1px solid #E2E8F0', flexWrap: 'wrap', gap: 1 }}>
+            <Box>
+              <Typography variant="h6" sx={{ fontWeight: 700, color: '#0F3C64' }}>
+                Реестр ведомостей выплат (Payroll Sheets)
+              </Typography>
+              <Typography variant="body2" sx={{ color: '#64748B' }}>
+                Официальные сводные документы клиники для бухгалтерии и выдачи вознаграждения
+              </Typography>
+            </Box>
+            <Button
+              variant="outlined"
+              startIcon={<ReceiptLongIcon />}
+              onClick={fetchSheets}
+              size="small"
+              sx={{ fontWeight: 600 }}
+            >
+              Обновить реестр
+            </Button>
+          </Box>
+
+          <DataGrid
+            autoHeight
+            rows={sheets}
+            columns={sheetColumns}
+            loading={sheetsLoading}
+            pageSizeOptions={[10, 25, 50]}
+            initialState={{
+              pagination: { paginationModel: { pageSize: 10 } }
+            }}
+            localeText={ruRU.components.MuiDataGrid.defaultProps.localeText}
+            getRowHeight={() => 'auto'}
+            sx={{
+              width: '100%',
+              border: 'none',
+              '& .MuiDataGrid-virtualScroller': { overflowX: 'hidden' },
+              '& .MuiDataGrid-columnHeaders': {
+                position: 'sticky',
+                top: 0,
+                zIndex: 1,
+                bgcolor: '#F8FAFC',
+                color: '#0F3C64',
+                fontWeight: 700
+              },
+              '& .MuiDataGrid-cell': {
+                borderBottom: '1px solid #E2E8F0',
+                display: 'flex',
+                alignItems: 'center'
+              }
+            }}
+          />
+        </Paper>
+      )}
+
+      {/* TAB 2: WIZARD */}
+      {activeTab === 2 && (
         <PayoutCalculationWizard
           onCalculationCommitted={() => {
             fetchAccruals();
@@ -781,15 +1364,97 @@ export default function StaffPayouts() {
         />
       )}
 
-      {/* TAB 2: BI DASHBOARD */}
-      {activeTab === 2 && (
+      {/* TAB 3: BI DASHBOARD */}
+      {activeTab === 3 && (
         <PayoutBiDashboard />
       )}
 
-      {/* TAB 3: SCHEMES & RATES */}
-      {activeTab === 3 && (
+      {/* TAB 4: SCHEMES & RATES */}
+      {activeTab === 4 && (
         <PayoutSchemeEditor />
       )}
+
+      {/* DIALOG: CREATE PAYOUT SHEET */}
+      <Dialog open={sheetDialogOpen} onClose={() => setSheetDialogOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle sx={{ fontWeight: 700, color: '#0F3C64', display: 'flex', alignItems: 'center', gap: 1 }}>
+          <ReceiptLongIcon sx={{ color: '#0284C7' }} />
+          Формирование ведомости
+        </DialogTitle>
+        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 2 }}>
+          <Typography variant="body2" sx={{ color: '#475569' }}>
+            Выбрано строк к включению в ведомость: <strong>{selectedIdsArray.length}</strong>.
+          </Typography>
+          <Typography variant="caption" sx={{ color: '#64748B' }}>
+            Если выбрано несколько специалистов, система автоматически создаст персональную расчетную ведомость для каждого из них.
+          </Typography>
+          <TextField
+            label="Примечание / назначение ведомости"
+            fullWidth
+            multiline
+            rows={2}
+            value={sheetNotes}
+            onChange={(e) => setSheetNotes(e.target.value)}
+            placeholder="Например: Выплата за первую декаду текущего месяца"
+          />
+        </DialogContent>
+        <DialogActions sx={{ p: 2 }}>
+          <Button onClick={() => setSheetDialogOpen(false)}>Отмена</Button>
+          <Button
+            variant="contained"
+            onClick={handleConfirmCreateSheet}
+            disabled={creatingSheet}
+            sx={{ bgcolor: '#0284C7', fontWeight: 600, '&:hover': { bgcolor: '#0369A1' } }}
+          >
+            {creatingSheet ? 'Формирование...' : 'Сформировать ведомость'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* DIALOG: CONFIRM PAYMENT ORDER */}
+      <Dialog open={payOrderDialogOpen} onClose={() => setPayOrderDialogOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle sx={{ fontWeight: 700, color: '#0F3C64', display: 'flex', alignItems: 'center', gap: 1 }}>
+          <PaymentsIcon sx={{ color: '#16A34A' }} />
+          Отметка о выплате
+        </DialogTitle>
+        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 2 }}>
+          {targetSheetForPay && (
+            <>
+              <Typography variant="body2" sx={{ color: '#334155' }}>
+                Ведомость: <strong>{targetSheetForPay.sheet_number}</strong>
+              </Typography>
+              <Typography variant="body2" sx={{ color: '#334155' }}>
+                Сотрудник: <strong>{targetSheetForPay.staff_name}</strong>
+              </Typography>
+              <Typography variant="body2" sx={{ fontWeight: 700, color: '#16A34A' }}>
+                Сумма к выплате: {formatCurrency(targetSheetForPay.total_payout_amount)}
+              </Typography>
+            </>
+          )}
+          <TextField
+            label="Номер платежного поручения / кассового ордера"
+            fullWidth
+            value={paymentOrderNum}
+            onChange={(e) => setPaymentOrderNum(e.target.value)}
+            placeholder="ПП-123456 от 10.10.2026"
+          />
+        </DialogContent>
+        <DialogActions sx={{ p: 2 }}>
+          <Button onClick={() => setPayOrderDialogOpen(false)}>Отмена</Button>
+          <Button
+            variant="contained"
+            color="success"
+            onClick={() => {
+              if (targetSheetForPay) {
+                handleUpdateSheetStatus(targetSheetForPay.id, 'paid', paymentOrderNum);
+                setPayOrderDialogOpen(false);
+              }
+            }}
+            sx={{ fontWeight: 600 }}
+          >
+            Подтвердить выплату
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       {/* EDIT ACCRUAL DIALOG */}
       <Dialog open={editDialogOpen} onClose={() => setEditDialogOpen(false)} maxWidth="sm" fullWidth>
@@ -802,7 +1467,7 @@ export default function StaffPayouts() {
               Сотрудник: <strong>{editingAccrual.staff_name}</strong> ({editingAccrual.role_in_procedure})
             </Typography>
             <Typography variant="body2" sx={{ color: '#4A5568' }}>
-              Процедура: <strong>{editingAccrual.operation_name}</strong>
+              Сервис: <strong>{editingAccrual.operation_name}</strong>
             </Typography>
             <Typography variant="body2" sx={{ color: '#156C9C' }}>
               Маржинальная база: <strong>{formatCurrency(editingAccrual.margin_base)}</strong>
@@ -834,7 +1499,9 @@ export default function StaffPayouts() {
               >
                 <MenuItem value="accrued">Начислено</MenuItem>
                 <MenuItem value="approved">Утверждено</MenuItem>
+                <MenuItem value="in_sheet">В ведомости</MenuItem>
                 <MenuItem value="paid">Выплачено</MenuItem>
+                <MenuItem value="storno">Аннулировано</MenuItem>
               </Select>
             </FormControl>
 

@@ -213,7 +213,7 @@ async function seedDaemonTestData() {
   // Сестра Васильева
   await runAsync(`
     INSERT INTO staff_operation_rates (staff_id, operation_id, payout_percent, fixed_min_payout, notes)
-    VALUES (?, ?, 10.0, 300.0, '[TEST_DAEMON] Фикс-минимум медсестры консультации 300 руб.')
+    VALUES (?, ?, 10.0, 0.0, '[TEST_DAEMON] Ставка медсестры консультации 10% (без фикс-минимума)')
   `, [nurseVasilievaId, opConsultId]);
 
   await runAsync(`

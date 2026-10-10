@@ -54,7 +54,7 @@ export const UserGuidePrintTemplate = React.forwardRef<HTMLDivElement, UserGuide
             Руководство пользователя и технологический регламент
           </Typography>
           <Typography variant="subtitle2" sx={{ color: '#4A5568', mt: 0.5, fontSize: '10pt', fontStyle: 'italic' }}>
-            Порядок работы с картотекой ЭМК, складом, технологическими картами BOM и модулем расчета выплат персоналу
+            Порядок работы с картотекой ЭМК, складом, технологическими картами BOM и модулем расчета выплат сотрудникам
           </Typography>
         </Box>
 
@@ -81,14 +81,14 @@ export const UserGuidePrintTemplate = React.forwardRef<HTMLDivElement, UserGuide
                 <TableCell sx={{ fontSize: '8.5pt', py: 0.6 }}>Картотека из 61 000+ пациентов, номер карты (ЭМК), ДМС, история визитов</TableCell>
               </TableRow>
               <TableRow>
-                <TableCell sx={{ fontWeight: 700, fontSize: '8.5pt', py: 0.6 }}>Персонал клиники</TableCell>
+                <TableCell sx={{ fontWeight: 700, fontSize: '8.5pt', py: 0.6 }}>Сотрудники клиники</TableCell>
                 <TableCell sx={{ fontSize: '8.5pt', py: 0.6 }}><code>staff</code></TableCell>
                 <TableCell sx={{ fontSize: '8.5pt', py: 0.6 }}>Реестр врачей-хирургов, консультантов и операционных сестер</TableCell>
               </TableRow>
               <TableRow>
-                <TableCell sx={{ fontWeight: 700, fontSize: '8.5pt', py: 0.6 }}>Каталог операций</TableCell>
+                <TableCell sx={{ fontWeight: 700, fontSize: '8.5pt', py: 0.6 }}>Каталог сервисов</TableCell>
                 <TableCell sx={{ fontSize: '8.5pt', py: 0.6 }}><code>operations</code></TableCell>
-                <TableCell sx={{ fontSize: '8.5pt', py: 0.6 }}>Номенклатура процедур, базовая цена для пациента и нормативная спецификация</TableCell>
+                <TableCell sx={{ fontSize: '8.5pt', py: 0.6 }}>Номенклатура сервисов, базовая цена для пациента и нормативная спецификация</TableCell>
               </TableRow>
               <TableRow>
                 <TableCell sx={{ fontWeight: 700, fontSize: '8.5pt', py: 0.6 }}>Склад материалов</TableCell>
@@ -98,7 +98,7 @@ export const UserGuidePrintTemplate = React.forwardRef<HTMLDivElement, UserGuide
               <TableRow>
                 <TableCell sx={{ fontWeight: 700, fontSize: '8.5pt', py: 0.6 }}>Спецификация BOM</TableCell>
                 <TableCell sx={{ fontSize: '8.5pt', py: 0.6 }}><code>operation_materials</code></TableCell>
-                <TableCell sx={{ fontSize: '8.5pt', py: 0.6 }}>Нормы списания расходников на манипуляцию (Bill of Materials)</TableCell>
+                <TableCell sx={{ fontSize: '8.5pt', py: 0.6 }}>Нормы списания расходников на сервис (Bill of Materials)</TableCell>
               </TableRow>
               <TableRow>
                 <TableCell sx={{ fontWeight: 700, fontSize: '8.5pt', py: 0.6 }}>Начисления выплат</TableCell>
@@ -126,7 +126,7 @@ export const UserGuidePrintTemplate = React.forwardRef<HTMLDivElement, UserGuide
             </Typography>
             <Typography variant="body2" sx={{ fontSize: '9pt', color: '#1A202C', mb: 0.5 }}>
               <strong>2. Маржинальная база клиники:</strong><br />
-              <code>Маржинальная база = max(0, Стоимость процедуры − Себестоимость расходников)</code>
+              <code>Маржинальная база = max(0, Стоимость сервиса − Себестоимость расходников)</code>
             </Typography>
             <Typography variant="body2" sx={{ fontSize: '9pt', color: '#1A202C', mb: 0.5 }}>
               <strong>3. Выплата специалисту:</strong><br />
@@ -145,11 +145,11 @@ export const UserGuidePrintTemplate = React.forwardRef<HTMLDivElement, UserGuide
             3. Регламентный поток бизнес-процесса (Flow)
           </Typography>
           <Typography variant="body2" sx={{ fontSize: '9.5pt', color: '#2D3748', mb: 1 }}>
-            Порядок обработки процедур и начисления заработной платы состоит из 6 последовательных шагов:
+            Порядок обработки сервисов и начисления заработной платы состоит из 6 последовательных шагов:
           </Typography>
           <Box component="ol" sx={{ pl: 2.5, m: 0, fontSize: '9pt', color: '#2D3748', '& li': { mb: 0.5 } }}>
-            <li><strong>Оказание услуги и фиксация визита:</strong> врач или администратор через Мастер оформления визита регистрирует факт оказания процедуры. Услуга попадает в статус «Нерассчитано».</li>
-            <li><strong>Захват в расчет и мягкая блокировка (Soft Lock):</strong> экономист в модуле «Выплаты сотрудникам» выбирает процедуры расчетного месяца. Система захватывает блокировку на 30 минут, исключая двойную оплату.</li>
+            <li><strong>Оказание сервиса и фиксация визита:</strong> врач или администратор через Мастер оформления визита регистрирует факт оказания сервиса. Сервис попадает в статус «Нерассчитано».</li>
+            <li><strong>Захват в расчет и мягкая блокировка (Soft Lock):</strong> экономист в модуле «Выплаты сотрудникам» выбирает сервисы расчетного месяца. Система захватывает блокировку на 30 минут, исключая двойную оплату.</li>
             <li><strong>Предварительный расчет (Preview):</strong> система производит мгновенный аудит маржинальности, проверяет фикс-минимумы и лимит бригады (Cap).</li>
             <li><strong>Атомарный коммит начислений (Commit):</strong> фиксация записей в таблицах <code>procedure_records</code> и <code>staff_payout_accruals</code> с освобождением блокировок.</li>
             <li><strong>Ручные корректировки и сторно:</strong> возможность внесения премий/удержаний или полного реверсирования ошибочных строк со статусом <code>storno_reversal</code>.</li>

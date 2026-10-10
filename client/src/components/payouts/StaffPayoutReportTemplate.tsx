@@ -117,7 +117,7 @@ export const StaffPayoutReportTemplate = React.forwardRef<HTMLDivElement, StaffP
               <strong>Должность / Роль:</strong> {data.staff_role} {data.specialization ? `(${data.specialization})` : ''}
             </Typography>
             <Typography variant="body2">
-              <strong>Количество процедур:</strong> {data.total_operations_count} манипуляций
+              <strong>Количество сервисов:</strong> {data.total_operations_count} сервисов
             </Typography>
             <Typography variant="body2">
               <strong>Реквизиты для выплат:</strong> {data.payout_account_info || 'Основной лицевой счет сотрудника'}
@@ -132,7 +132,7 @@ export const StaffPayoutReportTemplate = React.forwardRef<HTMLDivElement, StaffP
               <TableCell sx={{ width: '4%' }}>№</TableCell>
               <TableCell sx={{ width: '10%' }}>Дата</TableCell>
               <TableCell sx={{ width: '18%' }}>Пациент (ЭМК)</TableCell>
-              <TableCell sx={{ width: '26%' }}>Медицинская услуга / операция</TableCell>
+              <TableCell sx={{ width: '26%' }}>Сервис</TableCell>
               <TableCell align="right" sx={{ width: '10%' }}>Выручка</TableCell>
               <TableCell align="right" sx={{ width: '11%' }}>Расходники*1.15</TableCell>
               <TableCell align="right" sx={{ width: '10%' }}>Маржа</TableCell>
@@ -168,7 +168,7 @@ export const StaffPayoutReportTemplate = React.forwardRef<HTMLDivElement, StaffP
           <Box sx={{ p: 2, bgcolor: '#F8FAFC', borderRadius: 2, border: '1px solid #CBD5E1', mb: 3 }}>
             <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 2, mb: 1.5 }}>
               <Box>
-                <Typography variant="caption" sx={{ color: '#64748B' }}>Общая выручка от услуг:</Typography>
+                <Typography variant="caption" sx={{ color: '#64748B' }}>Общая выручка от сервисов:</Typography>
                 <Typography variant="body1" sx={{ fontWeight: 700 }}>{formatCurrency(totalRevenue)}</Typography>
               </Box>
               <Box>

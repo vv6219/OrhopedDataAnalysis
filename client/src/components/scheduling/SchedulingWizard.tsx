@@ -70,7 +70,7 @@ const CLINICAL_PROCEDURES = [
 
 const STEPS = [
   'Идентификация пациента',
-  'Сустав и услуга',
+  'Сустав и сервис',
   'Врач и слот',
   'Клинический чек-лист',
   'Омниканальное уведомление'
@@ -565,7 +565,7 @@ export default function SchedulingWizard({
             </Box>
 
             <Typography variant="subtitle2" sx={{ fontWeight: 700, color: '#0F3C64', mb: 1 }}>
-              2. Выберите медицинскую услугу из прейскуранта:
+              2. Выберите сервис из каталога:
             </Typography>
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, mb: 2 }}>
               {CLINICAL_PROCEDURES.map((p) => {
@@ -918,7 +918,7 @@ export default function SchedulingWizard({
                 Здравствуйте, <strong>{selectedPatient?.full_name}</strong>!{'\n'}
                 Вы записаны на приём: <strong>{appointmentDate}</strong> в <strong>{selectedSlotTime}</strong>.{'\n'}
                 Врач: <strong>{selectedDocObj?.full_name}</strong> ({selectedDocObj?.roomNumber}).{'\n'}
-                Услуга: {selectedOpObj?.name}.{'\n'}
+                Сервис: {selectedOpObj?.name}.{'\n'}
                 Стоимость: <strong>{selectedOpObj?.price.toLocaleString('ru-RU')} ₽</strong>.{'\n'}
                 Адрес клиники: г. Сочи, ул. Транспортная 65, 3 этаж.
               </Typography>
@@ -966,7 +966,7 @@ export default function SchedulingWizard({
               <Typography variant="body2" sx={{ color: '#334155' }}>
                 Пациент: <strong>{selectedPatient?.full_name}</strong> (карта №{selectedPatient?.mednum}) · Врач:{' '}
                 <strong>{selectedDocObj?.full_name}</strong> · Время: <strong>{selectedSlotTime}</strong> (
-                {customDuration} мин) · Услуга: {selectedOpObj?.name}
+                {customDuration} мин) · Сервис: {selectedOpObj?.name}
               </Typography>
             </Box>
           </Box>

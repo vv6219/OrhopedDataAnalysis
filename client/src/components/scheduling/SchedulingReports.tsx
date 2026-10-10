@@ -433,7 +433,7 @@ export const DoctorDailyRoster = forwardRef<
             <TableCell sx={{ color: '#FFFFFF', fontWeight: 700, width: 80 }}>ЭМК №</TableCell>
             <TableCell sx={{ color: '#FFFFFF', fontWeight: 700 }}>ФИО Пациента</TableCell>
             <TableCell sx={{ color: '#FFFFFF', fontWeight: 700, width: 60 }}>Возраст</TableCell>
-            <TableCell sx={{ color: '#FFFFFF', fontWeight: 700 }}>Медицинская услуга / Назначение</TableCell>
+            <TableCell sx={{ color: '#FFFFFF', fontWeight: 700 }}>Сервис / Назначение</TableCell>
             <TableCell sx={{ color: '#FFFFFF', fontWeight: 700, width: 110 }}>Статус явки</TableCell>
           </TableRow>
         </TableHead>
@@ -626,7 +626,7 @@ export default function SchedulingReports({ appointments, doctors, currentDate }
                 Суточный лист расписания врача (Ведомость смены)
               </Typography>
               <Typography variant="caption" sx={{ color: '#64748B' }}>
-                Официальная сводка приёма на рабочий день: перечень пациентов, услуг и подписи
+                Официальная сводка приёма на рабочий день: перечень пациентов, сервисов и подписи
               </Typography>
             </Box>
           </Box>

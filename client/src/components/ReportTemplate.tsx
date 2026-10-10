@@ -86,13 +86,13 @@ export const ReportTemplate = React.forwardRef<HTMLDivElement, ReportTemplatePro
           return (
             <Box key={op.id} sx={{ mb: 4, pageBreakInside: 'avoid' }}>
               <Typography variant="h6" sx={{ bgcolor: '#f0f4f8', p: 1, borderRadius: 1, fontWeight: 'bold' }}>
-                Процедура: {op.name}
+                Сервис: {op.name}
               </Typography>
               <Typography variant="body2" sx={{ ml: 1, mt: 1, mb: 1, fontWeight: 500 }}>
-                Стоимость самой процедуры: {op.price ? Number(op.price).toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0,00'} ₽
+                Стоимость сервиса: {op.price ? Number(op.price).toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0,00'} ₽
               </Typography>
               
-              <Typography variant="subtitle2" sx={{ ml: 1, mt: 2, mb: 1 }}>Материалы для процедуры:</Typography>
+              <Typography variant="subtitle2" sx={{ ml: 1, mt: 2, mb: 1 }}>Материалы для сервиса:</Typography>
               {mats.length > 0 ? (
                 <TableContainer component={Paper} elevation={0} sx={{ border: '1px solid #e0e0e0', mb: 2 }}>
                   <Table size="small">
@@ -124,7 +124,7 @@ export const ReportTemplate = React.forwardRef<HTMLDivElement, ReportTemplatePro
                 </TableContainer>
               ) : (
                 <Typography variant="body2" sx={{ ml: 1, color: 'text.secondary', fontStyle: 'italic', mb: 2 }}>
-                  Для данной процедуры не указаны расходные материалы.
+                  Для данного сервиса не указаны расходные материалы.
                 </Typography>
               )}
             </Box>
@@ -136,7 +136,7 @@ export const ReportTemplate = React.forwardRef<HTMLDivElement, ReportTemplatePro
           <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
             <Box sx={{ width: '400px' }}>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                <Typography variant="body2" sx={{ color: 'text.secondary' }}>Сумма за процедуры:</Typography>
+                <Typography variant="body2" sx={{ color: 'text.secondary' }}>Сумма за сервисы:</Typography>
                 <Typography variant="body2" sx={{ fontWeight: 600 }}>{grandTotalOperations.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₽</Typography>
               </Box>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>

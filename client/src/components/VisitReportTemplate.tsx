@@ -17,13 +17,24 @@ export interface VisitReportMaterial {
   unit_of_measure: string;
   current_unit_cost: number;
   actual_qty: number;
+  operation_id?: number;
+  operation_name?: string;
+}
+
+export interface VisitReportOperationItem {
+  id: number;
+  name: string;
+  price: number;
+  quantity?: number;
+  subtotal?: number;
 }
 
 export interface VisitReportProps {
   patientName: string;
   patientPhone?: string;
-  operationName: string;
-  operationPrice: number;
+  operationName?: string;
+  operationPrice?: number;
+  operations?: VisitReportOperationItem[];
   doctorName?: string;
   nurseName?: string;
   materials: VisitReportMaterial[];
@@ -38,8 +49,9 @@ export const VisitReportTemplate = React.forwardRef<HTMLDivElement, VisitReportP
     {
       patientName,
       patientPhone,
-      operationName,
-      operationPrice,
+      operationName = '',
+      operationPrice = 0,
+      operations,
       doctorName,
       nurseName,
       materials,
@@ -59,8 +71,12 @@ export const VisitReportTemplate = React.forwardRef<HTMLDivElement, VisitReportP
       0
     );
 
-    const netProfit = operationPrice - totalMaterialsCost;
-    const marginPercent = operationPrice > 0 ? ((netProfit / operationPrice) * 100).toFixed(1) : '0';
+    const totalOperationsPrice = operations && operations.length > 0
+      ? operations.reduce((sum, o) => sum + (o.subtotal !== undefined ? o.subtotal : (o.price * (o.quantity || 1))), 0)
+      : operationPrice;
+
+    const netProfit = totalOperationsPrice - totalMaterialsCost;
+    const marginPercent = totalOperationsPrice > 0 ? ((netProfit / totalOperationsPrice) * 100).toFixed(1) : '0';
 
     const getPaymentMethodText = (method?: string) => {
       switch (method) {
@@ -206,7 +222,7 @@ export const VisitReportTemplate = React.forwardRef<HTMLDivElement, VisitReportP
 
             <Box>
               <Typography variant="caption" sx={{ color: '#718096', textTransform: 'uppercase', fontWeight: 700, display: 'block', fontSize: '0.68rem' }}>
-                Лечащий персонал:
+                Ответственные сотрудники:
               </Typography>
               <Typography variant="body2" sx={{ fontWeight: 600, color: '#2D3748', fontSize: '0.85rem' }}>
                 Врач: {doctorName || 'Добрушкин Александр Моисеевич'}
@@ -240,37 +256,76 @@ export const VisitReportTemplate = React.forwardRef<HTMLDivElement, VisitReportP
           )}
         </Paper>
 
-        {/* PROCEDURE SECTION */}
+        {/* SERVICE SECTION (Single or Multi-Operation) */}
         <Box sx={{ mb: 1.5, pageBreakInside: 'avoid', breakInside: 'avoid' }}>
-          <Box
-            sx={{
-              bgcolor: '#F0F4F8',
-              px: 1.5,
-              py: 0.85,
-              borderRadius: 1.5,
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              borderLeft: '4px solid #0F3C64'
-            }}
-          >
-            <Box>
-              <Typography variant="caption" sx={{ textTransform: 'uppercase', fontWeight: 700, color: '#718096', fontSize: '0.68rem' }}>
-                Медицинская услуга:
-              </Typography>
-              <Typography variant="subtitle2" sx={{ fontWeight: 800, color: '#0F3C64', fontSize: '0.92rem' }}>
-                {operationName || 'Процедура не выбрана'}
-              </Typography>
+          {operations && operations.length > 1 ? (
+            <Box sx={{ bgcolor: '#F0F4F8', p: 1.5, borderRadius: 1.5, borderLeft: '4px solid #0F3C64' }}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                <Typography variant="caption" sx={{ textTransform: 'uppercase', fontWeight: 700, color: '#0F3C64', fontSize: '0.72rem' }}>
+                  Оказанные сервисы ({operations.length}):
+                </Typography>
+                <Typography variant="caption" sx={{ textTransform: 'uppercase', fontWeight: 700, color: '#718096', fontSize: '0.68rem' }}>
+                  Итого по прайсу: <strong style={{ color: '#0F3C64', fontSize: '0.85rem' }}>{totalOperationsPrice.toLocaleString('ru-RU')} ₽</strong>
+                </Typography>
+              </Box>
+              <TableContainer component={Paper} elevation={0} sx={{ border: '1px solid #CBD5E1', borderRadius: 1 }}>
+                <Table size="small">
+                  <TableHead sx={{ bgcolor: '#E2E8F0' }}>
+                    <TableRow>
+                      <TableCell sx={{ py: 0.5, fontWeight: 700, fontSize: '0.72rem', color: '#0F3C64', width: 40 }}>№</TableCell>
+                      <TableCell sx={{ py: 0.5, fontWeight: 700, fontSize: '0.72rem', color: '#0F3C64' }}>Наименование сервиса</TableCell>
+                      <TableCell align="right" sx={{ py: 0.5, fontWeight: 700, fontSize: '0.72rem', color: '#0F3C64', width: 90 }}>Цена (₽)</TableCell>
+                      <TableCell align="center" sx={{ py: 0.5, fontWeight: 700, fontSize: '0.72rem', color: '#0F3C64', width: 60 }}>Кол-во</TableCell>
+                      <TableCell align="right" sx={{ py: 0.5, fontWeight: 700, fontSize: '0.72rem', color: '#0F3C64', width: 100 }}>Сумма (₽)</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {operations.map((op, idx) => (
+                      <TableRow key={op.id || idx}>
+                        <TableCell sx={{ py: 0.5, fontSize: '0.75rem', color: '#64748B' }}>{idx + 1}</TableCell>
+                        <TableCell sx={{ py: 0.5, fontSize: '0.78rem', fontWeight: 600, color: '#1E293B' }}>{op.name}</TableCell>
+                        <TableCell align="right" sx={{ py: 0.5, fontSize: '0.75rem' }}>{op.price.toLocaleString('ru-RU')} ₽</TableCell>
+                        <TableCell align="center" sx={{ py: 0.5, fontSize: '0.75rem' }}>{op.quantity || 1}</TableCell>
+                        <TableCell align="right" sx={{ py: 0.5, fontSize: '0.78rem', fontWeight: 700, color: '#0F3C64' }}>
+                          {(op.subtotal !== undefined ? op.subtotal : (op.price * (op.quantity || 1))).toLocaleString('ru-RU')} ₽
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
             </Box>
-            <Box sx={{ textAlign: 'right' }}>
-              <Typography variant="caption" sx={{ textTransform: 'uppercase', fontWeight: 700, color: '#718096', fontSize: '0.68rem' }}>
-                Стоимость по прайсу:
-              </Typography>
-              <Typography variant="subtitle1" sx={{ fontWeight: 800, color: '#0F3C64', fontSize: '1rem' }}>
-                {operationPrice.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₽
-              </Typography>
+          ) : (
+            <Box
+              sx={{
+                bgcolor: '#F0F4F8',
+                px: 1.5,
+                py: 0.85,
+                borderRadius: 1.5,
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                borderLeft: '4px solid #0F3C64'
+              }}
+            >
+              <Box>
+                <Typography variant="caption" sx={{ textTransform: 'uppercase', fontWeight: 700, color: '#718096', fontSize: '0.68rem' }}>
+                  Сервис:
+                </Typography>
+                <Typography variant="subtitle2" sx={{ fontWeight: 800, color: '#0F3C64', fontSize: '0.92rem' }}>
+                  {operations && operations[0] ? operations[0].name : (operationName || 'Сервис не выбран')}
+                </Typography>
+              </Box>
+              <Box sx={{ textAlign: 'right' }}>
+                <Typography variant="caption" sx={{ textTransform: 'uppercase', fontWeight: 700, color: '#718096', fontSize: '0.68rem' }}>
+                  Стоимость по прайсу:
+                </Typography>
+                <Typography variant="subtitle1" sx={{ fontWeight: 800, color: '#0F3C64', fontSize: '1rem' }}>
+                  {totalOperationsPrice.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₽
+                </Typography>
+              </Box>
             </Box>
-          </Box>
+          )}
         </Box>
 
         {/* MATERIALS SPECIFICATION TABLE */}
@@ -280,45 +335,103 @@ export const VisitReportTemplate = React.forwardRef<HTMLDivElement, VisitReportP
           </Typography>
 
           {materials.length > 0 ? (
-            <TableContainer component={Paper} elevation={0} sx={{ border: '1px solid #E2E8F0', borderRadius: 1.5 }}>
-              <Table size="small" sx={{ '& td, & th': { py: 0.4, px: 1, fontSize: '0.78rem' } }}>
-                <TableHead sx={{ bgcolor: '#F8FAFC' }}>
-                  <TableRow>
-                    <TableCell sx={{ fontWeight: 700, color: '#0F3C64' }}>Наименование материала</TableCell>
-                    <TableCell sx={{ fontWeight: 700, color: '#0F3C64' }}>Ед. изм.</TableCell>
-                    <TableCell align="right" sx={{ fontWeight: 700, color: '#0F3C64' }}>Кол-во</TableCell>
-                    <TableCell align="right" sx={{ fontWeight: 700, color: '#0F3C64' }}>Цена за ед.</TableCell>
-                    <TableCell align="right" sx={{ fontWeight: 700, color: '#0F3C64' }}>Сумма расхода</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {materials.map((m, idx) => (
-                    <TableRow key={idx}>
-                      <TableCell sx={{ fontWeight: 600 }}>{m.material_name}</TableCell>
-                      <TableCell>{m.unit_of_measure}</TableCell>
-                      <TableCell align="right" sx={{ fontWeight: 600 }}>{m.actual_qty}</TableCell>
-                      <TableCell align="right">
-                        {m.current_unit_cost.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₽
+            materials.some(m => m.operation_name || m.operation_id) ? (
+              // Grouped by service first, then grand total
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                {Array.from(new Set(materials.map(m => m.operation_name || 'Общие материалы'))).map(serviceTitle => {
+                  const items = materials.filter(m => (m.operation_name || 'Общие материалы') === serviceTitle);
+                  const serviceCost = items.reduce((sum, m) => sum + (m.actual_qty * m.current_unit_cost), 0);
+
+                  return (
+                    <Box key={serviceTitle} sx={{ mb: 0.5 }}>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.3, px: 0.5 }}>
+                        <Typography variant="caption" sx={{ fontWeight: 700, color: '#156C9C', fontSize: '0.72rem' }}>
+                          Сервис: {serviceTitle}
+                        </Typography>
+                        <Typography variant="caption" sx={{ fontWeight: 700, color: '#0F3C64', fontSize: '0.72rem' }}>
+                          Себестоимость материалов сервиса: {serviceCost.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₽
+                        </Typography>
+                      </Box>
+                      <TableContainer component={Paper} elevation={0} sx={{ border: '1px solid #E2E8F0', borderRadius: 1 }}>
+                        <Table size="small" sx={{ '& td, & th': { py: 0.35, px: 0.8, fontSize: '0.74rem' } }}>
+                          <TableHead sx={{ bgcolor: '#F8FAFC' }}>
+                            <TableRow>
+                              <TableCell sx={{ fontWeight: 700, color: '#0F3C64' }}>Наименование материала</TableCell>
+                              <TableCell sx={{ fontWeight: 700, color: '#0F3C64' }}>Ед. изм.</TableCell>
+                              <TableCell align="right" sx={{ fontWeight: 700, color: '#0F3C64' }}>Кол-во</TableCell>
+                              <TableCell align="right" sx={{ fontWeight: 700, color: '#0F3C64' }}>Цена за ед.</TableCell>
+                              <TableCell align="right" sx={{ fontWeight: 700, color: '#0F3C64' }}>Сумма расхода</TableCell>
+                            </TableRow>
+                          </TableHead>
+                          <TableBody>
+                            {items.map((m, idx) => (
+                              <TableRow key={idx}>
+                                <TableCell sx={{ fontWeight: 600 }}>{m.material_name}</TableCell>
+                                <TableCell>{m.unit_of_measure}</TableCell>
+                                <TableCell align="right" sx={{ fontWeight: 600 }}>{m.actual_qty}</TableCell>
+                                <TableCell align="right">
+                                  {m.current_unit_cost.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₽
+                                </TableCell>
+                                <TableCell align="right" sx={{ fontWeight: 700 }}>
+                                  {(m.actual_qty * m.current_unit_cost).toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₽
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </TableContainer>
+                    </Box>
+                  );
+                })}
+
+                {/* Grand total row across all services */}
+                <Box sx={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', p: 0.8, bgcolor: '#F1F5F9', borderRadius: 1, border: '1px solid #CBD5E1', mt: 0.5 }}>
+                  <Typography variant="body2" sx={{ fontWeight: 800, color: '#0F3C64', fontSize: '0.8rem' }}>
+                    Итого себестоимость материалов (все сервисы): <span style={{ color: '#C53030' }}>{totalMaterialsCost.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₽</span>
+                  </Typography>
+                </Box>
+              </Box>
+            ) : (
+              <TableContainer component={Paper} elevation={0} sx={{ border: '1px solid #E2E8F0', borderRadius: 1.5 }}>
+                <Table size="small" sx={{ '& td, & th': { py: 0.4, px: 1, fontSize: '0.78rem' } }}>
+                  <TableHead sx={{ bgcolor: '#F8FAFC' }}>
+                    <TableRow>
+                      <TableCell sx={{ fontWeight: 700, color: '#0F3C64' }}>Наименование материала</TableCell>
+                      <TableCell sx={{ fontWeight: 700, color: '#0F3C64' }}>Ед. изм.</TableCell>
+                      <TableCell align="right" sx={{ fontWeight: 700, color: '#0F3C64' }}>Кол-во</TableCell>
+                      <TableCell align="right" sx={{ fontWeight: 700, color: '#0F3C64' }}>Цена за ед.</TableCell>
+                      <TableCell align="right" sx={{ fontWeight: 700, color: '#0F3C64' }}>Сумма расхода</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {materials.map((m, idx) => (
+                      <TableRow key={idx}>
+                        <TableCell sx={{ fontWeight: 600 }}>{m.material_name}</TableCell>
+                        <TableCell>{m.unit_of_measure}</TableCell>
+                        <TableCell align="right" sx={{ fontWeight: 600 }}>{m.actual_qty}</TableCell>
+                        <TableCell align="right">
+                          {m.current_unit_cost.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₽
+                        </TableCell>
+                        <TableCell align="right" sx={{ fontWeight: 700 }}>
+                          {(m.actual_qty * m.current_unit_cost).toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₽
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    <TableRow sx={{ bgcolor: '#F8FAFC' }}>
+                      <TableCell colSpan={4} align="right" sx={{ fontWeight: 700 }}>
+                        Итого себестоимость материалов:
                       </TableCell>
-                      <TableCell align="right" sx={{ fontWeight: 700 }}>
-                        {(m.actual_qty * m.current_unit_cost).toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₽
+                      <TableCell align="right" sx={{ fontWeight: 800, color: '#C53030' }}>
+                        {totalMaterialsCost.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₽
                       </TableCell>
                     </TableRow>
-                  ))}
-                  <TableRow sx={{ bgcolor: '#F8FAFC' }}>
-                    <TableCell colSpan={4} align="right" sx={{ fontWeight: 700 }}>
-                      Итого себестоимость материалов:
-                    </TableCell>
-                    <TableCell align="right" sx={{ fontWeight: 800, color: '#C53030' }}>
-                      {totalMaterialsCost.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₽
-                    </TableCell>
-                  </TableRow>
-                </TableBody>
-              </Table>
-            </TableContainer>
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            )
           ) : (
             <Typography variant="body2" sx={{ color: '#718096', fontStyle: 'italic', p: 1, bgcolor: '#F8FAFC', borderRadius: 1.5, fontSize: '0.78rem' }}>
-              Расходные материалы со склада в рамках данной процедуры не списывались.
+              Расходные материалы со склада в рамках данного сервиса не списывались.
             </Typography>
           )}
         </Box>
@@ -352,16 +465,16 @@ export const VisitReportTemplate = React.forwardRef<HTMLDivElement, VisitReportP
                 Подтверждение пациента:
               </Typography>
               <Typography variant="caption" sx={{ color: '#4A5568', lineHeight: 1.35, display: 'block', fontSize: '0.72rem' }}>
-                Медицинские услуги оказаны в полном объеме, качественно и в установленный срок. С калькуляцией материалов и итоговой стоимостью ознакомлен(а) и согласен(на), претензий к клинике не имею.
+                Сервисы оказаны в полном объеме, качественно и в установленный срок. С калькуляцией материалов и итоговой стоимостью ознакомлен(а) и согласен(на), претензий к клинике не имею.
               </Typography>
             </Box>
 
             {/* Right: Detailed Breakdown & Grand Total */}
             <Box>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.4 }}>
-                <Typography variant="caption" sx={{ color: '#4A5568', fontSize: '0.75rem' }}>Сумма медицинской услуги:</Typography>
+                <Typography variant="caption" sx={{ color: '#4A5568', fontSize: '0.75rem' }}>Сумма сервисов:</Typography>
                 <Typography variant="caption" sx={{ fontWeight: 600, fontSize: '0.75rem' }}>
-                  {operationPrice.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₽
+                  {totalOperationsPrice.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₽
                 </Typography>
               </Box>
 

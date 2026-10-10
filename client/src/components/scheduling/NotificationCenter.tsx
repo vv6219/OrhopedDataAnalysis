@@ -109,7 +109,7 @@ export default function NotificationCenter({ onRefreshParent }: NotificationCent
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
         <Box>
           <Typography variant="h6" sx={{ fontWeight: 700, color: '#0F3C64' }}>
-            Центр омниканальных уведомлений пациентов и медперсонала
+            Центр омниканальных уведомлений пациентов и сотрудников
           </Typography>
           <Typography variant="caption" sx={{ color: '#64748B' }}>
             Интерактивный шлюз мессенджеров (Telegram, MAX Messenger, WhatsApp, SMS) с поддержкой inline-кнопок

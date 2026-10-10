@@ -825,7 +825,7 @@ export default function Patients() {
               </Grid>
 
               <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
-                <Tooltip title="Доля пациентов, пришедших на повторный приём, перевязку или курс процедур после первичной консультации" arrow enterDelay={200}>
+                <Tooltip title="Доля пациентов, пришедших на повторный приём, перевязку или курс сервисов после первичной консультации" arrow enterDelay={200}>
                   <Paper elevation={0} sx={{ p: 2.5, borderRadius: 2.5, border: '1px solid #E2E8F0', bgcolor: '#F8FAFC', cursor: 'help' }}>
                     <Typography variant="body2" sx={{ fontWeight: 600, color: '#64748B' }}>Повторные приёмы</Typography>
                     <Typography variant="h5" sx={{ fontWeight: 800, color: '#059669', my: 0.5 }}>
@@ -1117,7 +1117,7 @@ export default function Patients() {
 
               {/* Passport */}
               <Grid size={{ xs: 12, sm: 6, lg: 4 }}>
-                <Tooltip title="Наличие паспортных данных для официального договора на платные медицинские услуги и налоговых справок" arrow enterDelay={200}>
+                <Tooltip title="Наличие паспортных данных для официального договора на платные медицинские сервисы и налоговых справок" arrow enterDelay={200}>
                   <Paper elevation={0} sx={{ p: 2, border: '1px solid #E2E8F0', borderRadius: 2, cursor: 'help' }}>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
                       <Typography variant="body2" sx={{ fontWeight: 600 }}>Паспортные данные</Typography>

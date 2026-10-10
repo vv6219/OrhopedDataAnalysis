@@ -287,7 +287,7 @@ export default function OperationsAnalytics() {
       width: 110,
       minWidth: 100,
       filterOperators: customStringOperators,
-      renderHeader: () => renderHeaderWithTooltip('Код', 'Уникальный номенклатурный артикул услуги в учетной системе клиники.'),
+      renderHeader: () => renderHeaderWithTooltip('Код', 'Уникальный номенклатурный артикул сервиса в учетной системе клиники.'),
       renderCell: (params: GridRenderCellParams) => (
         <Tooltip title={`Номенклатурный код: ${params.value}`} arrow enterDelay={200}>
           <Typography variant="body2" sx={{ fontFamily: 'monospace', fontWeight: 600, color: '#475569' }}>
@@ -298,11 +298,11 @@ export default function OperationsAnalytics() {
     },
     {
       field: 'name',
-      headerName: 'Наименование медицинской услуги',
+      headerName: 'Наименование сервиса',
       flex: 3,
       minWidth: 320,
       filterOperators: customStringOperators,
-      renderHeader: () => renderHeaderWithTooltip('Наименование услуги', 'Название процедуры по прейскуранту клиники. Нажмите на строку, чтобы открыть технологическую карту списания материалов со склада.'),
+      renderHeader: () => renderHeaderWithTooltip('Наименование сервиса', 'Название сервиса по прейскуранту клиники. Нажмите на строку, чтобы открыть технологическую карту списания материалов со склада.'),
       renderCell: (params: GridRenderCellParams) => (
         <Tooltip title="Нажмите, чтобы открыть технологическую карту BOM, перечень материалов и врачей" arrow enterDelay={200}>
           <Box
@@ -329,7 +329,7 @@ export default function OperationsAnalytics() {
       flex: 1.4,
       minWidth: 175,
       filterOperators: customStringOperators,
-      renderHeader: () => renderHeaderWithTooltip('Направление', 'Клиническая специализация процедуры: инъекции, хирургия, иммобилизация, консультации и др.'),
+      renderHeader: () => renderHeaderWithTooltip('Направление', 'Клиническая специализация сервиса: инъекции, хирургия, иммобилизация, консультации и др.'),
       renderCell: (params: GridRenderCellParams) => {
         const catColor = CATEGORY_COLORS[params.value] || '#64748B';
         return (
@@ -359,15 +359,15 @@ export default function OperationsAnalytics() {
       minWidth: 85,
       align: 'center',
       headerAlign: 'center',
-      renderHeader: () => renderHeaderWithTooltip('ABC', 'ABC-классификация: Класс A — ядро доходов (80% выручки), Класс B — умеренные доходы (следующие 15%), Класс C — редкие услуги (последние 5%).'),
+      renderHeader: () => renderHeaderWithTooltip('ABC', 'ABC-классификация: Класс A — ядро доходов (80% выручки), Класс B — умеренные доходы (следующие 15%), Класс C — редкие сервисы (последние 5%).'),
       renderCell: (params: GridRenderCellParams) => {
         const val = params.value;
         const color = val === 'A' ? '#10B981' : val === 'B' ? '#3B82F6' : '#94A3B8';
         const hintText = val === 'A'
-          ? 'Класс A: ключевая услуга клиники, входит в 80% основной выручки'
+          ? 'Класс A: ключевой сервис клиники, входит в 80% основной выручки'
           : val === 'B'
-          ? 'Класс B: стабильная услуга со средним вкладом в оборот (следующие 15% выручки)'
-          : 'Класс C: сопутствующая или редкая процедура (входит в оставшиеся 5% выручки)';
+          ? 'Класс B: стабильный сервис со средним вкладом в оборот (следующие 15% выручки)'
+          : 'Класс C: сопутствующий или редкий сервис (входит в оставшиеся 5% выручки)';
         return (
           <Tooltip title={hintText} arrow enterDelay={200}>
             <Chip
@@ -393,9 +393,9 @@ export default function OperationsAnalytics() {
       width: 100,
       headerAlign: 'right',
       align: 'right',
-      renderHeader: () => renderHeaderWithTooltip('Выполнено', 'Фактическое количество проведенных процедур пациентам за выбранный отчетный период.'),
+      renderHeader: () => renderHeaderWithTooltip('Выполнено', 'Фактическое количество оказанных сервисов пациентам за выбранный отчетный период.'),
       renderCell: (params: GridRenderCellParams) => (
-        <Tooltip title={`Процедура выполнена ${params.value} раз за отчетный период`} arrow enterDelay={200}>
+        <Tooltip title={`Сервис оказан ${params.value} раз за отчетный период`} arrow enterDelay={200}>
           <Typography variant="body2" sx={{ fontWeight: 600 }}>
             {params.value?.toLocaleString('ru-RU')}
           </Typography>
@@ -409,9 +409,9 @@ export default function OperationsAnalytics() {
       width: 110,
       headerAlign: 'right',
       align: 'right',
-      renderHeader: () => renderHeaderWithTooltip('Цена (₽)', 'Фактическая средняя стоимость одной процедуры для пациента (с учетом скидок и параметров симуляции).'),
+      renderHeader: () => renderHeaderWithTooltip('Цена (₽)', 'Фактическая средняя стоимость одного сервиса для пациента (с учетом скидок и параметров симуляции).'),
       renderCell: (params: GridRenderCellParams) => (
-        <Tooltip title={`Средняя цена для пациента: ${Math.round(params.value || 0).toLocaleString('ru-RU')} ₽ за 1 прием`} arrow enterDelay={200}>
+        <Tooltip title={`Средняя цена для пациента: ${Math.round(params.value || 0).toLocaleString('ru-RU')} ₽ за 1 сервис`} arrow enterDelay={200}>
           <Typography variant="body2">
             {Math.round(params.value || 0).toLocaleString('ru-RU')} ₽
           </Typography>
@@ -425,9 +425,9 @@ export default function OperationsAnalytics() {
       width: 115,
       headerAlign: 'right',
       align: 'right',
-      renderHeader: () => renderHeaderWithTooltip('Себест. BOM', 'Прямая себестоимость материалов (Bill of Materials) на 1 процедуру: сумма закупочных цен медикаментов и расходников по технологической карте.'),
+      renderHeader: () => renderHeaderWithTooltip('Себест. BOM', 'Прямая себестоимость материалов (Bill of Materials) на 1 сервис: сумма закупочных цен медикаментов и расходников по технологической карте.'),
       renderCell: (params: GridRenderCellParams) => (
-        <Tooltip title={`Списание медикаментов на 1 процедуру: ${Math.round(params.value || 0).toLocaleString('ru-RU')} ₽`} arrow enterDelay={200}>
+        <Tooltip title={`Списание медикаментов на 1 сервис: ${Math.round(params.value || 0).toLocaleString('ru-RU')} ₽`} arrow enterDelay={200}>
           <Typography variant="body2" color="text.secondary">
             {Math.round(params.value || 0).toLocaleString('ru-RU')} ₽
           </Typography>
@@ -441,9 +441,9 @@ export default function OperationsAnalytics() {
       width: 125,
       headerAlign: 'right',
       align: 'right',
-      renderHeader: () => renderHeaderWithTooltip('Выручка (₽)', 'Совокупная сумма денежных поступлений в кассу клиники за эту процедуру за весь выбранный период.'),
+      renderHeader: () => renderHeaderWithTooltip('Выручка (₽)', 'Совокупная сумма денежных поступлений в кассу клиники за этот сервис за весь выбранный период.'),
       renderCell: (params: GridRenderCellParams) => (
-        <Tooltip title={`Общая выручка клиники по этой процедуре: ${Math.round(params.value || 0).toLocaleString('ru-RU')} ₽`} arrow enterDelay={200}>
+        <Tooltip title={`Общая выручка клиники по этому сервису: ${Math.round(params.value || 0).toLocaleString('ru-RU')} ₽`} arrow enterDelay={200}>
           <Typography variant="body2" sx={{ fontWeight: 700, color: '#0F3C64' }}>
             {Math.round(params.value || 0).toLocaleString('ru-RU')} ₽
           </Typography>
@@ -457,12 +457,12 @@ export default function OperationsAnalytics() {
       width: 125,
       headerAlign: 'right',
       align: 'right',
-      renderHeader: () => renderHeaderWithTooltip('Вал. прибыль', 'Валовая прибыль = Выручка минус Затраты на медикаменты со склада. Показывает, сколько чистых денег услуга приносит клинике.'),
+      renderHeader: () => renderHeaderWithTooltip('Вал. прибыль', 'Валовая прибыль = Выручка минус Затраты на медикаменты со склада. Показывает, сколько чистых денег сервис приносит клинике.'),
       renderCell: (params: GridRenderCellParams) => {
         const val = params.value || 0;
         const profitHint = val >= 0
           ? `Прибыль клиники после вычета материалов: +${Math.round(val).toLocaleString('ru-RU')} ₽`
-          : `Внимание: процедура убыточна на ${Math.round(Math.abs(val)).toLocaleString('ru-RU')} ₽ из-за заниженной цены по сравнению со стоимостью медикаментов`;
+          : `Внимание: сервис убыточен на ${Math.round(Math.abs(val)).toLocaleString('ru-RU')} ₽ из-за заниженной цены по сравнению со стоимостью медикаментов`;
         return (
           <Tooltip title={profitHint} arrow enterDelay={200}>
             <Typography
@@ -529,7 +529,7 @@ export default function OperationsAnalytics() {
       filterable: false,
       align: 'center',
       headerAlign: 'center',
-      renderHeader: () => renderHeaderWithTooltip('Детали', 'Кнопка быстрого открытия технологической карты BOM и истории выполнений услуги.'),
+      renderHeader: () => renderHeaderWithTooltip('Детали', 'Кнопка быстрого открытия технологической карты BOM и истории выполнений сервиса.'),
       renderCell: (params: GridRenderCellParams) => (
         <Tooltip title="Открыть технологическую карту: рецептура материалов, нормы расхода, цены закупки и врачи" arrow enterDelay={200}>
           <IconButton
@@ -558,9 +558,9 @@ export default function OperationsAnalytics() {
         <Box>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
             <AssessmentIcon sx={{ fontSize: 32, color: '#0F3C64' }} />
-            <Tooltip title="Аналитический экран оценки доходности и материалоемкости медицинских услуг Центра ортопедии Добрушкина" arrow>
+            <Tooltip title="Аналитический экран оценки доходности и материалоемкости сервисов Центра ортопедии Добрушкина" arrow>
               <Typography variant="h4" sx={{ fontWeight: 700, color: '#0F3C64', letterSpacing: '-0.5px', cursor: 'help' }}>
-                Анализ операций и услуг (Operations BI)
+                Анализ сервисов (Services BI)
               </Typography>
             </Tooltip>
           </Box>
@@ -570,7 +570,7 @@ export default function OperationsAnalytics() {
         </Box>
 
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-          <Tooltip title="Открыть интерактивный калькулятор прогнозирования: позволяет наглядно оценить финансовый результат при изменении цен на операции или росте стоимости медикаментов" arrow>
+          <Tooltip title="Открыть интерактивный калькулятор прогнозирования: позволяет наглядно оценить финансовый результат при изменении цен на сервисы или росте стоимости медикаментов" arrow>
             <Button
               variant={showSimulator ? 'contained' : 'outlined'}
               color={showSimulator ? 'secondary' : 'primary'}
@@ -638,7 +638,7 @@ export default function OperationsAnalytics() {
               <Tooltip title="Потяните ползунок, чтобы смоделировать изменение розничных цен в прейскуранте (например, индексацию на +10% или скидку -5%)" arrow placement="top">
                 <Box>
                   <Typography variant="subtitle2" sx={{ opacity: 0.9, mb: 1, cursor: 'help' }}>
-                    Индексация прейскуранта (Цены операций):{' '}
+                    Индексация прейскуранта (Цены сервисов):{' '}
                     <strong style={{ fontSize: '1.1rem', color: priceAdjustmentPct >= 0 ? '#34D399' : '#F87171' }}>
                       {priceAdjustmentPct > 0 ? `+${priceAdjustmentPct}%` : `${priceAdjustmentPct}%`}
                     </strong>
@@ -747,11 +747,11 @@ export default function OperationsAnalytics() {
             } else if (ins.id === 'low_margin_alert') {
               borderCol = '#F59E0B';
               icon = <WarningAmberIcon sx={{ color: '#F59E0B' }} />;
-              hint = 'Внимание руководству: у данных процедур стоимость медикаментов слишком высока по сравнению с ценой чека. Рекомендуется поднять цену в прейскуранте или пересмотреть протокол расхода.';
+              hint = 'Внимание руководству: у данных сервисов стоимость медикаментов слишком высока по сравнению с ценой чека. Рекомендуется поднять цену в прейскуранте или пересмотреть протокол расхода.';
             } else if (ins.id === 'volume_leader') {
               borderCol = '#7C3AED';
               icon = <TrendingUpIcon sx={{ color: '#7C3AED' }} />;
-              hint = 'Самая массовая процедура: формирует основной пациентопоток и загрузку кабинетов клиники.';
+              hint = 'Самый массовый сервис: формирует основной пациентопоток и загрузку кабинетов клиники.';
             }
 
             return (
@@ -834,7 +834,7 @@ export default function OperationsAnalytics() {
           </FormControl>
         </Tooltip>
 
-        <Tooltip title="Фильтровать операции по типу вмешательства (инъекции гиалуроновой кислоты и PRP, хирургия, иммобилизация Турбокаст и др.)" arrow>
+        <Tooltip title="Фильтровать сервисы по типу вмешательства (инъекции гиалуроновой кислоты и PRP, хирургия, иммобилизация Турбокаст и др.)" arrow>
           <FormControl size="small" sx={{ minWidth: 230 }}>
             <InputLabel id="category-label" htmlFor="category-select">Клиническое направление</InputLabel>
             <Select
@@ -874,10 +874,10 @@ export default function OperationsAnalytics() {
           </FormControl>
         </Tooltip>
 
-        <Tooltip title="Быстрый живой фильтр по названию процедуры или коду услуги в прейскуранте" arrow>
+        <Tooltip title="Быстрый живой фильтр по названию сервиса или коду сервиса в прейскуранте" arrow>
           <TextField
             size="small"
-            placeholder="Фильтр по названию процедуры..."
+            placeholder="Фильтр по названию сервиса..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             sx={{ flexGrow: 1, minWidth: 220 }}
@@ -918,7 +918,7 @@ export default function OperationsAnalytics() {
                   <Typography variant="h6" sx={{ fontWeight: 700, color: '#0F3C64' }}>
                     {Math.round(simulatedData?.summary.totalRevenue || 0).toLocaleString('ru-RU')} ₽
                   </Typography>
-                  <Tooltip title="Средняя стоимость одной медицинской услуги для пациента (Общая выручка ÷ Объем процедур)" arrow>
+                  <Tooltip title="Средняя стоимость одного сервиса для пациента (Общая выручка ÷ Объем сервисов)" arrow>
                     <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
                       Ср. чек: {Math.round(simulatedData?.summary.avgCheck || 0).toLocaleString('ru-RU')} ₽
                     </Typography>
@@ -976,7 +976,7 @@ export default function OperationsAnalytics() {
         {/* KPI 3: Валовая прибыль */}
         <Grid size={{ xs: 12, sm: 6, md: 4, lg: 2 }}>
           <Tooltip
-            title="Разница между полученной выручкой и затратами на медикаменты со склада (Выручка минус Затраты BOM). Это чистая маржинальная прибыль от медицинских манипуляций до вычета общих постоянных расходов (аренда, налоги, админперсонал)."
+            title="Разница между полученной выручкой и затратами на медикаменты со склада (Выручка минус Затраты BOM). Это чистая маржинальная прибыль от медицинских манипуляций до вычета общих постоянных расходов (аренда, налоги, сотрудники администрации)."
             arrow
             placement="top"
           >
@@ -1007,7 +1007,7 @@ export default function OperationsAnalytics() {
                   <Typography variant="caption" sx={{ color: '#059669', fontWeight: 600, display: 'block' }}>
                     {simulatedData?.summary.profitDelta !== 0 && simulatedData?.summary.profitDelta !== undefined
                       ? `${simulatedData.summary.profitDelta > 0 ? '+' : ''}${Math.round(simulatedData.summary.profitDelta).toLocaleString('ru-RU')} ₽`
-                      : 'Чистая прибыль операций'}
+                      : 'Чистая прибыль сервисов'}
                   </Typography>
                 </>
               )}
@@ -1018,7 +1018,7 @@ export default function OperationsAnalytics() {
         {/* KPI 4: Средняя маржинальность */}
         <Grid size={{ xs: 12, sm: 6, md: 4, lg: 2 }}>
           <Tooltip
-            title="Процент выручки, остающийся после списания себестоимости материалов ((Прибыль ÷ Выручка) × 100%). Выше 70% — высокая норма прибыли, 50-70% — стандартная, ниже 40% — требует пересмотра цены услуги."
+            title="Процент выручки, остающийся после списания себестоимости материалов ((Прибыль ÷ Выручка) × 100%). Выше 70% — высокая норма прибыли, 50-70% — стандартная, ниже 40% — требует пересмотра цены сервиса."
             arrow
             placement="top"
           >
@@ -1055,10 +1055,10 @@ export default function OperationsAnalytics() {
           </Tooltip>
         </Grid>
 
-        {/* KPI 5: Объем операций */}
+        {/* KPI 5: Объем сервисов */}
         <Grid size={{ xs: 12, sm: 6, md: 4, lg: 2 }}>
           <Tooltip
-            title="Суммарное количество раз, сколько медицинские процедуры и операции были фактически проведены пациентам за выбранный период."
+            title="Суммарное количество раз, сколько сервисы были фактически оказаны пациентам за выбранный период."
             arrow
             placement="top"
           >
@@ -1075,7 +1075,7 @@ export default function OperationsAnalytics() {
             >
               <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
                 <Typography variant="caption" sx={{ fontWeight: 600 }} color="text.secondary">
-                  ОБЪЕМ ОПЕРАЦИЙ
+                  ОБЪЕМ СЕРВИСОВ
                 </Typography>
                 <LayersIcon sx={{ color: '#7C3AED', fontSize: 20 }} />
               </Box>
@@ -1087,7 +1087,7 @@ export default function OperationsAnalytics() {
                     {simulatedData?.summary.operationsCount?.toLocaleString('ru-RU') || 0}
                   </Typography>
                   <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-                    Всего визитов и манипуляций
+                    Всего визитов и сервисов
                   </Typography>
                 </>
               )}
@@ -1095,10 +1095,10 @@ export default function OperationsAnalytics() {
           </Tooltip>
         </Grid>
 
-        {/* KPI 6: Активных процедур */}
+        {/* KPI 6: Активных сервисов */}
         <Grid size={{ xs: 12, sm: 6, md: 4, lg: 2 }}>
           <Tooltip
-            title="Количество уникальных позиций процедур из официального каталога клиники, которые были реально выполнены хотя бы 1 раз за данный отчетный период."
+            title="Количество уникальных позиций сервисов из официального каталога клиники, которые были реально оказаны хотя бы 1 раз за данный отчетный период."
             arrow
             placement="top"
           >
@@ -1158,7 +1158,7 @@ export default function OperationsAnalytics() {
               icon={<ScatterPlotIcon fontSize="small" />}
               iconPosition="start"
               label={
-                <Tooltip title="Интерактивная карта распределения услуг по объемам выполнения (X) и маржинальности (Y). Позволяет найти звездные услуги и зону ценового риска" arrow>
+                <Tooltip title="Интерактивная карта распределения сервисов по объемам выполнения (X) и маржинальности (Y). Позволяет найти звездные сервисы и зону ценового риска" arrow>
                   <span>4-Квадрантная матрица эффективности (BCG)</span>
                 </Tooltip>
               }
@@ -1167,8 +1167,8 @@ export default function OperationsAnalytics() {
               icon={<PieChartIcon fontSize="small" />}
               iconPosition="start"
               label={
-                <Tooltip title="Рейтинг наиболее доходных медицинских процедур в абсолютных рублях валовой прибыли" arrow>
-                  <span>Рейтинг ТОП-10 услуг по прибыли</span>
+                <Tooltip title="Рейтинг наиболее доходных сервисов в абсолютных рублях валовой прибыли" arrow>
+                  <span>Рейтинг ТОП-10 сервисов по прибыли</span>
                 </Tooltip>
               }
             />
@@ -1288,20 +1288,20 @@ export default function OperationsAnalytics() {
         {activeChartTab === 1 && (
           <Box sx={{ p: 2.5 }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-              <Tooltip title="Разделение процедур на 4 группы: Флагманы (высокий объем + высокая маржа), Ниши (мало операций, но высокая прибыль), Потоковые (высокий поток, средняя маржа) и Зона риска (мало операций и низкая маржа)" arrow>
+              <Tooltip title="Разделение сервисов на 4 группы: Флагманы (высокий объем + высокая маржа), Ниши (мало сервисов, но высокая прибыль), Потоковые (высокий поток, средняя маржа) и Зона риска (мало сервисов и низкая маржа)" arrow>
                 <Typography variant="subtitle1" sx={{ fontWeight: 700, color: '#0F3C64', cursor: 'help' }}>
-                  Матрица эффективности: Объем процедур (X) vs Маржинальность % (Y)
+                  Матрица эффективности: Объем сервисов (X) vs Маржинальность % (Y)
                 </Typography>
               </Tooltip>
               <Box sx={{ display: 'flex', gap: 2 }}>
                 <Tooltip title="Флагманы: много проводят и высокая маржа (основа финансового благополучия)" arrow>
                   <Chip size="small" label="Флагманы (Stars)" sx={{ bgcolor: `${QUADRANT_COLORS.stars}20`, color: QUADRANT_COLORS.stars, fontWeight: 700, cursor: 'help' }} />
                 </Tooltip>
-                <Tooltip title="Ниши: редкие операции с очень высокой прибылью с одной процедуры" arrow>
+                <Tooltip title="Ниши: редкие сервисы с очень высокой прибылью с одного сервиса" arrow>
                   <Chip size="small" label="Высокодоходные ниши" sx={{ bgcolor: `${QUADRANT_COLORS.niche}20`, color: QUADRANT_COLORS.niche, fontWeight: 700, cursor: 'help' }} />
                 </Tooltip>
                 <Tooltip title="Потоковые: массовые манипуляции со стандартной или умеренной маржой" arrow>
-                  <Chip size="small" label="Потоковые услуги" sx={{ bgcolor: `${QUADRANT_COLORS.cash_cows}20`, color: QUADRANT_COLORS.cash_cows, fontWeight: 700, cursor: 'help' }} />
+                  <Chip size="small" label="Потоковые сервисы" sx={{ bgcolor: `${QUADRANT_COLORS.cash_cows}20`, color: QUADRANT_COLORS.cash_cows, fontWeight: 700, cursor: 'help' }} />
                 </Tooltip>
                 <Tooltip title="Зона риска: низкий объем и низкая маржа (рекомендуется пересмотреть цены или исключить)" arrow>
                   <Chip size="small" label="Зона риска" sx={{ bgcolor: `${QUADRANT_COLORS.question}20`, color: QUADRANT_COLORS.question, fontWeight: 700, cursor: 'help' }} />
@@ -1317,7 +1317,7 @@ export default function OperationsAnalytics() {
                     <XAxis
                       type="number"
                       dataKey="volume"
-                      name="Выполнено операций"
+                      name="Оказано сервисов"
                       stroke="#64748B"
                       fontSize={12}
                     />
@@ -1397,12 +1397,12 @@ export default function OperationsAnalytics() {
           </Box>
         )}
 
-        {/* TAB 2: Top-10 Profitable Procedures */}
+        {/* TAB 2: Top-10 Profitable Services */}
         {activeChartTab === 2 && (
           <Box sx={{ p: 2.5 }}>
-            <Tooltip title="Процедуры, которые принесли клинике больше всего чистых денег после вычета стоимости израсходованных медикаментов" arrow>
+            <Tooltip title="Сервисы, которые принесли клинике больше всего чистых денег после вычета стоимости израсходованных медикаментов" arrow>
               <Typography variant="subtitle1" sx={{ fontWeight: 700, color: '#0F3C64', mb: 1.5, cursor: 'help' }}>
-                ТОП-10 процедур клиники по валовой прибыли (Gross Profit)
+                ТОП-10 сервисов клиники по валовой прибыли (Gross Profit)
               </Typography>
             </Tooltip>
             <Box sx={{ width: '100%', height: 380 }}>
@@ -1595,7 +1595,7 @@ export default function OperationsAnalytics() {
 
               <Grid container spacing={1.5} sx={{ mt: 0.5 }}>
                 <Grid size={{ xs: 6 }}>
-                  <Tooltip title="Официальная прейскурантная цена процедуры для пациента" arrow>
+                  <Tooltip title="Официальная прейскурантная цена сервиса для пациента" arrow>
                     <Box sx={{ cursor: 'help' }}>
                       <Typography variant="caption" color="text.secondary">Каталожная цена:</Typography>
                       <Typography variant="body2" sx={{ fontWeight: 700 }}>
@@ -1605,7 +1605,7 @@ export default function OperationsAnalytics() {
                   </Tooltip>
                 </Grid>
                 <Grid size={{ xs: 6 }}>
-                  <Tooltip title="Прямая сумма закупочных цен на медикаменты со склада на 1 процедуру" arrow>
+                  <Tooltip title="Прямая сумма закупочных цен на медикаменты со склада на 1 сервис" arrow>
                     <Box sx={{ cursor: 'help' }}>
                       <Typography variant="caption" color="text.secondary">Себестоимость BOM:</Typography>
                       <Typography variant="body2" sx={{ fontWeight: 700, color: '#DC2626' }}>
@@ -1615,7 +1615,7 @@ export default function OperationsAnalytics() {
                   </Tooltip>
                 </Grid>
                 <Grid size={{ xs: 6 }}>
-                  <Tooltip title="Сколько раз процедура была проведена пациентам клиники за все время" arrow>
+                  <Tooltip title="Сколько раз сервис был оказан пациентам клиники за все время" arrow>
                     <Box sx={{ cursor: 'help' }}>
                       <Typography variant="caption" color="text.secondary">Всего выполнено:</Typography>
                       <Typography variant="body2" sx={{ fontWeight: 700 }}>
@@ -1625,7 +1625,7 @@ export default function OperationsAnalytics() {
                   </Tooltip>
                 </Grid>
                 <Grid size={{ xs: 6 }}>
-                  <Tooltip title="Процент валовой прибыли, остающийся клинике от стоимости услуги" arrow>
+                  <Tooltip title="Процент валовой прибыли, остающийся клинике от стоимости сервиса" arrow>
                     <Box sx={{ cursor: 'help' }}>
                       <Typography variant="caption" color="text.secondary">Маржинальность:</Typography>
                       <Typography variant="body2" sx={{ fontWeight: 700, color: '#059669' }}>
@@ -1665,12 +1665,12 @@ export default function OperationsAnalytics() {
                           </Tooltip>
                         </TableCell>
                         <TableCell align="right" sx={{ fontWeight: 700, fontSize: '0.75rem' }}>
-                          <Tooltip title="Итоговые затраты клиники на этот конкретный материал в рамках 1 процедуры (Норма × Цена)" arrow>
+                          <Tooltip title="Итоговые затраты клиники на этот конкретный материал в рамках 1 сервиса (Норма × Цена)" arrow>
                             <span>Сумма</span>
                           </Tooltip>
                         </TableCell>
                         <TableCell align="right" sx={{ fontWeight: 700, fontSize: '0.75rem' }}>
-                          <Tooltip title="Доля стоимости этого материала в общей себестоимости процедуры (показывает ключевой удорожающий фактор)" arrow>
+                          <Tooltip title="Доля стоимости этого материала в общей себестоимости сервиса (показывает ключевой удорожающий фактор)" arrow>
                             <span>Доля</span>
                           </Tooltip>
                         </TableCell>
@@ -1702,7 +1702,7 @@ export default function OperationsAnalytics() {
                             </Tooltip>
                           </TableCell>
                           <TableCell align="right" sx={{ fontSize: '0.8rem', color: 'text.secondary' }}>
-                            <Tooltip title={`Формирует ${m.shareInBom}% от всей стоимости материалов процедуры`} arrow enterDelay={200}>
+                            <Tooltip title={`Формирует ${m.shareInBom}% от всей стоимости материалов сервиса`} arrow enterDelay={200}>
                               <span>{m.shareInBom}%</span>
                             </Tooltip>
                           </TableCell>
@@ -1728,14 +1728,14 @@ export default function OperationsAnalytics() {
                 </TableContainer>
               ) : (
                 <Alert severity="info" sx={{ borderRadius: 2 }}>
-                  Для данной процедуры технологическая карта BOM пока не заполнена в номенклатуре.
+                  Для данного сервиса технологическая карта BOM пока не заполнена в номенклатуре.
                 </Alert>
               )}
             </Box>
 
             {/* Doctors Distribution */}
             <Box>
-              <Tooltip title="Статистика проведения данной процедуры хирургами клиники Добрушкина" arrow>
+              <Tooltip title="Статистика оказания данного сервиса специалистами клиники Добрушкина" arrow>
                 <Typography variant="subtitle2" sx={{ fontWeight: 700, color: '#0F3C64', mb: 1, cursor: 'help' }}>
                   Распределение по оперирующим специалистам
                 </Typography>
@@ -1743,7 +1743,7 @@ export default function OperationsAnalytics() {
               <Grid container spacing={2}>
                 {drawerData.doctors.map((d: any) => (
                   <Grid size={{ xs: 6 }} key={d.id}>
-                    <Tooltip title={`Врач ${d.name} провел(а) ${d.count} процедур (${d.sharePct}% от общего объема)`} arrow>
+                    <Tooltip title={`Врач ${d.name} оказал(а) ${d.count} сервисов (${d.sharePct}% от общего объема)`} arrow>
                       <Paper elevation={0} sx={{ p: 1.5, border: '1px solid #E2E8F0', borderRadius: 2, cursor: 'help' }}>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
                           <PersonIcon fontSize="small" sx={{ color: '#0F3C64' }} />

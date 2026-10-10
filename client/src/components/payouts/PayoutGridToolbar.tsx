@@ -11,6 +11,9 @@ import AddCircleIcon from '@mui/icons-material/AddCircle';
 import PrintIcon from '@mui/icons-material/Print';
 import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import BlockIcon from '@mui/icons-material/Block';
+import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
+import PaymentsIcon from '@mui/icons-material/Payments';
 
 export interface PayoutGridToolbarProps {
   onResetFilters?: () => void;
@@ -18,6 +21,9 @@ export interface PayoutGridToolbarProps {
   onPrint?: () => void;
   onExportCsv?: () => void;
   onBulkApprove?: () => void;
+  onBulkCreateSheet?: () => void;
+  onBulkPay?: () => void;
+  onBulkAnnul?: () => void;
   selectedCount?: number;
   [key: string]: any;
 }
@@ -28,6 +34,9 @@ export function PayoutGridToolbar({
   onPrint,
   onExportCsv,
   onBulkApprove,
+  onBulkCreateSheet,
+  onBulkPay,
+  onBulkAnnul,
   selectedCount = 0
 }: PayoutGridToolbarProps) {
   return (
@@ -64,12 +73,51 @@ export function PayoutGridToolbar({
           <Button
             variant="outlined"
             size="small"
-            color="success"
+            color="warning"
             startIcon={<CheckCircleIcon />}
             onClick={onBulkApprove}
             sx={{ fontWeight: 600 }}
           >
-            Утвердить выбранные ({selectedCount})
+            Утвердить ({selectedCount})
+          </Button>
+        )}
+
+        {selectedCount > 0 && onBulkCreateSheet && (
+          <Button
+            variant="contained"
+            size="small"
+            color="primary"
+            startIcon={<ReceiptLongIcon />}
+            onClick={onBulkCreateSheet}
+            sx={{ fontWeight: 600, bgcolor: '#0284C7', '&:hover': { bgcolor: '#0369A1' } }}
+          >
+            В ведомость ({selectedCount})
+          </Button>
+        )}
+
+        {selectedCount > 0 && onBulkPay && (
+          <Button
+            variant="outlined"
+            size="small"
+            color="success"
+            startIcon={<PaymentsIcon />}
+            onClick={onBulkPay}
+            sx={{ fontWeight: 600 }}
+          >
+            Выплачено ({selectedCount})
+          </Button>
+        )}
+
+        {selectedCount > 0 && onBulkAnnul && (
+          <Button
+            variant="outlined"
+            size="small"
+            color="error"
+            startIcon={<BlockIcon />}
+            onClick={onBulkAnnul}
+            sx={{ fontWeight: 600 }}
+          >
+            Аннулировать ({selectedCount})
           </Button>
         )}
 

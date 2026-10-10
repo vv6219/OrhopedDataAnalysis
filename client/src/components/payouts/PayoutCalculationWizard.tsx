@@ -98,7 +98,7 @@ interface PayoutCalculationWizardProps {
 
 const steps = [
   'Параметры смены и бригада',
-  'Выбор визитов и услуг',
+  'Выбор визитов и сервисов',
   'Калькулятор и доли бригады',
   'Утверждение начисления'
 ];
@@ -214,7 +214,7 @@ export function PayoutCalculationWizard({ onCalculationCommitted, onCancel }: Pa
   const handleGoToPreview = async () => {
     const selectedList = unbilledServices.filter(s => selectedServiceIds.has(s.dedup_hash));
     if (selectedList.length === 0) {
-      alert('Пожалуйста, выберите хотя бы одну услугу для расчета');
+      alert('Пожалуйста, выберите хотя бы один сервис для расчета');
       return;
     }
 
@@ -342,7 +342,13 @@ export function PayoutCalculationWizard({ onCalculationCommitted, onCancel }: Pa
   };
 
   const formatCurrency = (val: number) => {
-    return Math.round(val || 0).toLocaleString('ru-RU') + ' ₽';
+    if (val === undefined || val === null || isNaN(val)) return '0 ₽';
+    const num = Number(val);
+    const hasFraction = Math.abs(num % 1) > 0.001;
+    return num.toLocaleString('ru-RU', {
+      minimumFractionDigits: hasFraction ? 1 : 0,
+      maximumFractionDigits: 2
+    }) + ' ₽';
   };
 
   return (
@@ -360,7 +366,7 @@ export function PayoutCalculationWizard({ onCalculationCommitted, onCancel }: Pa
       {activeStep === 0 && (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
           <Alert severity="info" sx={{ borderRadius: 2 }}>
-            Укажите отчетный интервал дат и выберите бригаду смены. Назначенные врач и медсестра применятся ко всем выбранным процедурам.
+            Укажите отчетный интервал дат и выберите бригаду смены. Назначенные врач и медсестра применятся ко всем выбранным сервисам.
           </Alert>
 
           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 3 }}>
@@ -460,17 +466,17 @@ export function PayoutCalculationWizard({ onCalculationCommitted, onCancel }: Pa
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 2 }}>
             <Box>
               <Typography variant="h6" sx={{ fontWeight: 700, color: '#0F3C64' }}>
-                Очередь нерассчитанных услуг
+                Очередь нерассчитанных сервисов
               </Typography>
               <Typography variant="body2" sx={{ color: '#64748B' }}>
-                Выбрано: <strong>{selectedServiceIds.size}</strong> из <strong>{unbilledServices.length}</strong> доступных процедур
+                Выбрано: <strong>{selectedServiceIds.size}</strong> из <strong>{unbilledServices.length}</strong> доступных сервисов
               </Typography>
             </Box>
 
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
               <TextField
                 size="small"
-                placeholder="Поиск по пациенту или операции..."
+                placeholder="Поиск по пациенту или сервису..."
                 value={searchFilter}
                 onChange={e => setSearchFilter(e.target.value)}
                 sx={{ width: 260 }}
@@ -503,7 +509,7 @@ export function PayoutCalculationWizard({ onCalculationCommitted, onCancel }: Pa
                     </TableCell>
                     <TableCell sx={{ fontWeight: 700 }}>Дата</TableCell>
                     <TableCell sx={{ fontWeight: 700 }}>Пациент (ЭМК)</TableCell>
-                    <TableCell sx={{ fontWeight: 700 }}>Медицинская услуга / операция</TableCell>
+                    <TableCell sx={{ fontWeight: 700 }}>Сервис</TableCell>
                     <TableCell align="right" sx={{ fontWeight: 700 }}>Выручка</TableCell>
                     <TableCell align="right" sx={{ fontWeight: 700 }}>Расходники*1.15</TableCell>
                     <TableCell align="right" sx={{ fontWeight: 700 }}>Маржа базы</TableCell>
@@ -581,7 +587,7 @@ export function PayoutCalculationWizard({ onCalculationCommitted, onCancel }: Pa
               <CardContent>
                 <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr 1fr', md: 'repeat(5, 1fr)' }, gap: 2 }}>
                   <Box>
-                    <Typography variant="caption" sx={{ color: '#64748B' }}>Операций в выборке</Typography>
+                    <Typography variant="caption" sx={{ color: '#64748B' }}>Сервисов в выборке</Typography>
                     <Typography variant="h6" sx={{ fontWeight: 800 }}>{previewSummary.operationsCount}</Typography>
                   </Box>
                   <Box>
@@ -642,7 +648,7 @@ export function PayoutCalculationWizard({ onCalculationCommitted, onCancel }: Pa
                 <TableRow>
                   <TableCell sx={{ fontWeight: 700 }}>Дата</TableCell>
                   <TableCell sx={{ fontWeight: 700 }}>Пациент</TableCell>
-                  <TableCell sx={{ fontWeight: 700 }}>Операция</TableCell>
+                  <TableCell sx={{ fontWeight: 700 }}>Сервис</TableCell>
                   <TableCell align="right" sx={{ fontWeight: 700 }}>Маржа базы</TableCell>
                   <TableCell align="center" sx={{ fontWeight: 700 }}>Врач (%)</TableCell>
                   <TableCell align="right" sx={{ fontWeight: 700 }}>Выплата врачу</TableCell>
@@ -702,7 +708,7 @@ export function PayoutCalculationWizard({ onCalculationCommitted, onCancel }: Pa
             Начисление успешно зафиксировано!
           </Typography>
           <Typography variant="body1" sx={{ color: '#4A5568', textAlign: 'center', maxWidth: 600 }}>
-            Успешно обработано <strong>{commitResult?.committedProceduresCount || previewItems.length}</strong> медицинских процедур и создано{' '}
+            Успешно обработано <strong>{commitResult?.committedProceduresCount || previewItems.length}</strong> сервисов и создано{' '}
             <strong>{commitResult?.createdAccrualsCount}</strong> персональных начислений для участников бригады.
           </Typography>
 

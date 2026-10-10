@@ -150,14 +150,14 @@ export function PayoutBiDashboard() {
           <Card sx={{ bgcolor: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 2 }}>
             <CardContent sx={{ p: 2 }}>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-                <Typography variant="caption" sx={{ color: '#64748B', fontWeight: 600 }}>СР. ВЫПЛАТА ЗА ПРОЦЕДУРУ</Typography>
+                <Typography variant="caption" sx={{ color: '#64748B', fontWeight: 600 }}>СР. ВЫПЛАТА ЗА СЕРВИС</Typography>
                 <LocalHospitalIcon sx={{ color: '#2563EB', fontSize: 20 }} />
               </Box>
               <Typography variant="h5" sx={{ fontWeight: 800, color: '#1A2027' }}>
                 {formatCurrency(kpis.avgPerOperation)}
               </Typography>
               <Typography variant="caption" sx={{ color: '#64748B', display: 'block', mt: 0.5 }}>
-                на одну операцию
+                на один сервис
               </Typography>
             </CardContent>
           </Card>
@@ -222,7 +222,7 @@ export function PayoutBiDashboard() {
         <Card sx={{ border: '1px solid #E2E8F0', borderRadius: 2 }}>
           <CardContent>
             <Typography variant="subtitle1" sx={{ fontWeight: 700, color: '#0F3C64', mb: 2 }}>
-              Структура ФОТ по ролям персонала
+              Структура ФОТ по ролям сотрудников
             </Typography>
             {rolesDist.length > 0 ? (
               <Box sx={{ height: 320, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
@@ -355,7 +355,7 @@ export function PayoutBiDashboard() {
         <Card sx={{ border: '1px solid #E2E8F0', borderRadius: 2 }}>
           <CardContent>
             <Typography variant="subtitle1" sx={{ fontWeight: 700, color: '#0F3C64', mb: 2 }}>
-              Сводная матрица финансовой отдачи медицинского персонала
+              Сводная матрица финансовой отдачи сотрудников
             </Typography>
             <Paper variant="outlined" sx={{ borderRadius: 2 }}>
               <Table size="small">

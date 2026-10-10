@@ -41,7 +41,7 @@ export interface NavGroup {
 export const navigationGroups: NavGroup[] = [
   {
     id: 'operations_and_wizards',
-    title: 'Операции',
+    title: 'Сервисы',
     icon: <AutoAwesomeMotionIcon sx={{ fontSize: 20 }} />,
     defaultOpen: true,
     items: [
@@ -61,7 +61,7 @@ export const navigationGroups: NavGroup[] = [
         text: 'Выплаты сотрудникам',
         path: '/staff-payouts',
         icon: <AccountBalanceWalletIcon sx={{ fontSize: 20 }} />,
-        tooltip: 'Расчет и ведомости выплат врачам и медсестрам на основе визитов и операций'
+        tooltip: 'Расчет и ведомости выплат врачам и медсестрам на основе визитов и сервисов'
       },
       {
         text: 'Отчетность и документы',
@@ -90,16 +90,16 @@ export const navigationGroups: NavGroup[] = [
         tooltip: 'Реестр пациентов и электронные медицинские карты'
       },
       {
-        text: 'Персонал и врачи',
+        text: 'Сотрудники и врачи',
         path: '/staff',
         icon: <BadgeIcon sx={{ fontSize: 20 }} />,
-        tooltip: 'Реестр медицинского персонала, врачей и ассистентов'
+        tooltip: 'Реестр сотрудников, врачей и ассистентов'
       },
       {
-        text: 'Каталог операций и услуг',
+        text: 'Каталог сервисов',
         path: '/operations',
         icon: <LocalHospitalIcon sx={{ fontSize: 20 }} />,
-        tooltip: 'Справочник процедур и технологических карт BOM'
+        tooltip: 'Справочник сервисов и технологических карт BOM'
       },
       {
         text: 'Склад материалов и медикаментов',
@@ -128,10 +128,10 @@ export const navigationGroups: NavGroup[] = [
         tooltip: 'Главный экран аналитики и KPI'
       },
       {
-        text: 'Анализ операций',
+        text: 'Анализ сервисов',
         path: '/analytics/operations',
         icon: <AssessmentIcon sx={{ fontSize: 20 }} />,
-        tooltip: 'Глубокий финансовый и маржинальный анализ операций'
+        tooltip: 'Глубокий финансовый и маржинальный анализ сервисов'
       }
     ]
   },
@@ -203,38 +203,38 @@ export const routeMetaMap: Record<string, RouteMeta> = {
     parentPath: '/'
   },
   '/analytics/operations': {
-    title: 'Анализ операций и услуг',
+    title: 'Анализ сервисов',
     groupTitle: 'Аналитика',
     groupId: 'bi',
     parentPath: '/'
   },
   '/checkout': {
     title: 'Оформление визита (Wizard)',
-    groupTitle: 'Операции',
+    groupTitle: 'Сервисы',
     groupId: 'operations_and_wizards',
     parentPath: '/'
   },
   '/scheduling': {
     title: 'Расписание и прием',
-    groupTitle: 'Операции',
+    groupTitle: 'Сервисы',
     groupId: 'operations_and_wizards',
     parentPath: '/'
   },
   '/reports': {
     title: 'Отчетность и документы',
-    groupTitle: 'Операции',
+    groupTitle: 'Сервисы',
     groupId: 'operations_and_wizards',
     parentPath: '/'
   },
   '/staff-payouts': {
     title: 'Выплаты сотрудникам',
-    groupTitle: 'Операции',
+    groupTitle: 'Сервисы',
     groupId: 'operations_and_wizards',
     parentPath: '/'
   },
   '/user-guide': {
     title: 'Инструкция пользователя МИС',
-    groupTitle: 'Операции',
+    groupTitle: 'Сервисы',
     groupId: 'operations_and_wizards',
     parentPath: '/'
   },
@@ -245,13 +245,13 @@ export const routeMetaMap: Record<string, RouteMeta> = {
     parentPath: '/'
   },
   '/staff': {
-    title: 'Персонал и врачи',
+    title: 'Сотрудники и врачи',
     groupTitle: 'Базовые данные',
     groupId: 'base_entities',
     parentPath: '/'
   },
   '/operations': {
-    title: 'Каталог операций и услуг',
+    title: 'Каталог сервисов',
     groupTitle: 'Базовые данные',
     groupId: 'base_entities',
     parentPath: '/'

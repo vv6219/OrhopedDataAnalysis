@@ -53,7 +53,7 @@ const swaggerOptions = {
       { name: 'Inventory', description: 'Склад материалов, препаратов и расходников' },
       { name: 'Operations', description: 'Каталог медицинских услуг и технологических карт' },
       { name: 'Patients', description: 'Электронные медицинские карты (ЭМК)' },
-      { name: 'Staff', description: 'Медицинский персонал, врачи и ассистенты клиники' },
+      { name: 'Staff', description: 'Сотрудники, врачи и ассистенты клиники' },
       { name: 'BI Dashboard', description: 'Аналитические сводки и метрики эффективности' },
       { name: 'Calculation Parameters', description: 'Параметры ценообразования и наценок' },
       { name: 'SQLite Studio & Database', description: 'Администрирование БД SQLite и SQL Консоль' },
@@ -599,9 +599,48 @@ app.get('/api/patients', (req, res) => {
   const conditions = [];
 
   if (search && search.trim()) {
-    const q = `%${search.trim()}%`;
-    conditions.push("(full_name LIKE ? OR surname LIKE ? OR phone LIKE ? OR sphone LIKE ? OR CAST(mednum AS TEXT) LIKE ?)");
-    params.push(q, q, q, q, q);
+    const rawSearch = search.trim();
+    const variants = new Set();
+    variants.add(rawSearch);
+    variants.add(rawSearch.toLowerCase());
+    variants.add(rawSearch.toUpperCase());
+
+    const titleCase = rawSearch
+      .split(/[\s_\-]+/)
+      .map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+      .join(' ');
+    variants.add(titleCase);
+
+    if (rawSearch.includes('_')) {
+      variants.add(rawSearch.replace(/_/g, ' '));
+      variants.add(rawSearch.replace(/_/g, '%'));
+    }
+    if (rawSearch.includes(' ')) {
+      variants.add(rawSearch.replace(/\s+/g, '_'));
+      variants.add(rawSearch.replace(/\s+/g, '%'));
+    }
+    const cleanNoBrackets = rawSearch.replace(/[\[\]]/g, '').trim();
+    if (cleanNoBrackets) {
+      variants.add(cleanNoBrackets);
+      variants.add(cleanNoBrackets.toLowerCase());
+      variants.add(cleanNoBrackets.toUpperCase());
+    }
+
+    const searchCols = [
+      'full_name', 'surname', 'name', 'patron', 'brief_name',
+      'first_name', 'last_name', 'phone', 'sphone', 'contact_phone',
+      'CAST(mednum AS TEXT)', 'city', 'address', 'email', 'dms_insurer', 'dms_policy'
+    ];
+
+    const orClauses = [];
+    for (const v of variants) {
+      const pattern = `%${v}%`;
+      for (const col of searchCols) {
+        orClauses.push(`${col} LIKE ?`);
+        params.push(pattern);
+      }
+    }
+    conditions.push(`(${orClauses.join(' OR ')})`);
   }
 
   if (dms_only === 'true' || dms_only === '1') {
@@ -1610,14 +1649,14 @@ app.delete('/api/operations/:id/materials/:omId', (req, res) => {
 });
 
 // ============================================================================
-// STAFF MANAGEMENT (Персонал и врачи)
+// STAFF MANAGEMENT (Сотрудники и врачи)
 // ============================================================================
 
 /**
  * @swagger
  * /api/staff:
  *   get:
- *     summary: Получить список медицинского персонала
+ *     summary: Получить список сотрудников клиники
  *     description: "Возвращает полный реестр врачей, ассистентов и медсестер клиники."
  *     tags: [Staff]
  *     responses:
@@ -1737,7 +1776,7 @@ app.get('/api/staff/analytics-overview', async (req, res) => {
     const roleDistribution = [
       { name: 'Врачи травматологи-ортопеды', count: staffStats?.doctors_count || 2, color: '#0F3C64' },
       { name: 'Администрация и управление', count: staffStats?.admin_count || 2, color: '#0284C7' },
-      { name: 'Средний медицинский персонал', count: staffStats?.nurses_count || 1, color: '#16A34A' }
+      { name: 'Медицинские сестры (сотрудники)', count: staffStats?.nurses_count || 1, color: '#16A34A' }
     ];
 
     const alerts = [
@@ -1938,18 +1977,72 @@ app.delete('/api/staff/:id', (req, res) => {
  *         description: Транзакция успешно сохранена
  */
 app.post('/api/transactions', (req, res) => {
-  const { patient_id, operation_id, billed_price, calculated_cost, net_profit, notes, materials } = req.body;
-  const transaction_date = new Date().toISOString();
+  const { 
+    patient_id, 
+    operation_id, 
+    operations, 
+    doctor_id, 
+    nurse_id, 
+    billed_price, 
+    calculated_cost, 
+    net_profit, 
+    notes, 
+    materials,
+    transaction_date: client_transaction_date
+  } = req.body;
+  const transaction_date = client_transaction_date || new Date().toISOString();
+
+  // Primary operation for backward-compatible foreign key in operation_transactions
+  const primaryOperationId = (Array.isArray(operations) && operations.length > 0)
+    ? (operations[0].operation_id || operations[0].id)
+    : (operation_id || null);
 
   const stmt = db.prepare(`
     INSERT INTO operation_transactions (patient_id, operation_id, transaction_date, billed_price, calculated_cost, net_profit, notes)
     VALUES (?, ?, ?, ?, ?, ?, ?)
   `);
 
-  stmt.run(patient_id, operation_id, transaction_date, billed_price || 0, calculated_cost || 0, net_profit || 0, notes || '', function(err) {
+  stmt.run(patient_id, primaryOperationId, transaction_date, billed_price || 0, calculated_cost || 0, net_profit || 0, notes || '', function(err) {
     if (err) return res.status(500).json({ error: err.message });
     const transactionId = this.lastID;
 
+    // 1. Insert multiple operations into operation_transaction_items
+    const opsList = (Array.isArray(operations) && operations.length > 0)
+      ? operations
+      : (primaryOperationId ? [{ operation_id: primaryOperationId, quantity: 1, unit_price: billed_price || 0, subtotal: billed_price || 0 }] : []);
+
+    if (opsList.length > 0) {
+      const itemStmt = db.prepare(`
+        INSERT INTO operation_transaction_items (transaction_id, operation_id, quantity, unit_price, subtotal, notes)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `);
+      opsList.forEach(op => {
+        const opId = op.operation_id || op.id;
+        if (opId) {
+          const qty = Number(op.quantity) || 1;
+          const uPrice = Number(op.unit_price !== undefined ? op.unit_price : op.price) || 0;
+          const sub = Number(op.subtotal !== undefined ? op.subtotal : (qty * uPrice)) || 0;
+          itemStmt.run(transactionId, opId, qty, uPrice, sub, op.notes || op.name || '');
+        }
+      });
+      itemStmt.finalize();
+    }
+
+    // 2. Assign staff roles in transaction_staff_roles for automatic Staff Payouts resolution
+    if (doctor_id) {
+      db.run(
+        "INSERT INTO transaction_staff_roles (transaction_id, staff_id, manipulation_role) VALUES (?, ?, 'Primary Surgeon')",
+        [transactionId, doctor_id]
+      );
+    }
+    if (nurse_id) {
+      db.run(
+        "INSERT INTO transaction_staff_roles (transaction_id, staff_id, manipulation_role) VALUES (?, ?, 'Assisting Nurse')",
+        [transactionId, nurse_id]
+      );
+    }
+
+    // 3. Save actual materials
     if (Array.isArray(materials) && materials.length > 0) {
       const matStmt = db.prepare(`
         INSERT INTO transaction_actual_materials (transaction_id, material_id, quantity_used, actual_cost_at_time)

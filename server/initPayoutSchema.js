@@ -135,10 +135,69 @@ function initPayoutSchema(db, callback) {
       UNIQUE(source_type, source_id)
     )`);
 
+    // Ensure operation_transaction_items table exists
+    db.run(`CREATE TABLE IF NOT EXISTS operation_transaction_items (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      transaction_id INTEGER NOT NULL,
+      operation_id INTEGER NOT NULL,
+      quantity INTEGER NOT NULL DEFAULT 1,
+      unit_price REAL NOT NULL,
+      subtotal REAL NOT NULL,
+      notes TEXT,
+      FOREIGN KEY(transaction_id) REFERENCES operation_transactions(id) ON DELETE CASCADE,
+      FOREIGN KEY(operation_id) REFERENCES operations(id)
+    )`);
+    db.run(`CREATE INDEX IF NOT EXISTS idx_oti_trans ON operation_transaction_items(transaction_id)`);
+    db.run(`CREATE INDEX IF NOT EXISTS idx_oti_op ON operation_transaction_items(operation_id)`);
+
     // 8. SQL View for unbilled services pipeline
     db.run(`DROP VIEW IF EXISTS v_unbilled_services`);
     db.run(`CREATE VIEW v_unbilled_services AS
-      -- 1. Source: Operation transactions (Касса/Чеки)
+      -- 1a. Source: Multi-operation items in transactions
+      SELECT 
+        'transaction' AS source_type,
+        ot.id AS source_id,
+        'tr:' || ot.id || ':' || oti.operation_id AS dedup_hash,
+        ot.transaction_date AS service_date,
+        ot.patient_id,
+        COALESCE(p.full_name, (p.surname || ' ' || p.name)) AS patient_name,
+        p.phone AS patient_phone,
+        COALESCE(tsr_doc.staff_id, 2) AS primary_doctor_id,
+        COALESCE(s_doc.full_name, 'Добрушкин Александр Моисеевич') AS doctor_name,
+        oti.operation_id,
+        o.name AS operation_name,
+        oti.subtotal AS revenue,
+        o.price AS catalog_price,
+        COALESCE(
+          (SELECT ROUND(SUM(om.quantity * COALESCE(mc.current_unit_cost, 0) * oti.quantity), 2)
+           FROM operation_materials om
+           JOIN materials_catalog mc ON om.material_id = mc.id
+           WHERE om.operation_id = oti.operation_id),
+          0.0
+        ) AS materials_cost,
+        1.15 AS material_cost_factor,
+        MAX(0.0, ROUND(oti.subtotal - COALESCE(
+          (SELECT SUM(om.quantity * COALESCE(mc.current_unit_cost, 0) * oti.quantity)
+           FROM operation_materials om
+           JOIN materials_catalog mc ON om.material_id = mc.id
+           WHERE om.operation_id = oti.operation_id),
+          0.0
+        ) * 1.15, 2)) AS margin_base,
+        CASE WHEN scl.expires_at > datetime('now', 'localtime') THEN 1 ELSE 0 END AS is_locked,
+        scl.locked_by AS locked_by_user
+      FROM operation_transactions ot
+      JOIN operation_transaction_items oti ON ot.id = oti.transaction_id
+      JOIN patients p ON ot.patient_id = p.id
+      JOIN operations o ON oti.operation_id = o.id
+      LEFT JOIN transaction_staff_roles tsr_doc ON ot.id = tsr_doc.transaction_id AND (tsr_doc.manipulation_role LIKE '%Surgeon%' OR tsr_doc.manipulation_role LIKE '%Врач%')
+      LEFT JOIN staff s_doc ON tsr_doc.staff_id = s_doc.id
+      LEFT JOIN procedure_records pr ON pr.source_type = 'transaction' AND pr.source_id = ot.id AND pr.operation_id = oti.operation_id
+      LEFT JOIN service_calculation_locks scl ON scl.source_type = 'transaction' AND scl.source_id = ot.id
+      WHERE pr.id IS NULL
+
+      UNION ALL
+
+      -- 1b. Source: Legacy Operation transactions without items
       SELECT 
         'transaction' AS source_type,
         ot.id AS source_id,
@@ -174,6 +233,7 @@ function initPayoutSchema(db, callback) {
       LEFT JOIN procedure_records pr ON pr.source_type = 'transaction' AND pr.source_id = ot.id
       LEFT JOIN service_calculation_locks scl ON scl.source_type = 'transaction' AND scl.source_id = ot.id
       WHERE pr.id IS NULL
+        AND NOT EXISTS (SELECT 1 FROM operation_transaction_items oti2 WHERE oti2.transaction_id = ot.id)
 
       UNION ALL
 
@@ -235,7 +295,7 @@ function initPayoutSchema(db, callback) {
       {
         id: 3,
         name: 'Сестринское ассистирование и манипуляции',
-        desc: 'Схема для операционных медицинских сестер и процедурного персонала',
+        desc: 'Схема для операционных медицинских сестер и процедурных сотрудников',
         default_rate: 10.0,
         policy: 'from_actual_billed',
         max_cap: 25.0

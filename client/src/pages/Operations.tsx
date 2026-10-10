@@ -350,7 +350,7 @@ export default function Operations() {
   };
 
   const handleDelete = async (id: number) => {
-    if (!window.confirm('Вы уверены, что хотите удалить эту операцию из каталога?')) return;
+    if (!window.confirm('Вы уверены, что хотите удалить этот сервис из каталога?')) return;
     try {
       await fetch(`${API_BASE_URL}/api/operations/${id}`, { method: 'DELETE' });
       setOperations(operations.filter(m => m.id !== id));
@@ -418,7 +418,7 @@ export default function Operations() {
     { field: 'id', headerName: '№', width: 55, minWidth: 45, align: 'center', headerAlign: 'center' },
     { 
       field: 'name', 
-      headerName: 'Наименование медицинской процедуры / услуги', 
+      headerName: 'Наименование сервиса', 
       flex: 2.2, 
       minWidth: 260,
       filterOperators: customStringOperators,
@@ -599,7 +599,7 @@ export default function Operations() {
               <EditIcon fontSize="small" />
             </IconButton>
           </Tooltip>
-          <Tooltip title="Удалить услугу из каталога" arrow enterDelay={200}>
+          <Tooltip title="Удалить сервис из каталога" arrow enterDelay={200}>
             <IconButton size="small" color="error" onClick={(e) => { e.stopPropagation(); handleDelete(params.row.id); }} sx={{ cursor: 'pointer' }}>
               <DeleteIcon fontSize="small" />
             </IconButton>
@@ -615,15 +615,15 @@ export default function Operations() {
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 2 }}>
         <Box>
           <Typography variant="h4" sx={{ fontWeight: 800, color: '#0F3C64', letterSpacing: '-0.5px' }}>
-            Каталог операций и технологических карт (BOM)
+            Каталог сервисов и технологических карт (BOM)
           </Typography>
           <Typography variant="body2" sx={{ color: '#64748B', mt: 0.5 }}>
-            Прейскурант услуг Центра ортопедии Добрушкина, технологические спецификации расхода, анализ маржинальности и калькуляция
+            Прейскурант сервисов Центра ортопедии Добрушкина, технологические спецификации расхода, анализ маржинальности и калькуляция
           </Typography>
         </Box>
 
         <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center' }}>
-          <Tooltip title="Обновить список процедур и аналитические показатели" arrow enterDelay={200}>
+          <Tooltip title="Обновить список сервисов и аналитические показатели" arrow enterDelay={200}>
             <Button
               variant="outlined"
               size="small"
@@ -637,8 +637,8 @@ export default function Operations() {
           <Tooltip 
             title={
               getEffectivePrintIds().length > 0
-                ? `Открыть предпросмотр и напечатать официальный бланк калькуляции (${getEffectivePrintIds().length} процедур)`
-                : "Выберите одну или несколько процедур в таблице (чекбоксом или кликом) для печати бланка калькуляции"
+                ? `Открыть предпросмотр и напечатать официальный бланк калькуляции (${getEffectivePrintIds().length} сервисов)`
+                : "Выберите один или несколько сервисов в таблице (чекбоксом или кликом) для печати бланка калькуляции"
             } 
             arrow 
             enterDelay={200}
@@ -658,7 +658,7 @@ export default function Operations() {
               </Button>
             </span>
           </Tooltip>
-          <Tooltip title="Добавить новую медицинскую услугу в прейскурант клиники" arrow enterDelay={200}>
+          <Tooltip title="Добавить новый сервис в прейскурант клиники" arrow enterDelay={200}>
             <Button 
               variant="contained" 
               startIcon={<AddIcon />} 
@@ -671,7 +671,7 @@ export default function Operations() {
                 '&:hover': { bgcolor: '#0A2744' } 
               }}
             >
-              Добавить процедуру
+              Добавить сервис
             </Button>
           </Tooltip>
         </Box>
@@ -696,7 +696,7 @@ export default function Operations() {
             }}
           >
             <Tab icon={<ReceiptLongIcon fontSize="small" />} iconPosition="start" label="Справочник прейскуранта и спецификаций (BOM)" />
-            <Tab icon={<BarChartIcon fontSize="small" />} iconPosition="start" label="Экономика процедур и маржинальность" />
+            <Tab icon={<BarChartIcon fontSize="small" />} iconPosition="start" label="Экономика сервисов и маржинальность" />
             <Tab 
               icon={<HealthAndSafetyIcon fontSize="small" />} 
               iconPosition="start" 
@@ -740,7 +740,7 @@ export default function Operations() {
                   </Button>
                 }
               >
-                <strong>Активен фильтр аудита качества:</strong> {qualityFilterLabel} (показано {operations.length} услуг).
+                <strong>Активен фильтр аудита качества:</strong> {qualityFilterLabel} (показано {operations.length} сервисов).
               </Alert>
             )}
 
@@ -812,7 +812,7 @@ export default function Operations() {
                   <GridFooterContainer sx={{ p: 1 }}>
                     <Box sx={{ px: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
                       <Typography variant="body2" sx={{ fontWeight: 700, color: '#0F3C64' }}>
-                        Всего процедур в списке: {operations.length}
+                        Всего сервисов в списке: {operations.length}
                       </Typography>
                     </Box>
                     <Box sx={{ flexGrow: 1 }} />
@@ -951,7 +951,7 @@ export default function Operations() {
                         <Typography variant="body2" sx={{ fontWeight: 600, color: '#64748B' }}>Прейскурант клиники</Typography>
                       </Box>
                       <Typography variant="h5" sx={{ fontWeight: 800, color: '#0F3C64', my: 0.5 }}>
-                        {analytics?.totals?.totalOperations || 158} процедур
+                        {analytics?.totals?.totalOperations || 158} сервисов
                       </Typography>
                       <Typography variant="caption" sx={{ color: '#16A34A', fontWeight: 600 }}>
                         100% оснащены картами BOM
@@ -961,7 +961,7 @@ export default function Operations() {
                 </Grid>
 
                 <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
-                  <Tooltip title="Средняя стоимость услуги по прейскуранту Центра ортопедии Добрушкина" arrow enterDelay={200}>
+                  <Tooltip title="Средняя стоимость сервиса по прейскуранту Центра ортопедии Добрушкина" arrow enterDelay={200}>
                     <Paper elevation={0} sx={{ p: 2.5, borderRadius: 2.5, border: '1px solid #E2E8F0', bgcolor: '#F8FAFC', cursor: 'help' }}>
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
                         <MonetizationOnIcon sx={{ color: '#0284C7', fontSize: 20 }} />
@@ -978,11 +978,11 @@ export default function Operations() {
                 </Grid>
 
                 <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
-                  <Tooltip title="Процедуры с положительной расчётной прибылью (доход превышает себестоимость материалов)" arrow enterDelay={200}>
+                  <Tooltip title="Сервисы с положительной расчётной прибылью (доход превышает себестоимость материалов)" arrow enterDelay={200}>
                     <Paper elevation={0} sx={{ p: 2.5, borderRadius: 2.5, border: '1px solid #E2E8F0', bgcolor: '#F8FAFC', cursor: 'help' }}>
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
                         <TrendingUpIcon sx={{ color: '#16A34A', fontSize: 20 }} />
-                        <Typography variant="body2" sx={{ fontWeight: 600, color: '#64748B' }}>Рентабельные услуги</Typography>
+                        <Typography variant="body2" sx={{ fontWeight: 600, color: '#64748B' }}>Рентабельные сервисы</Typography>
                       </Box>
                       <Typography variant="h5" sx={{ fontWeight: 800, color: '#0F3C64', my: 0.5 }}>
                         {analytics?.totals?.positiveMarginCount || 122} из 158
@@ -995,11 +995,11 @@ export default function Operations() {
                 </Grid>
 
                 <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
-                  <Tooltip title="Суммарная выручка по всем фактически выполненным клиническим протоколам операций" arrow enterDelay={200}>
+                  <Tooltip title="Суммарная выручка по всем фактически выполненным сервисам клиники" arrow enterDelay={200}>
                     <Paper elevation={0} sx={{ p: 2.5, borderRadius: 2.5, border: '1px solid #E2E8F0', bgcolor: '#F8FAFC', cursor: 'help' }}>
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
                         <ReceiptLongIcon sx={{ color: '#7C3AED', fontSize: 20 }} />
-                        <Typography variant="body2" sx={{ fontWeight: 600, color: '#64748B' }}>Общий оборот процедур</Typography>
+                        <Typography variant="body2" sx={{ fontWeight: 600, color: '#64748B' }}>Общий оборот сервисов</Typography>
                       </Box>
                       <Typography variant="h5" sx={{ fontWeight: 800, color: '#0F3C64', my: 0.5 }}>
                         {(analytics?.totals?.totalTransactionsRevenue || 27429334).toLocaleString('ru-RU')} ₽
@@ -1019,10 +1019,10 @@ export default function Operations() {
                   <Paper elevation={0} sx={{ p: 2.5, borderRadius: 2.5, border: '1px solid #E2E8F0' }}>
                     <Box sx={{ mb: 2 }}>
                       <Typography variant="subtitle1" sx={{ fontWeight: 700, color: '#0F3C64' }}>
-                        Зонирование маржинальности процедур
+                        Зонирование маржинальности сервисов
                       </Typography>
                       <Typography variant="caption" sx={{ color: '#64748B' }}>
-                        Соотношение высокорентабельных, нормативных и дефицитных услуг
+                        Соотношение высокорентабельных, нормативных и дефицитных сервисов
                       </Typography>
                     </Box>
 
@@ -1034,10 +1034,10 @@ export default function Operations() {
                             <XAxis dataKey="name" stroke="#64748B" fontSize={11} />
                             <YAxis stroke="#64748B" fontSize={11} />
                             <RechartsTooltip
-                              formatter={(v: any) => [`${v} процедур`, 'Количество']}
+                              formatter={(v: any) => [`${v} сервисов`, 'Количество']}
                               contentStyle={{ borderRadius: 8, border: '1px solid #CBD5E1' }}
                             />
-                            <Bar dataKey="count" name="Услуг" radius={[4, 4, 0, 0]}>
+                            <Bar dataKey="count" name="Сервисов" radius={[4, 4, 0, 0]}>
                               {analytics.marginZones.map((entry, index) => (
                                 <Cell key={`cell-${index}`} fill={entry.color} />
                               ))}
@@ -1069,7 +1069,7 @@ export default function Operations() {
                             <XAxis dataKey="name" stroke="#64748B" fontSize={12} />
                             <YAxis stroke="#64748B" fontSize={11} />
                             <RechartsTooltip
-                              formatter={(v: any) => [`${v} услуг`, 'Количество']}
+                              formatter={(v: any) => [`${v} сервисов`, 'Количество']}
                               labelFormatter={(_, payload) => {
                                 const item = payload && payload[0] && payload[0].payload;
                                 return item ? `${item.name} (${item.category})` : '';
@@ -1096,7 +1096,7 @@ export default function Operations() {
                         Клинические направления прейскуранта
                       </Typography>
                       <Typography variant="caption" sx={{ color: '#64748B' }}>
-                        Специализированная структура услуг Центра ортопедии
+                        Специализированная структура сервисов Центра ортопедии
                       </Typography>
                     </Box>
 
@@ -1118,7 +1118,7 @@ export default function Operations() {
                               ))}
                             </Pie>
                             <RechartsTooltip
-                              formatter={(v: any) => [`${v} процедур`, 'Количество']}
+                              formatter={(v: any) => [`${v} сервисов`, 'Количество']}
                               contentStyle={{ borderRadius: 8, border: '1px solid #CBD5E1' }}
                             />
                             <Legend />
@@ -1129,15 +1129,15 @@ export default function Operations() {
                   </Paper>
                 </Grid>
 
-                {/* Chart 4: Top Expensive Procedures */}
+                {/* Chart 4: Top Expensive Services */}
                 <Grid size={{ xs: 12, lg: 6 }}>
                   <Paper elevation={0} sx={{ p: 2.5, borderRadius: 2.5, border: '1px solid #E2E8F0' }}>
                     <Box sx={{ mb: 2 }}>
                       <Typography variant="subtitle1" sx={{ fontWeight: 700, color: '#0F3C64' }}>
-                        Топ-8 самых дорогостоящих процедур
+                        Топ-8 самых дорогостоящих сервисов
                       </Typography>
                       <Typography variant="caption" sx={{ color: '#64748B' }}>
-                        Флагманские услуги клеточной терапии, выездов и стелек
+                        Флагманские сервисы клеточной терапии, выездов и стелек
                       </Typography>
                     </Box>
 
@@ -1196,7 +1196,7 @@ export default function Operations() {
                           Сводный индекс технологических карт (BOM): {analytics?.dataQuality?.score || 89} из 100 баллов
                         </Typography>
                         <Typography variant="body2" sx={{ color: '#475569' }}>
-                          Высокий уровень оснащённости прейскуранта. Все 100% услуг имеют положительные тарифы и карты списания. Главные зоны внимания — устранение разрывов связей со складом и корректировка карт снятия гипса.
+                          Высокий уровень оснащённости прейскуранта. Все 100% сервисов имеют положительные тарифы и карты списания. Главные зоны внимания — устранение разрывов связей со складом и корректировка карт снятия гипса.
                         </Typography>
                       </Box>
                     </Box>
@@ -1241,7 +1241,7 @@ export default function Operations() {
                         sx={{ height: 8, borderRadius: 4, bgcolor: '#F1F5F9', '& .MuiLinearProgress-bar': { bgcolor: '#16A34A' } }}
                       />
                       <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.5 }}>
-                        <Typography variant="caption" color="text.secondary">158 из 158 процедур</Typography>
+                        <Typography variant="caption" color="text.secondary">158 из 158 сервисов</Typography>
                         <Chip label="Отлично" size="small" sx={{ height: 18, fontSize: '0.65rem', bgcolor: '#DCFCE7', color: '#166534', fontWeight: 700 }} />
                       </Box>
                     </Paper>
@@ -1250,7 +1250,7 @@ export default function Operations() {
 
                 {/* BOM Assigned */}
                 <Grid size={{ xs: 12, sm: 6, lg: 4 }}>
-                  <Tooltip title="Наличие технологической карты расхода материалов (BOM) для каждой медицинской услуги" arrow enterDelay={200}>
+                  <Tooltip title="Наличие технологической карты расхода материалов (BOM) для каждого сервиса" arrow enterDelay={200}>
                     <Paper elevation={0} sx={{ p: 2, border: '1px solid #E2E8F0', borderRadius: 2, cursor: 'help' }}>
                       <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
                         <Typography variant="body2" sx={{ fontWeight: 600 }}>Наличие карт расхода (BOM)</Typography>
@@ -1264,7 +1264,7 @@ export default function Operations() {
                         sx={{ height: 8, borderRadius: 4, bgcolor: '#F1F5F9', '& .MuiLinearProgress-bar': { bgcolor: '#16A34A' } }}
                       />
                       <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.5 }}>
-                        <Typography variant="caption" color="text.secondary">158 из 158 процедур</Typography>
+                        <Typography variant="caption" color="text.secondary">158 из 158 сервисов</Typography>
                         <Chip label="Отлично" size="small" sx={{ height: 18, fontSize: '0.65rem', bgcolor: '#DCFCE7', color: '#166534', fontWeight: 700 }} />
                       </Box>
                     </Paper>
@@ -1273,7 +1273,7 @@ export default function Operations() {
 
                 {/* Margin Integrity */}
                 <Grid size={{ xs: 12, sm: 6, lg: 4 }}>
-                  <Tooltip title="Доля услуг, где себестоимость материалов строго ниже тарифа услуги" arrow enterDelay={200}>
+                  <Tooltip title="Доля сервисов, где себестоимость материалов строго ниже тарифа сервиса" arrow enterDelay={200}>
                     <Paper elevation={0} sx={{ p: 2, border: '1px solid #E2E8F0', borderRadius: 2, cursor: 'help' }}>
                       <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
                         <Typography variant="body2" sx={{ fontWeight: 600 }}>Корректность маржи</Typography>
@@ -1287,7 +1287,7 @@ export default function Operations() {
                         sx={{ height: 8, borderRadius: 4, bgcolor: '#F1F5F9', '& .MuiLinearProgress-bar': { bgcolor: '#D97706' } }}
                       />
                       <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.5 }}>
-                        <Typography variant="caption" color="text.secondary">122 из 158 процедур</Typography>
+                        <Typography variant="caption" color="text.secondary">122 из 158 сервисов</Typography>
                         <Chip label="Внимание" size="small" sx={{ height: 18, fontSize: '0.65rem', bgcolor: '#FFFBEB', color: '#D97706', fontWeight: 700 }} />
                       </Box>
                     </Paper>
@@ -1296,7 +1296,7 @@ export default function Operations() {
 
                 {/* BOM Cleanliness */}
                 <Grid size={{ xs: 12, sm: 6, lg: 4 }}>
-                  <Tooltip title="Доля услуг, в технологических картах которых отсутствуют разорванные ссылки на пустые материалы" arrow enterDelay={200}>
+                  <Tooltip title="Доля сервисов, в технологических картах которых отсутствуют разорванные ссылки на пустые материалы" arrow enterDelay={200}>
                     <Paper elevation={0} sx={{ p: 2, border: '1px solid #E2E8F0', borderRadius: 2, cursor: 'help' }}>
                       <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
                         <Typography variant="body2" sx={{ fontWeight: 600 }}>Целостность связей со складом</Typography>
@@ -1310,7 +1310,7 @@ export default function Operations() {
                         sx={{ height: 8, borderRadius: 4, bgcolor: '#F1F5F9', '& .MuiLinearProgress-bar': { bgcolor: '#D97706' } }}
                       />
                       <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.5 }}>
-                        <Typography variant="caption" color="text.secondary">126 из 158 процедур</Typography>
+                        <Typography variant="caption" color="text.secondary">126 из 158 сервисов</Typography>
                         <Chip label="Внимание" size="small" sx={{ height: 18, fontSize: '0.65rem', bgcolor: '#FFFBEB', color: '#D97706', fontWeight: 700 }} />
                       </Box>
                     </Paper>
@@ -1382,7 +1382,7 @@ export default function Operations() {
                                 </Typography>
                               </Box>
                               <Chip
-                                label={`${alert.count} процедур`}
+                                label={`${alert.count} сервисов`}
                                 size="small"
                                 sx={{
                                   fontWeight: 700,
@@ -1425,14 +1425,14 @@ export default function Operations() {
         )}
       </Paper>
 
-      {/* Add / Edit Operation Dialog */}
+      {/* Add / Edit Service Dialog */}
       <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
         <DialogTitle sx={{ fontWeight: 700, color: '#0F3C64' }}>
-          {editingItem?.id && operations.some(o => o.id === editingItem.id) ? 'Редактировать процедуру' : 'Новая процедура в прейскуранте'}
+          {editingItem?.id && operations.some(o => o.id === editingItem.id) ? 'Редактировать сервис' : 'Новый сервис в прейскуранте'}
         </DialogTitle>
         <DialogContent dividers>
           <TextField
-            fullWidth margin="normal" label="Наименование процедуры"
+            fullWidth margin="normal" label="Наименование сервиса"
             value={editingItem?.name || ''}
             onChange={(e) => setEditingItem({...editingItem, name: e.target.value})}
             placeholder="Например: Первичный приём врача ортопеда-травматолога"
@@ -1472,7 +1472,7 @@ export default function Operations() {
             )}
           />
           <TextField
-            fullWidth margin="normal" label="Норма расхода на 1 процедуру" type="number"
+            fullWidth margin="normal" label="Норма расхода на 1 сервис" type="number"
             value={editingDetailItem?.quantity || ''}
             onChange={(e) => setEditingDetailItem({...editingDetailItem, quantity: Number(e.target.value)})}
           />
@@ -1504,7 +1504,7 @@ export default function Operations() {
             <PrintIcon sx={{ color: '#0F3C64' }} />
             <Box>
               <Typography variant="h6" sx={{ fontWeight: 800, color: '#0F3C64', lineHeight: 1.2 }}>
-                Предпросмотр бланка калькуляции ({printOperations.length} {printOperations.length === 1 ? 'процедура' : 'процедур'})
+                Предпросмотр бланка калькуляции ({printOperations.length} {printOperations.length === 1 ? 'сервис' : 'сервисов'})
               </Typography>
               <Typography variant="caption" sx={{ color: '#64748B' }}>
                 Официальный расчет себестоимости и нормативного расхода материалов клиники

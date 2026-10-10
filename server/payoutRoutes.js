@@ -163,7 +163,7 @@ router.get('/staff-rates/:staffId', async (req, res) => {
         sor.role_in_procedure,
         COALESCE(sor.payout_percent, sch.default_rate_percent, 20.0) AS effective_percent,
         sor.payout_percent AS custom_percent,
-        COALESCE(sor.fixed_min_payout, 0.0) AS fixed_min_payout,
+        COALESCE(sor.fixed_min_payout, 100.0) AS fixed_min_payout,
         COALESCE(sor.fixed_bonus, 0.0) AS fixed_bonus,
         sor.notes AS rate_notes
       FROM operations o
@@ -174,6 +174,22 @@ router.get('/staff-rates/:staffId', async (req, res) => {
     `;
     const rows = await allAsync(sql, [staffId, staffId]);
     res.json({ success: true, rates: rows });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// POST /api/payouts/staff-rates/bulk-set-min - Bulk set minimum guarantee for staff or all
+router.post('/staff-rates/bulk-set-min', async (req, res) => {
+  const { staffId, min_value = 100, apply_to_all_staff = false } = req.body;
+  try {
+    const val = Number(min_value);
+    if (apply_to_all_staff) {
+      await runAsync("UPDATE staff_operation_rates SET fixed_min_payout = ?", [val]);
+    } else if (staffId) {
+      await runAsync("UPDATE staff_operation_rates SET fixed_min_payout = ? WHERE staff_id = ?", [val, staffId]);
+    }
+    res.json({ success: true, min_value: val });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -384,7 +400,7 @@ router.post('/preview-calculation', async (req, res) => {
         ? Number(brigade.custom_doctor_pct)
         : (docRatesMap[svc.operation_id] ? docRatesMap[svc.operation_id].payout_percent : defaultDocRate);
       
-      let docMin = docRatesMap[svc.operation_id] ? Number(docRatesMap[svc.operation_id].fixed_min_payout || 0) : 0;
+      let docMin = docRatesMap[svc.operation_id] ? Number(docRatesMap[svc.operation_id].fixed_min_payout ?? 100) : 100;
       let calculatedDocPayout = Math.round((margin * (docRate / 100)) * 100) / 100;
       let appliedDocMin = false;
       if (docMin > 0 && calculatedDocPayout < docMin) {
@@ -402,7 +418,7 @@ router.post('/preview-calculation', async (req, res) => {
           ? Number(brigade.custom_nurse_pct)
           : (nurseRatesMap[svc.operation_id] ? nurseRatesMap[svc.operation_id].payout_percent : defaultNurseRate);
         
-        let nurseMin = nurseRatesMap[svc.operation_id] ? Number(nurseRatesMap[svc.operation_id].fixed_min_payout || 0) : 0;
+        let nurseMin = nurseRatesMap[svc.operation_id] ? Number(nurseRatesMap[svc.operation_id].fixed_min_payout ?? 100) : 100;
         calculatedNursePayout = Math.round((margin * (nurseRate / 100)) * 100) / 100;
         if (nurseMin > 0 && calculatedNursePayout < nurseMin) {
           calculatedNursePayout = nurseMin;
@@ -768,35 +784,82 @@ router.put('/accruals/:id', async (req, res) => {
   }
 });
 
-// DELETE /api/payouts/accruals/:id - Cancel/delete accrual
+// DELETE /api/payouts/accruals/:id - Cancel/annul accrual (sets status to 'cancelled')
 router.delete('/accruals/:id', async (req, res) => {
   const { id } = req.params;
+  const { hardDelete } = req.query;
   try {
     const current = await getAsync("SELECT * FROM staff_payout_accruals WHERE id = ?", [id]);
     if (!current) {
       return res.status(404).json({ success: false, error: 'Начисление не найдено' });
     }
     if (current.status === 'paid') {
-      return res.status(400).json({ success: false, error: 'Нельзя удалить выплаченное начисление' });
+      return res.status(400).json({ success: false, error: 'Нельзя аннулировать выплаченное начисление' });
     }
 
     const procId = current.procedure_record_id;
-    await runAsync("DELETE FROM staff_payout_accruals WHERE id = ?", [id]);
+    let newStatus = 'storno';
 
-    // Check if procedure has remaining accruals
-    const remaining = await getAsync("SELECT count(*) as count FROM staff_payout_accruals WHERE procedure_record_id = ?", [procId]);
-    if (remaining.count === 0) {
-      await runAsync("DELETE FROM procedure_records WHERE id = ?", [procId]);
+    if (hardDelete === 'true') {
+      await runAsync("DELETE FROM staff_payout_accruals WHERE id = ?", [id]);
+      const remaining = await getAsync("SELECT count(*) as count FROM staff_payout_accruals WHERE procedure_record_id = ?", [procId]);
+      if (remaining.count === 0) {
+        await runAsync("DELETE FROM procedure_records WHERE id = ?", [procId]);
+      }
+      newStatus = 'deleted';
     } else {
-      await runAsync(`
-        UPDATE procedure_records
-        SET total_staff_payouts = (SELECT COALESCE(SUM(final_payout), 0) FROM staff_payout_accruals WHERE procedure_record_id = ?),
-            clinic_profit = margin_base - (SELECT COALESCE(SUM(final_payout), 0) FROM staff_payout_accruals WHERE procedure_record_id = ?)
-        WHERE id = ?
-      `, [procId, procId, procId]);
+      // Toggle cancellation status (if already storno -> restore to accrued)
+      newStatus = current.status === 'storno' ? 'accrued' : 'storno';
+      const isStorno = newStatus === 'storno' ? 1 : 0;
+      await runAsync("UPDATE staff_payout_accruals SET status = ?, is_storno = ? WHERE id = ?", [newStatus, isStorno, id]);
     }
 
-    res.json({ success: true });
+    // Recalculate procedure totals excluding storno
+    await runAsync(`
+      UPDATE procedure_records
+      SET total_staff_payouts = (SELECT COALESCE(SUM(final_payout), 0) FROM staff_payout_accruals WHERE procedure_record_id = ? AND status != 'storno'),
+          clinic_profit = margin_base - (SELECT COALESCE(SUM(final_payout), 0) FROM staff_payout_accruals WHERE procedure_record_id = ? AND status != 'storno'),
+          accrual_status = CASE 
+            WHEN (SELECT COUNT(*) FROM staff_payout_accruals WHERE procedure_record_id = ? AND status != 'storno') = 0 THEN 'storno'
+            ELSE 'accrued'
+          END
+      WHERE id = ?
+    `, [procId, procId, procId, procId]);
+
+    res.json({ success: true, status: newStatus });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// POST /api/payouts/accruals/bulk-annul - Mass annul accruals
+router.post('/accruals/bulk-annul', async (req, res) => {
+  const { accrualIds } = req.body;
+  if (!Array.isArray(accrualIds) || accrualIds.length === 0) {
+    return res.status(400).json({ success: false, error: 'Accrual IDs are required' });
+  }
+
+  try {
+    const placeholders = accrualIds.map(() => '?').join(',');
+    await runAsync(`UPDATE staff_payout_accruals SET status = 'storno', is_storno = 1 WHERE id IN (${placeholders}) AND status != 'paid'`, accrualIds);
+
+    // Recalculate affected procedure records
+    const procs = await allAsync(`SELECT DISTINCT procedure_record_id FROM staff_payout_accruals WHERE id IN (${placeholders})`, accrualIds);
+    for (const p of procs) {
+      const procId = p.procedure_record_id;
+      await runAsync(`
+        UPDATE procedure_records
+        SET total_staff_payouts = (SELECT COALESCE(SUM(final_payout), 0) FROM staff_payout_accruals WHERE procedure_record_id = ? AND status != 'storno'),
+            clinic_profit = margin_base - (SELECT COALESCE(SUM(final_payout), 0) FROM staff_payout_accruals WHERE procedure_record_id = ? AND status != 'storno'),
+            accrual_status = CASE 
+              WHEN (SELECT COUNT(*) FROM staff_payout_accruals WHERE procedure_record_id = ? AND status != 'storno') = 0 THEN 'storno'
+              ELSE accrual_status
+            END
+        WHERE id = ?
+      `, [procId, procId, procId, procId]);
+    }
+
+    res.json({ success: true, annulledCount: accrualIds.length });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -813,6 +876,22 @@ router.post('/accruals/bulk-approve', async (req, res) => {
     const placeholders = accrualIds.map(() => '?').join(',');
     await runAsync(`UPDATE staff_payout_accruals SET status = 'approved' WHERE id IN (${placeholders}) AND status != 'paid'`, accrualIds);
     res.json({ success: true, approvedCount: accrualIds.length });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// POST /api/payouts/accruals/bulk-pay - Mass mark accruals as paid
+router.post('/accruals/bulk-pay', async (req, res) => {
+  const { accrualIds } = req.body;
+  if (!Array.isArray(accrualIds) || accrualIds.length === 0) {
+    return res.status(400).json({ success: false, error: 'Accrual IDs are required' });
+  }
+
+  try {
+    const placeholders = accrualIds.map(() => '?').join(',');
+    await runAsync(`UPDATE staff_payout_accruals SET status = 'paid' WHERE id IN (${placeholders}) AND status != 'storno'`, accrualIds);
+    res.json({ success: true, paidCount: accrualIds.length });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -841,54 +920,77 @@ router.get('/sheets', async (req, res) => {
   }
 });
 
-// POST /api/payouts/sheets - Create payout sheet from selected accruals
+// POST /api/payouts/sheets - Create payout sheet from selected accruals (auto-groups per staff)
 router.post('/sheets', async (req, res) => {
   const { staff_id, period_start, period_end, accrual_ids, notes } = req.body;
 
-  if (!staff_id || !period_start || !period_end || !Array.isArray(accrual_ids) || accrual_ids.length === 0) {
-    return res.status(400).json({ success: false, error: 'Staff, period, and accruals are required' });
+  if (!period_start || !period_end || !Array.isArray(accrual_ids) || accrual_ids.length === 0) {
+    return res.status(400).json({ success: false, error: 'Period and accruals are required' });
   }
 
   try {
     const placeholders = accrual_ids.map(() => '?').join(',');
-    const summary = await getAsync(`
-      SELECT 
-        count(*) AS total_count,
-        COALESCE(SUM(margin_base), 0) AS total_margin,
-        COALESCE(SUM(final_payout), 0) AS total_payout
-      FROM staff_payout_accruals
-      WHERE id IN (${placeholders})
-    `, accrual_ids);
-
-    const sheetCountRow = await getAsync("SELECT count(*) as count FROM staff_payout_sheets");
-    const sheetNum = `ВЫП-${period_start.slice(0, 7)}-${String(sheetCountRow.count + 1).padStart(3, '0')}`;
-
-    const insertSql = `
-      INSERT INTO staff_payout_sheets (
-        sheet_number, staff_id, period_start, period_end, total_operations_count,
-        total_margin_base, total_payout_amount, status, notes
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, 'draft', ?)
-    `;
-    const result = await runAsync(insertSql, [
-      sheetNum,
-      staff_id,
-      period_start,
-      period_end,
-      summary.total_count,
-      summary.total_margin,
-      summary.total_payout,
-      notes || ''
-    ]);
-
-    const sheetId = result.lastID;
-
-    // Attach accruals to this sheet and update status
-    await runAsync(
-      `UPDATE staff_payout_accruals SET sheet_id = ?, status = 'in_sheet' WHERE id IN (${placeholders})`,
-      [sheetId, ...accrual_ids]
+    
+    // Find staff members for selected accruals
+    const staffRows = await allAsync(
+      `SELECT DISTINCT doctor_or_staff_id AS staff_id FROM staff_payout_accruals WHERE id IN (${placeholders})`,
+      accrual_ids
     );
 
-    res.json({ success: true, sheetId, sheetNumber: sheetNum });
+    if (staffRows.length === 0) {
+      return res.status(400).json({ success: false, error: 'Не найдены начисления для ведомости' });
+    }
+
+    const targetStaffIds = staff_id ? [Number(staff_id)] : staffRows.map(s => s.staff_id);
+    let createdSheets = [];
+
+    for (const sid of targetStaffIds) {
+      const staffAccruals = await allAsync(
+        `SELECT id, margin_base, final_payout FROM staff_payout_accruals WHERE id IN (${placeholders}) AND doctor_or_staff_id = ?`,
+        [...accrual_ids, sid]
+      );
+      if (staffAccruals.length === 0) continue;
+
+      const subIds = staffAccruals.map(a => a.id);
+      const subPlaceholders = subIds.map(() => '?').join(',');
+      const totalMargin = staffAccruals.reduce((sum, a) => sum + (Number(a.margin_base) || 0), 0);
+      const totalPayout = staffAccruals.reduce((sum, a) => sum + (Number(a.final_payout) || 0), 0);
+
+      const sheetCountRow = await getAsync("SELECT count(*) as count FROM staff_payout_sheets");
+      const sheetNum = `ВЫП-${period_start.slice(0, 7)}-${String(sheetCountRow.count + 1).padStart(3, '0')}`;
+
+      const insertSql = `
+        INSERT INTO staff_payout_sheets (
+          sheet_number, staff_id, period_start, period_end, total_operations_count,
+          total_margin_base, total_payout_amount, status, notes
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, 'draft', ?)
+      `;
+      const result = await runAsync(insertSql, [
+        sheetNum,
+        sid,
+        period_start,
+        period_end,
+        staffAccruals.length,
+        Math.round(totalMargin * 100) / 100,
+        Math.round(totalPayout * 100) / 100,
+        notes || ''
+      ]);
+
+      const sheetId = result.lastID;
+      await runAsync(
+        `UPDATE staff_payout_accruals SET sheet_id = ?, status = 'in_sheet' WHERE id IN (${subPlaceholders})`,
+        [sheetId, ...subIds]
+      );
+
+      createdSheets.push({ sheetId, sheetNumber: sheetNum, staffId: sid, count: staffAccruals.length });
+    }
+
+    res.json({
+      success: true,
+      sheets: createdSheets,
+      sheetId: createdSheets[0]?.sheetId,
+      sheetNumber: createdSheets[0]?.sheetNumber
+    });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }

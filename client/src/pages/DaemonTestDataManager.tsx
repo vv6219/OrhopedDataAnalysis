@@ -207,7 +207,7 @@ export default function DaemonTestDataManager() {
                 Текущее состояние базы данных (маркер [TEST_DAEMON])
               </Typography>
               <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                Изолированный контур тестовых записей модуля выплат персоналу
+                Изолированный контур тестовых записей модуля выплат сотрудникам
               </Typography>
             </Box>
           </Box>
@@ -255,7 +255,7 @@ export default function DaemonTestDataManager() {
                 sx={{ fontWeight: 600 }}
               />
               <Chip
-                label={`Процедур: ${stats.proceduresCount}`}
+                label={`Сервисов: ${stats.proceduresCount}`}
                 color={stats.proceduresCount > 0 ? 'primary' : 'default'}
                 variant={stats.proceduresCount > 0 ? 'filled' : 'outlined'}
                 size="small"
@@ -331,10 +331,10 @@ export default function DaemonTestDataManager() {
                   • 3 сотрудника Staff (врачи, медсестра) и 3 пациента Patients
                 </Typography>
                 <Typography variant="caption" sx={{ fontWeight: 600, color: '#166534' }}>
-                  • 4 операции Operations и 4 набора Materials с нормативами
+                  • 4 сервиса и 4 набора Materials с нормативами
                 </Typography>
                 <Typography variant="caption" sx={{ fontWeight: 600, color: '#166534' }}>
-                  • 22 процедуры в 3 ведомостях, 4 нерассчитанные услуги в очереди
+                  • 22 сервиса в 3 ведомостях, 4 нерассчитанных сервиса в очереди
                 </Typography>
               </Box>
             </CardContent>
@@ -407,7 +407,7 @@ export default function DaemonTestDataManager() {
                   • Удаляет только данные с маркером [TEST_DAEMON]
                 </Typography>
                 <Typography variant="caption" sx={{ fontWeight: 600, color: '#991B1B' }}>
-                  • Защита рабочих данных: реальные пациенты, приемы, операции, материалы и сотрудники клиники не затрагиваются
+                  • Защита рабочих данных: реальные пациенты, приемы, сервисы, материалы и сотрудники клиники не затрагиваются
                 </Typography>
                 <Typography variant="caption" sx={{ fontWeight: 600, color: '#991B1B' }}>
                   • Освобождает все блокировки и полностью очищает тестовый контур

@@ -89,11 +89,11 @@ export default function UserGuide() {
       title: '1. Концептуальная модель данных и взаимосвязь сущностей',
       subtitle: 'Реляционная архитектура базы данных SQLite, ключевые таблицы и связи по внешним ключам (ER)',
       icon: <AccountTreeIcon sx={{ color: '#0F3C64' }} />,
-      tags: ['сущности', 'er', 'база данных', 'foreign keys', 'пациенты', 'персонал', 'операции', 'bom', 'склад', 'начисления'],
+      tags: ['сущности', 'er', 'база данных', 'foreign keys', 'пациенты', 'сотрудники', 'сервисы', 'bom', 'склад', 'начисления'],
       content: (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           <Typography variant="body2" sx={{ color: '#334155', lineHeight: 1.6 }}>
-            Система МИС «ОртоERP» построена на единой реляционной СУБД SQLite с включенным контролем внешних ключей (<code>PRAGMA foreign_keys = ON</code>). Это гарантирует, что ни одна операция, визит или начисление не могут существовать без родительских записей пациента и врача.
+            Система МИС «ОртоERP» построена на единой реляционной СУБД SQLite с включенным контролем внешних ключей (<code>PRAGMA foreign_keys = ON</code>). Это гарантирует, что ни один сервис, визит или начисление не могут существовать без родительских записей пациента и врача.
           </Typography>
 
           <TableContainer component={Paper} elevation={0} sx={{ border: '1px solid #E2E8F0', borderRadius: 2 }}>
@@ -114,13 +114,13 @@ export default function UserGuide() {
                   <TableCell>Родитель для визитов (<code>appointments</code>) и транзакций (<code>operation_transactions</code>)</TableCell>
                 </TableRow>
                 <TableRow>
-                  <TableCell sx={{ fontWeight: 600 }}>Персонал клиники</TableCell>
+                  <TableCell sx={{ fontWeight: 600 }}>Сотрудники клиники</TableCell>
                   <TableCell><code>staff</code></TableCell>
                   <TableCell><code>id</code>, <code>full_name</code>, <code>role</code>, <code>department</code>, <code>is_active</code></TableCell>
-                  <TableCell>Связан со схемами выплат, ставками и ролями в операциях</TableCell>
+                  <TableCell>Связан со схемами выплат, ставками и ролями в сервисах</TableCell>
                 </TableRow>
                 <TableRow>
-                  <TableCell sx={{ fontWeight: 600 }}>Каталог операций</TableCell>
+                  <TableCell sx={{ fontWeight: 600 }}>Каталог сервисов</TableCell>
                   <TableCell><code>operations</code></TableCell>
                   <TableCell><code>id</code>, <code>name</code>, <code>price</code></TableCell>
                   <TableCell>Содержит спецификацию расхода материалов (BOM) в <code>operation_materials</code></TableCell>
@@ -129,7 +129,7 @@ export default function UserGuide() {
                   <TableCell sx={{ fontWeight: 600 }}>Склад материалов</TableCell>
                   <TableCell><code>materials_catalog</code></TableCell>
                   <TableCell><code>id</code>, <code>material_name</code>, <code>current_unit_cost</code>, <code>package_cost</code></TableCell>
-                  <TableCell>Списывается в операциях и транзакциях (<code>transaction_actual_materials</code>)</TableCell>
+                  <TableCell>Списывается в сервисах и транзакциях (<code>transaction_actual_materials</code>)</TableCell>
                 </TableRow>
                 <TableRow>
                   <TableCell sx={{ fontWeight: 600 }}>Схемы выплат</TableCell>
@@ -138,22 +138,22 @@ export default function UserGuide() {
                   <TableCell>Определяет правила расчета для категорий: Хирургия (35%), Консультации (25%), Сестринское (10%)</TableCell>
                 </TableRow>
                 <TableRow>
-                  <TableCell sx={{ fontWeight: 600 }}>Записи процедур</TableCell>
+                  <TableCell sx={{ fontWeight: 600 }}>Записи сервисов</TableCell>
                   <TableCell><code>procedure_records</code></TableCell>
                   <TableCell><code>id</code>, <code>source_type</code>, <code>source_id</code>, <code>margin_base</code>, <code>dedup_hash</code></TableCell>
-                  <TableCell>Фиксирует факт расчета услуги; защищает от повторного включения в оплату</TableCell>
+                  <TableCell>Фиксирует факт расчета сервиса; защищает от повторного включения в оплату</TableCell>
                 </TableRow>
                 <TableRow>
                   <TableCell sx={{ fontWeight: 600 }}>Начисления выплат</TableCell>
                   <TableCell><code>staff_payout_accruals</code></TableCell>
                   <TableCell><code>id</code>, <code>sheet_id</code>, <code>staff_id</code>, <code>final_payout</code>, <code>status</code></TableCell>
-                  <TableCell>Строки выплат персоналу; группируются в ведомость (<code>staff_payout_sheets</code>)</TableCell>
+                  <TableCell>Строки выплат сотрудникам; группируются в ведомость (<code>staff_payout_sheets</code>)</TableCell>
                 </TableRow>
                 <TableRow>
                   <TableCell sx={{ fontWeight: 600 }}>Мягкие блокировки</TableCell>
                   <TableCell><code>service_calculation_locks</code></TableCell>
                   <TableCell><code>source_type</code>, <code>source_id</code>, <code>lock_token</code>, <code>expires_at</code></TableCell>
-                  <TableCell>Защищают услуги от параллельного расчета несколькими операторами (таймаут 30 мин)</TableCell>
+                  <TableCell>Защищают сервисы от параллельного расчета несколькими операторами (таймаут 30 мин)</TableCell>
                 </TableRow>
               </TableBody>
             </Table>
@@ -187,13 +187,13 @@ export default function UserGuide() {
               2. Маржинальная база клиники (Margin Base)
             </Typography>
             <Typography variant="body2" sx={{ color: '#334155', mb: 1 }}>
-              Маржинальная база — это очищенный финансовый остаток стоимости услуги после покрытия всех прямых расходов на медикаменты. База ограничена снизу нулем:
+              Маржинальная база — это очищенный финансовый остаток стоимости сервиса после покрытия всех прямых расходов на медикаменты. База ограничена снизу нулем:
             </Typography>
             <Paper elevation={0} sx={{ p: 1.5, bgcolor: '#FFFFFF', border: '1px solid #CBD5E1', fontFamily: 'monospace', fontSize: '0.88rem' }}>
-              Маржинальная база = max(0, Цена услуги для пациента − Себестоимость материалов)
+              Маржинальная база = max(0, Цена сервиса для пациента − Себестоимость материалов)
             </Paper>
             <Alert severity="info" sx={{ mt: 1.5, borderRadius: 1.5 }}>
-              Если стоимость расходников превышает цену услуги (высокозатратная процедура), маржинальная база равна 0 ₽, но врач гарантированно получает оплату по своему минимальному тарифу.
+              Если стоимость расходников превышает цену сервиса (высокозатратный сервис), маржинальная база равна 0 ₽, но врач гарантированно получает оплату по своему минимальному тарифу.
             </Alert>
           </Box>
 
@@ -224,19 +224,19 @@ export default function UserGuide() {
       id: 'section-flow',
       category: 'flow',
       title: '3. Регламентный поток бизнес-процесса (Flow)',
-      subtitle: 'Жизненный цикл оказания услуг: регистрация, мягкая блокировка, предварительный расчет, ACID коммит, сторно',
+      subtitle: 'Жизненный цикл оказания сервисов: регистрация, мягкая блокировка, предварительный расчет, ACID коммит, сторно',
       icon: <TimelineIcon sx={{ color: '#0F3C64' }} />,
       tags: ['flow', 'бизнес-процесс', 'жизненный цикл', 'блокировка', 'коммит', 'сторно', 'корректировка', 'ведомость'],
       content: (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           <Typography variant="body2" sx={{ color: '#334155', lineHeight: 1.6 }}>
-            Весь процесс начисления сдельной оплаты труда медицинского персонала регламентирован строгой последовательностью фаз:
+            Весь процесс начисления сдельной оплаты труда сотрудников регламентирован строгой последовательностью фаз:
           </Typography>
 
           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 2 }}>
             <Paper elevation={0} sx={{ p: 2, border: '1px solid #E2E8F0', borderRadius: 2, bgcolor: '#FFFFFF' }}>
               <Typography variant="subtitle2" sx={{ fontWeight: 700, color: '#0F3C64', display: 'flex', alignItems: 'center', gap: 1 }}>
-                <CheckCircleIcon fontSize="small" sx={{ color: '#16A34A' }} /> Шаг 1: Фиксация приема и процедур
+                <CheckCircleIcon fontSize="small" sx={{ color: '#16A34A' }} /> Шаг 1: Фиксация приема и сервисов
               </Typography>
               <Typography variant="body2" sx={{ color: '#64748B', mt: 0.8, fontSize: '0.85rem' }}>
                 Врач или регистратура через Мастер оформления визита регистрирует завершение приема. Запись попадает в таблицу <code>operation_transactions</code> со статусом «Нерассчитана».
@@ -248,7 +248,7 @@ export default function UserGuide() {
                 <LockIcon fontSize="small" sx={{ color: '#D97706' }} /> Шаг 2: Захват мягкой блокировки (Lock)
               </Typography>
               <Typography variant="body2" sx={{ color: '#64748B', mt: 0.8, fontSize: '0.85rem' }}>
-                Бухгалтер в модуле «Выплаты сотрудникам» выбирает услуги месяца. Сервер блокирует выбранные строки на 30 минут, генерируя <code>lockToken</code>. Другой бухгалтер не сможет взять те же услуги в параллельный расчет.
+                Бухгалтер в модуле «Выплаты сотрудникам» выбирает сервисы месяца. Сервер блокирует выбранные строки на 30 минут, генерируя <code>lockToken</code>. Другой бухгалтер не сможет взять те же сервисы в параллельный расчет.
               </Typography>
             </Paper>
 
@@ -272,7 +272,7 @@ export default function UserGuide() {
           </Box>
 
           <Alert severity="warning" sx={{ borderRadius: 2 }}>
-            <strong>Защита от дублей (Dedup Guard):</strong> Каждая процедура получает уникальный хэш <code>dedup_hash</code>. Повторный запуск коммита тех же услуг не создаст дублирующих начислений — система просто пропустит уже рассчитанные записи.
+            <strong>Защита от дублей (Dedup Guard):</strong> Каждый сервис получает уникальный хэш <code>dedup_hash</code>. Повторный запуск коммита тех же сервисов не создаст дублирующих начислений — система просто пропустит уже рассчитанные записи.
           </Alert>
 
           <Box sx={{ p: 2, border: '1px solid #E2E8F0', borderRadius: 2, bgcolor: '#F8FAFC' }}>
@@ -293,7 +293,7 @@ export default function UserGuide() {
       title: '4. Порядок определения и ввода первичных данных',
       subtitle: 'Регламент заведения номенклатуры, спецификаций BOM, картотеки пациентов и врачей',
       icon: <InputIcon sx={{ color: '#0F3C64' }} />,
-      tags: ['ввод данных', 'инструкция', 'номенклатура', 'bom', 'пациенты', 'персонал', 'порядок'],
+      tags: ['ввод данных', 'инструкция', 'номенклатура', 'bom', 'пациенты', 'сотрудники', 'порядок'],
       content: (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           <Typography variant="body2" sx={{ color: '#334155', lineHeight: 1.6 }}>
@@ -305,16 +305,16 @@ export default function UserGuide() {
               <strong>Склад материалов и медикаментов (`/inventory`):</strong> заведение номенклатурных позиций (наименование, учетная стоимость единицы, цена упаковки, единица измерения). Заполнение нулевых стоимостей обязательно для корректной оценки себестоимости.
             </li>
             <li>
-              <strong>Каталог операций и услуг (`/operations`):</strong> создание позиций процедур, задание цены для пациента, привязка нормативного комплекта расходных материалов через кнопку <strong>«Расходники (BOM)»</strong> с указанием количества.
+              <strong>Каталог сервисов (`/operations`):</strong> создание позиций сервисов, задание цены для пациента, привязка нормативного комплекта расходных материалов через кнопку <strong>«Расходники (BOM)»</strong> с указанием количества.
             </li>
             <li>
-              <strong>Персонал и врачи (`/staff`):</strong> ввод сотрудников, распределение по должностям, выбор базовой тарифной схемы (Хирургия 35%, Консультации 25%, Сестринское 10%), назначение персональных фикс-минимумов.
+              <strong>Сотрудники и врачи (`/staff`):</strong> ввод сотрудников, распределение по должностям, выбор базовой тарифной схемы (Хирургия 35%, Консультации 25%, Сестринское 10%), назначение персональных фикс-минимумов.
             </li>
             <li>
               <strong>Картотека пациентов (`/patients`):</strong> создание электронной медицинской карты (ЭМК), заполнение ФИО, даты рождения, телефона и полиса ДМС.
             </li>
             <li>
-              <strong>Оформление визита (`/checkout`):</strong> выбор пациента, лечащего врача, процедур и фактических расходников с фиксацией способа оплаты.
+              <strong>Оформление визита (`/checkout`):</strong> выбор пациента, лечащего врача, сервисов и фактических расходников с фиксацией способа оплаты.
             </li>
           </Box>
         </Box>
@@ -359,7 +359,7 @@ export default function UserGuide() {
                 Выплаты сотрудникам (`/staff-payouts`)
               </Typography>
               <Typography variant="body2" sx={{ color: '#64748B', mt: 0.5, fontSize: '0.85rem' }}>
-                • Вкладка 1: Мастер расчета с очередью нерассчитанных услуг.<br />
+                • Вкладка 1: Мастер расчета с очередью нерассчитанных сервисов.<br />
                 • Вкладка 2: Реестр начислений с корректировками и сторно.<br />
                 • Вкладка 3: Ведомости за периоды с печатью бланка А4 и экспортом в CSV.<br />
                 • Вкладка 4: BI Аналитика и рейтинг врачей с окупаемостью (ROI).
@@ -430,7 +430,7 @@ export default function UserGuide() {
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           <Box sx={{ p: 2, border: '1px solid #E2E8F0', borderRadius: 2 }}>
             <Typography variant="subtitle2" sx={{ fontWeight: 700, color: '#0F3C64' }}>
-              Вопрос: Что делать, если услуга заблокирована другим пользователем?
+              Вопрос: Что делать, если сервис заблокирован другим пользователем?
             </Typography>
             <Typography variant="body2" sx={{ color: '#475569', mt: 0.5, fontSize: '0.88rem' }}>
               Мягкая блокировка действует ровно 30 минут. По истечении этого времени система автоматически снимет блокировку при следующем обращении к серверу. Также блокировку можно снять вручную через интерфейс мастера.
@@ -451,7 +451,7 @@ export default function UserGuide() {
               Вопрос: Как работает тестовый набор демо-данных [TEST_DAEMON]?
             </Typography>
             <Typography variant="body2" sx={{ color: '#475569', mt: 0.5, fontSize: '0.88rem' }}>
-              В разделе <strong>«Администратор → Демо-данные»</strong> доступен автономный контур тестирования. Он создает полностью изолированные карточки пациентов, врачей, операции и ведомости с префиксом <code>[TEST_DAEMON]</code>. Они не влияют на базовую отчетность клиники и удаляются одной кнопкой.
+              В разделе <strong>«Администратор → Демо-данные»</strong> доступен автономный контур тестирования. Он создает полностью изолированные карточки пациентов, врачей, сервисы и ведомости с префиксом <code>[TEST_DAEMON]</code>. Они не влияют на базовую отчетность клиники и удаляются одной кнопкой.
             </Typography>
           </Box>
         </Box>

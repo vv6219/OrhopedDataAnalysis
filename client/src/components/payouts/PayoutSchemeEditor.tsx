@@ -87,6 +87,40 @@ export function PayoutSchemeEditor() {
 
   const [notification, setNotification] = useState<string | null>(null);
 
+  // Bulk min payout state
+  const [bulkMinVal, setBulkMinVal] = useState<number>(100);
+  const [applyingBulk, setApplyingBulk] = useState<boolean>(false);
+
+  const handleApplyBulkMinToCurrent = () => {
+    setRates(prev => prev.map(r => ({ ...r, fixed_min_payout: bulkMinVal })));
+    setNotification(`Фикс-минимум ${bulkMinVal} ₽ установлен для всех сервисов текущего сотрудника (нажмите «Сохранить ставки» для фиксации в БД)`);
+  };
+
+  const handleApplyBulkMinToAllStaff = async () => {
+    if (!confirm(`Установить гарантированный фикс-минимум ${bulkMinVal} ₽ абсолютно для всех сотрудников и сервисов клиники?`)) return;
+    setApplyingBulk(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/payouts/staff-rates/bulk-set-min`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ min_value: bulkMinVal, apply_to_all_staff: true })
+      });
+      if (res.ok) {
+        setNotification(`Успешно установлен фикс-минимум ${bulkMinVal} ₽ для всех специалистов клиники!`);
+        if (selectedStaffId) {
+          fetchRates(selectedStaffId);
+        }
+      } else {
+        const err = await res.json().catch(() => ({}));
+        alert('Ошибка: ' + (err.error || res.statusText));
+      }
+    } catch (err: any) {
+      alert('Ошибка: ' + err.message);
+    } finally {
+      setApplyingBulk(false);
+    }
+  };
+
   const fetchData = async () => {
     try {
       const [schRes, stfRes] = await Promise.all([
@@ -275,7 +309,7 @@ export function PayoutSchemeEditor() {
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 2, mb: 2 }}>
             <Box>
               <Typography variant="h6" sx={{ fontWeight: 700, color: '#0F3C64' }}>
-                Персональные ставки сотрудника по процедурам
+                Персональные ставки сотрудника по сервисам
               </Typography>
               <Typography variant="caption" sx={{ color: '#64748B' }}>
                 Индивидуальное переопределение процента от маржинального дохода и гарантированного минимума
@@ -301,11 +335,45 @@ export function PayoutSchemeEditor() {
 
               <TextField
                 size="small"
-                placeholder="Поиск процедуры..."
+                placeholder="Поиск сервиса..."
                 value={searchOp}
                 onChange={e => setSearchOp(e.target.value)}
-                sx={{ width: 220 }}
+                sx={{ width: 180 }}
               />
+
+              {/* Bulk Min Payout Setting */}
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8, bgcolor: '#F1F5F9', p: 0.5, px: 1, borderRadius: 2, border: '1px solid #CBD5E1' }}>
+                <Typography variant="caption" sx={{ fontWeight: 700, color: '#334155' }}>
+                  Фикс-мин:
+                </Typography>
+                <TextField
+                  size="small"
+                  type="number"
+                  value={bulkMinVal}
+                  onChange={e => setBulkMinVal(Number(e.target.value))}
+                  sx={{ width: 80, bgcolor: '#FFFFFF', '& input': { textAlign: 'center', p: 0.5, fontWeight: 700 } }}
+                />
+                <Typography variant="caption" sx={{ fontWeight: 600, color: '#64748B' }}>₽</Typography>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  onClick={handleApplyBulkMinToCurrent}
+                  sx={{ fontSize: '0.72rem', py: 0.3, px: 0.8, textTransform: 'none', fontWeight: 600 }}
+                  title="Установить это значение для всех 162 сервисов текущего специалиста"
+                >
+                  Текущему
+                </Button>
+                <Button
+                  size="small"
+                  variant="contained"
+                  disabled={applyingBulk}
+                  onClick={handleApplyBulkMinToAllStaff}
+                  sx={{ fontSize: '0.72rem', py: 0.3, px: 0.8, textTransform: 'none', fontWeight: 700, bgcolor: '#0284C7', '&:hover': { bgcolor: '#0369A1' } }}
+                  title="Записать значение 100 ₽ в базу данных сразу для всех сотрудников и сервисов клиники"
+                >
+                  {applyingBulk ? '...' : 'Всем (Клиника)'}
+                </Button>
+              </Box>
 
               <Button
                 variant="contained"
@@ -321,7 +389,7 @@ export function PayoutSchemeEditor() {
 
           {selectedStaff && (
             <Alert severity="info" sx={{ mb: 2, py: 0.5, borderRadius: 2 }}>
-              Назначенная схема: <strong>{selectedStaff.scheme_name || 'Не назначена'}</strong> (базовый процент схемы: {selectedStaff.scheme_default_rate || 20}%). Если персональный % не задан, применяется процент схемы.
+              Назначенная схема: <strong>{selectedStaff.scheme_name || 'Не назначена'}</strong> (базовый процент схемы: {selectedStaff.scheme_default_rate || 20}%). Гарантированный минимум по умолчанию: <strong>100 ₽</strong>.
             </Alert>
           )}
 
@@ -335,7 +403,7 @@ export function PayoutSchemeEditor() {
                 <TableHead sx={{ bgcolor: '#F8FAFC' }}>
                   <TableRow>
                     <TableCell sx={{ fontWeight: 700, width: '6%' }}>Код</TableCell>
-                    <TableCell sx={{ fontWeight: 700, width: '38%' }}>Медицинская услуга / операция</TableCell>
+                    <TableCell sx={{ fontWeight: 700, width: '38%' }}>Сервис</TableCell>
                     <TableCell align="right" sx={{ fontWeight: 700, width: '12%' }}>Прейскурант</TableCell>
                     <TableCell align="center" sx={{ fontWeight: 700, width: '14%' }}>Действующий %</TableCell>
                     <TableCell align="center" sx={{ fontWeight: 700, width: '14%' }}>Персональный %</TableCell>
@@ -365,10 +433,10 @@ export function PayoutSchemeEditor() {
                         <TextField
                           size="small"
                           type="number"
-                          value={row.fixed_min_payout || ''}
-                          placeholder="0"
+                          value={row.fixed_min_payout !== undefined && row.fixed_min_payout !== null ? row.fixed_min_payout : 100}
+                          placeholder="100"
                           onChange={e => handleRateChange(row.operation_id, 'fixed_min_payout', e.target.value === '' ? 0 : Number(e.target.value))}
-                          sx={{ width: 110, '& input': { textAlign: 'center', p: 0.8 } }}
+                          sx={{ width: 110, '& input': { textAlign: 'center', p: 0.8, fontWeight: 600 } }}
                         />
                       </TableCell>
                     </TableRow>
