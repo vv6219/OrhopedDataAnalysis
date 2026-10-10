@@ -13,7 +13,7 @@ import {
   InputLabel,
   Select,
   MenuItem,
-  CircularProgress,
+  Divider,
   Tooltip,
   Table,
   TableHead,
@@ -59,7 +59,6 @@ import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import FilterAltOffIcon from '@mui/icons-material/FilterAltOff';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
-import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import StarIcon from '@mui/icons-material/Star';
 import PetsIcon from '@mui/icons-material/Pets';
@@ -1423,7 +1422,7 @@ export default function ServicesBiAnalytics() {
             toolbar: {
               onResetFilters: handleResetFilters,
               onPrint: handlePrint
-            },
+            } as any,
             footer: {
               totalCount: gridTotals.count,
               totalRevenue: gridTotals.revenue,
@@ -1431,7 +1430,7 @@ export default function ServicesBiAnalytics() {
               totalStaffPayout: gridTotals.payout,
               totalClinicProfit: gridTotals.profit,
               avgMarginPct: gridTotals.avgMargin
-            }
+            } as any
           }}
           sx={{
             width: '100%',
