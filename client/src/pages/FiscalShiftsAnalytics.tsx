@@ -659,7 +659,16 @@ export default function FiscalShiftsAnalytics() {
         onClose={() => setDetailsDrawerOpen(false)}
         slotProps={{
           paper: {
-            sx: { width: { xs: '100%', sm: 620, md: 720 }, p: 0, bgcolor: '#F8FAFC' }
+            sx: {
+              width: { xs: '100%', sm: 620, md: 720 },
+              height: '100vh',
+              maxHeight: '100vh',
+              overflow: 'hidden',
+              display: 'flex',
+              flexDirection: 'column',
+              p: 0,
+              bgcolor: '#F8FAFC'
+            }
           }
         }}
       >
@@ -668,9 +677,9 @@ export default function FiscalShiftsAnalytics() {
             <CircularProgress size={40} sx={{ color: '#0F3C64' }} />
           </Box>
         ) : shiftDetails ? (
-          <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-            {/* Drawer Top Header */}
-            <Box sx={{ bgcolor: '#0F3C64', color: '#FFFFFF', p: 2.5, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', flex: 1, minHeight: 0, overflow: 'hidden' }}>
+            {/* Drawer Top Header (Fixed at top) */}
+            <Box sx={{ bgcolor: '#0F3C64', color: '#FFFFFF', p: 2.5, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
               <Box>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                   <Typography variant="h6" sx={{ fontWeight: 800 }}>
@@ -692,8 +701,8 @@ export default function FiscalShiftsAnalytics() {
               </IconButton>
             </Box>
 
-            {/* Navigation Tabs */}
-            <Box sx={{ borderBottom: 1, borderColor: 'divider', bgcolor: '#FFFFFF' }}>
+            {/* Navigation Tabs (Fixed at top) */}
+            <Box sx={{ borderBottom: 1, borderColor: 'divider', bgcolor: '#FFFFFF', flexShrink: 0 }}>
               <Tabs value={drawerTab} onChange={(_, v) => setDrawerTab(v)} variant="scrollable" scrollButtons="auto">
                 <Tab label="1. Z-отчет (Слип)" sx={{ fontWeight: 600, textTransform: 'none' }} />
                 <Tab label={`2. Чеки (${shiftDetails.receipts?.length || 0})`} sx={{ fontWeight: 600, textTransform: 'none' }} />
@@ -702,12 +711,37 @@ export default function FiscalShiftsAnalytics() {
               </Tabs>
             </Box>
 
-            {/* Tab Contents */}
-            <Box sx={{ p: 2.5, flexGrow: 1, overflowY: 'auto' }}>
+            {/* Tab Contents (Scrollable viewport) */}
+            <Box
+              sx={{
+                p: 2.5,
+                flex: 1,
+                minHeight: 0,
+                overflowY: 'auto',
+                overflowX: 'hidden',
+                '&::-webkit-scrollbar': { width: '8px' },
+                '&::-webkit-scrollbar-track': { background: '#F1F5F9' },
+                '&::-webkit-scrollbar-thumb': { background: '#CBD5E1', borderRadius: '4px' },
+                '&::-webkit-scrollbar-thumb:hover': { background: '#94A3B8' }
+              }}
+            >
               {/* Tab 0: Z-Report Thermal Preview */}
               {drawerTab === 0 && (
-                <Box>
-                  <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1, mb: 2 }}>
+                <Box sx={{ pb: 3 }}>
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      justifyContent: 'flex-end',
+                      gap: 1,
+                      mb: 2,
+                      position: 'sticky',
+                      top: -8,
+                      zIndex: 10,
+                      bgcolor: '#F8FAFC',
+                      py: 1,
+                      borderBottom: '1px solid #E2E8F0'
+                    }}
+                  >
                     <Button
                       variant="contained"
                       startIcon={<PrintIcon />}
@@ -728,8 +762,8 @@ export default function FiscalShiftsAnalytics() {
                     </Button>
                   </Box>
 
-                  <Card sx={{ maxWidth: 360, margin: '0 auto', boxShadow: 3, borderRadius: 2 }}>
-                    <Box sx={{ p: 1, bgcolor: '#FFFFFF' }}>
+                  <Card sx={{ maxWidth: 380, margin: '0 auto', boxShadow: '0 4px 20px rgba(0,0,0,0.08)', borderRadius: 3, mb: 4 }}>
+                    <Box sx={{ p: 2, pb: 3, bgcolor: '#FFFFFF' }}>
                       <FiscalZReportPrintTemplate
                         ref={printRef}
                         data={{

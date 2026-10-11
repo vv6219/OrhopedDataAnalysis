@@ -246,7 +246,7 @@ export const FiscalZReportPrintTemplate = React.forwardRef<HTMLDivElement, Fisca
             </Box>
           </Box>
 
-          <Box sx={{ textAlign: 'center', mt: 2, pt: 1, borderTop: '1px solid #000000' }}>
+          <Box sx={{ textAlign: 'center', mt: 2, pt: 1, pb: 2.5, borderTop: '1px solid #000000' }}>
             <Typography sx={{ fontWeight: 700, fontSize: '11px' }}>СМЕНА ЗАКРЫТА</Typography>
             <Typography sx={{ fontSize: '10px' }}>СПАСИБО ЗА РАБОТУ!</Typography>
           </Box>
