@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
   Box, Typography, Paper, Button, TextField, Switch, FormControlLabel,
   MenuItem, Select, FormControl, InputLabel, Card, CardContent, Chip,
@@ -55,12 +55,27 @@ export interface AuditRecord {
 
 const COMMON_PORTS = ['COM1', 'COM2', 'COM3', 'COM4', 'COM5', 'COM6', 'COM7', 'COM8', '/dev/ttyUSB0'];
 const BAUD_RATES = [9600, 19200, 38400, 57600, 115200];
-const TAX_TYPES = [
-  { value: 6, label: 'Без НДС (пп. 2 п. 2 ст. 149 НК РФ — медицинские услуги)' },
-  { value: 1, label: 'НДС 20%' },
-  { value: 2, label: 'НДС 10%' },
-  { value: 4, label: 'НДС 0%' }
+const TAX_PRESETS = [
+  { value: 6, label: '6: Без НДС (мед. услуги)', regime: 'Без НДС (пп. 2 п. 2 ст. 149 НК РФ — медицинские услуги)' },
+  { value: 1, label: '1: НДС 20%', regime: 'Основная система налогообложения (НДС 20% по ст. 164 НК РФ)' },
+  { value: 2, label: '2: НДС 10%', regime: 'Льготный НДС 10% (ст. 164 НК РФ)' },
+  { value: 4, label: '4: НДС 0%', regime: 'Ставка НДС 0% (ст. 164 НК РФ)' },
+  { value: 3, label: '3: Расчетный 20/120', regime: 'Расчетная ставка НДС 20/120' },
+  { value: 5, label: '5: Расчетный 10/110', regime: 'Расчетная ставка НДС 10/110' },
+  { value: 7, label: '7: НДС 5% (УСН 2025)', regime: 'Специальный налоговый режим УСН (НДС 5% по ст. 164 НК РФ)' },
+  { value: 8, label: '8: НДС 7% (УСН 2025)', regime: 'Специальный налоговый режим УСН (НДС 7% по ст. 164 НК РФ)' }
 ];
+
+function getTaxDescription(taxCode: number | string | undefined): { title: string; isStandard: boolean } {
+  if (taxCode === undefined || taxCode === null || taxCode === '') {
+    return { title: 'Ставка не указана', isStandard: false };
+  }
+  const num = Number(taxCode);
+  if (isNaN(num)) return { title: 'Некорректное число', isStandard: false };
+  const found = TAX_PRESETS.find(p => p.value === num);
+  if (found) return { title: `Стандарт ДТО 10: ${found.label}`, isStandard: true };
+  return { title: `Пользовательский код ставки ДТО 10: ${num}`, isStandard: false };
+}
 const SUBJECT_TYPES = [
   { value: 4, label: '4 — Услуга (медицинские и ортопедические процедуры)' },
   { value: 1, label: '1 — Товар (медикаменты, ортезы, расходные материалы)' }
@@ -148,14 +163,35 @@ export default function FiscalSettings() {
     }));
   };
 
+  const taxVal = formData.default_tax_type;
+  const isTaxValid = useMemo(() => {
+    if (taxVal === undefined || taxVal === null || String(taxVal).trim() === '') return false;
+    const num = Number(taxVal);
+    return Number.isInteger(num) && num >= 0 && num <= 99;
+  }, [taxVal]);
+
+  const taxError = useMemo(() => {
+    if (taxVal === undefined || taxVal === null || String(taxVal).trim() === '') return 'Укажите код ставки НДС';
+    const num = Number(taxVal);
+    if (isNaN(num)) return 'Код ставки должен быть числом';
+    if (!Number.isInteger(num)) return 'Код ставки должен быть целым числом';
+    if (num < 0 || num > 99) return 'Код ставки должен быть в диапазоне от 0 до 99';
+    return null;
+  }, [taxVal]);
+
   const handleSave = async () => {
     if (!selectedProfile) return;
+    if (!isTaxValid) {
+      setAlert({ type: 'error', message: `Ошибка валидации: ${taxError || 'Ставка НДС должна быть целым числом от 0 до 99'}` });
+      return;
+    }
     setSaving(true);
     setAlert(null);
 
     try {
       const payload = {
         ...formData,
+        default_tax_type: Math.floor(Number(formData.default_tax_type)),
         updated_by: 'Администратор'
       };
 
@@ -611,26 +647,61 @@ export default function FiscalSettings() {
           </Box>
 
           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 2.5, mb: 2.5 }}>
-            <FormControl fullWidth>
-              <InputLabel>Ставка НДС по умолчанию</InputLabel>
-              <Select
-                value={formData.default_tax_type ?? 6}
-                label="Ставка НДС по умолчанию"
-                onChange={e => handleChange('default_tax_type', Number(e.target.value))}
-              >
-                {TAX_TYPES.map(t => (
-                  <MenuItem key={t.value} value={t.value}>{t.label}</MenuItem>
-                ))}
-              </Select>
-              <FormHelperText>Для клиники применяется ставка 6 (Без НДС)</FormHelperText>
-            </FormControl>
+            <Box>
+              <TextField
+                fullWidth
+                type="number"
+                label="Ставка НДС (Код ДТО 10 / ФФД 1.2)"
+                value={formData.default_tax_type ?? ''}
+                onChange={e => {
+                  const val = e.target.value === '' ? '' : Number(e.target.value);
+                  handleChange('default_tax_type', val);
+                }}
+                error={Boolean(taxError)}
+                helperText={taxError || getTaxDescription(formData.default_tax_type).title}
+                slotProps={{
+                  htmlInput: { min: 0, max: 99, step: 1 }
+                }}
+              />
+
+              {/* Quick Preset Chips */}
+              <Box sx={{ display: 'flex', gap: 0.8, flexWrap: 'wrap', mt: 1, alignItems: 'center' }}>
+                <Typography variant="caption" sx={{ color: '#718096', fontWeight: 700 }}>
+                  Стандартные пресеты:
+                </Typography>
+                {TAX_PRESETS.map(preset => {
+                  const isSelected = Number(formData.default_tax_type) === preset.value;
+                  return (
+                    <Chip
+                      key={preset.value}
+                      size="small"
+                      label={preset.label}
+                      color={isSelected ? 'primary' : 'default'}
+                      variant={isSelected ? 'filled' : 'outlined'}
+                      onClick={() => {
+                        handleChange('default_tax_type', preset.value);
+                        if (!formData.tax_regime_name || formData.tax_regime_name.includes('НДС')) {
+                          handleChange('tax_regime_name', preset.regime);
+                        }
+                      }}
+                      sx={{
+                        cursor: 'pointer',
+                        fontWeight: isSelected ? 800 : 500,
+                        fontSize: '0.72rem',
+                        '&:hover': { bgcolor: isSelected ? undefined : '#EDF2F7' }
+                      }}
+                    />
+                  );
+                })}
+              </Box>
+            </Box>
 
             <TextField
               fullWidth
               label="Наименование налогового режима"
               value={formData.tax_regime_name || ''}
               onChange={e => handleChange('tax_regime_name', e.target.value)}
-              helperText="Основание освобождения от НДС в чеке"
+              helperText="Основание освобождения или применение ставки в чеке"
             />
           </Box>
 

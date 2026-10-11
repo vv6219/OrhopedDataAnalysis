@@ -110,6 +110,12 @@ router.post('/settings', async (req, res) => {
     return res.status(400).json({ error: 'Название профиля обязательно' });
   }
 
+  const taxNum = Number(default_tax_type);
+  if (isNaN(taxNum) || taxNum < 0 || taxNum > 99) {
+    return res.status(400).json({ error: 'Код ставки НДС должен быть целым числом от 0 до 99' });
+  }
+  const cleanTaxType = Math.floor(taxNum);
+
   try {
     if (Number(is_active) === 1) {
       await new Promise((resolve, reject) => {
@@ -136,7 +142,7 @@ router.post('/settings', async (req, res) => {
       Number(execution_timeout_seconds) || 35,
       fn_number,
       kkt_reg_number,
-      Number(default_tax_type) || 6,
+      cleanTaxType,
       tax_regime_name,
       Number(payment_subject_type) || 4,
       Number(payment_method_type) || 4,
@@ -210,6 +216,14 @@ router.put('/settings/:id', (req, res) => {
       notes: req.body.notes !== undefined ? req.body.notes : oldRow.notes,
       updated_by: req.body.updated_by || 'Администратор'
     };
+
+    if (newValues.default_tax_type !== undefined) {
+      const taxNum = Number(newValues.default_tax_type);
+      if (isNaN(taxNum) || taxNum < 0 || taxNum > 99) {
+        return res.status(400).json({ error: 'Код ставки НДС должен быть целым числом от 0 до 99' });
+      }
+      newValues.default_tax_type = Math.floor(taxNum);
+    }
 
     // Calculate diff for audit
     const changedFields = [];
