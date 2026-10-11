@@ -2,22 +2,22 @@ import { Box, Typography } from '@mui/material';
 import { GridFooterContainer, GridPagination } from '@mui/x-data-grid';
 
 export interface ServicesBiGridFooterProps {
-  totalCount: number;
-  totalRevenue: number;
-  totalBom: number;
-  totalStaffPayout: number;
-  totalClinicProfit: number;
-  avgMarginPct: number;
+  totalCount?: number;
+  totalRevenue?: number;
+  totalBom?: number;
+  totalStaffPayout?: number;
+  totalClinicProfit?: number;
+  avgMarginPct?: number;
   [key: string]: any;
 }
 
 export function ServicesBiGridFooter({
-  totalCount,
-  totalRevenue,
-  totalBom,
-  totalStaffPayout,
-  totalClinicProfit,
-  avgMarginPct
+  totalCount = 0,
+  totalRevenue = 0,
+  totalBom = 0,
+  totalStaffPayout = 0,
+  totalClinicProfit = 0,
+  avgMarginPct = 0
 }: ServicesBiGridFooterProps) {
   const formatCurrency = (val: number) => {
     if (val === undefined || val === null || isNaN(val)) return '0 ₽';

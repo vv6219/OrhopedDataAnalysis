@@ -33,7 +33,6 @@ import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
 import BarChartIcon from '@mui/icons-material/BarChart';
 import SettingsIcon from '@mui/icons-material/Settings';
 import EditIcon from '@mui/icons-material/Edit';
-import DeleteIcon from '@mui/icons-material/Delete';
 import BlockIcon from '@mui/icons-material/Block';
 import RestoreIcon from '@mui/icons-material/Restore';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
@@ -42,8 +41,6 @@ import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
 import PaymentsIcon from '@mui/icons-material/Payments';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import PrintIcon from '@mui/icons-material/Print';
-import DescriptionIcon from '@mui/icons-material/Description';
-import CheckIcon from '@mui/icons-material/Check';
 
 // Subcomponents
 import { PayoutGridToolbar } from '../components/payouts/PayoutGridToolbar';
@@ -884,7 +881,7 @@ export default function StaffPayouts() {
       headerAlign: 'center',
       renderCell: (params) => {
         let label = 'Начислено';
-        let color: 'default' | 'info' | 'success' | 'warning' | 'error' = 'info';
+        let color: 'default' | 'primary' | 'secondary' | 'info' | 'success' | 'warning' | 'error' = 'info';
         if (params.value === 'approved') { label = 'Утверждено'; color = 'warning'; }
         if (params.value === 'in_sheet') { label = 'В ведомости'; color = 'primary'; }
         if (params.value === 'paid') { label = 'Выплачено'; color = 'success'; }

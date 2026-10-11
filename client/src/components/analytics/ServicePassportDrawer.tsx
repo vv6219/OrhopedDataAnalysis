@@ -63,13 +63,13 @@ export function ServicePassportDrawer({
       slotProps={{
         backdrop: {
           sx: { backdropFilter: 'blur(3px)', bgcolor: 'rgba(15, 23, 42, 0.4)' }
-        }
-      }}
-      PaperProps={{
-        sx: {
-          width: { xs: '100%', sm: 540, md: 580 },
-          boxShadow: '-8px 0 24px rgba(0,0,0,0.15)',
-          bgcolor: '#F8FAFC'
+        },
+        paper: {
+          sx: {
+            width: { xs: '100%', sm: 540, md: 580 },
+            boxShadow: '-8px 0 24px rgba(0,0,0,0.15)',
+            bgcolor: '#F8FAFC'
+          }
         }
       }}
     >

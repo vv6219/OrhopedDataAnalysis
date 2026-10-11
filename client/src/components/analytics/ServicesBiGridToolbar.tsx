@@ -68,54 +68,27 @@ export function ServicesBiGridToolbar({
       </Box>
 
       {/* Right DataGrid Built-in Tools */}
-      <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1 }}>
-        <GridToolbarColumnsButton
-          slotProps={{
-            button: {
-              size: 'small',
-              sx: { color: '#475569', textTransform: 'none', fontWeight: 600 }
-            }
-          }}
-        />
-        <GridToolbarFilterButton
-          slotProps={{
-            button: {
-              size: 'small',
-              sx: { color: '#475569', textTransform: 'none', fontWeight: 600 }
-            }
-          }}
-        />
-        <GridToolbarDensitySelector
-          slotProps={{
-            button: {
-              size: 'small',
-              sx: { color: '#475569', textTransform: 'none', fontWeight: 600 }
-            }
-          }}
-        />
-        <GridToolbarExport
-          slotProps={{
-            button: {
-              size: 'small',
-              sx: { color: '#475569', textTransform: 'none', fontWeight: 600 }
-            }
-          }}
-        />
-        <GridToolbarQuickFilter
-          debounceMs={300}
-          placeholder="Поиск по названию или коду..."
-          sx={{
-            minWidth: 260,
-            '& .MuiInputBase-root': {
-              fontSize: '0.875rem',
-              bgcolor: 'white',
-              borderRadius: 1.5,
-              px: 1,
-              py: 0.25,
-              border: '1px solid #CBD5E1'
-            }
-          }}
-        />
+      <Box
+        sx={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          alignItems: 'center',
+          gap: 1,
+          '& .MuiButton-root': {
+            color: '#475569',
+            textTransform: 'none',
+            fontWeight: 600,
+            fontSize: '0.8125rem'
+          }
+        }}
+      >
+        <GridToolbarColumnsButton />
+        <GridToolbarFilterButton />
+        <GridToolbarDensitySelector />
+        <GridToolbarExport />
+        <Box sx={{ minWidth: 260 }}>
+          <GridToolbarQuickFilter debounceMs={300} />
+        </Box>
       </Box>
     </GridToolbarContainer>
   );
