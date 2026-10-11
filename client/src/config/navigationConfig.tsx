@@ -22,6 +22,8 @@ import DeleteForeverIcon from '@mui/icons-material/DeleteForever';
 import PlayCircleFilledWhiteIcon from '@mui/icons-material/PlayCircleFilledWhite';
 import MenuBookIcon from '@mui/icons-material/MenuBook';
 import QueryStatsIcon from '@mui/icons-material/QueryStats';
+import PointOfSaleIcon from '@mui/icons-material/PointOfSale';
+import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
 
 export interface NavItem {
   text: string;
@@ -186,10 +188,34 @@ export const navigationGroups: NavGroup[] = [
         tooltip: 'Удалить все тестовые данные с маркером [TEST_DAEMON]'
       },
       {
-        text: 'Запуск тестов потока',
-        path: '/admin/daemon-data?action=run-tests',
+        text: 'Журнал аудита ККТ (Serilog)',
+        path: '/fiscal-audit',
+        icon: <ReceiptLongIcon sx={{ fontSize: 20 }} />,
+        tooltip: 'Журнал аудита фискальных операций ККТ АТОЛ 91Ф (Serilog / 54-ФЗ)'
+      },
+      {
+        text: 'Мастер тестов ККТ [TEST_DAEMON]',
+        path: '/admin/fiscal-test-wizard',
+        icon: <PointOfSaleIcon sx={{ fontSize: 20 }} />,
+        tooltip: 'Мастер верификации и тестирования фискализации [TEST_DAEMON]'
+      },
+      {
+        text: 'Заполнить тестовые чеки',
+        path: '/admin/fiscal-test-wizard?action=seed',
+        icon: <AddCircleIcon sx={{ fontSize: 20, color: '#16A34A' }} />,
+        tooltip: 'Сгенерировать набор тестовых чеков ККТ [TEST_DAEMON]'
+      },
+      {
+        text: 'Удалить тестовые чеки',
+        path: '/admin/fiscal-test-wizard?action=purge',
+        icon: <DeleteForeverIcon sx={{ fontSize: 20, color: '#DC2626' }} />,
+        tooltip: 'Удалить все фискальные данные с маркером [TEST_DAEMON]'
+      },
+      {
+        text: 'Запуск тестов ККТ (5 тестов)',
+        path: '/admin/fiscal-test-wizard?action=run-test',
         icon: <PlayCircleFilledWhiteIcon sx={{ fontSize: 20, color: '#2563EB' }} />,
-        tooltip: 'Запустить автоматическое тестирование потока FL-01 — FL-14 (27 проверок)'
+        tooltip: 'Запустить 5 сквозных сценариев тестирования ККТ АТОЛ 91Ф'
       }
     ]
   }
@@ -301,6 +327,18 @@ export const routeMetaMap: Record<string, RouteMeta> = {
   },
   '/admin/daemon-data': {
     title: 'Управление демо-данными [TEST_DAEMON]',
+    groupTitle: 'Администратор',
+    groupId: 'administrator',
+    parentPath: '/'
+  },
+  '/fiscal-audit': {
+    title: 'Журнал аудита ККТ (Serilog)',
+    groupTitle: 'Администратор',
+    groupId: 'administrator',
+    parentPath: '/'
+  },
+  '/admin/fiscal-test-wizard': {
+    title: 'Мастер тестов ККТ [TEST_DAEMON]',
     groupTitle: 'Администратор',
     groupId: 'administrator',
     parentPath: '/'

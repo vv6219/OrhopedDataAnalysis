@@ -132,4 +132,99 @@ router.post('/repeat-print', async (req, res) => {
   }
 });
 
+// ============================================================================
+// [TEST_DAEMON] TEST & MOCK DATA WIZARD ENDPOINTS
+// ============================================================================
+const {
+  createFiscalDaemonData,
+  purgeFiscalDaemonData,
+  runFiscalTestWizard,
+  getFiscalDaemonStatus
+} = require('./fiscalDaemonTestData');
+
+/**
+ * GET /api/fiscal/test-data/status
+ * Returns count of test receipts and recent records
+ */
+router.get('/test-data/status', async (req, res) => {
+  try {
+    const status = await getFiscalDaemonStatus();
+    res.json(status);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /api/fiscal/test-data/create
+ * Seeds isolated [TEST_DAEMON] fiscal receipts and Serilog audit records
+ */
+router.post('/test-data/create', async (req, res) => {
+  try {
+    const result = await createFiscalDaemonData();
+    res.json({
+      success: true,
+      message: `Сгенерировано ${result.createdCount} тестовых фискальных чеков [TEST_DAEMON] и журнал аудита Serilog`,
+      ...result
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /api/fiscal/test-data/remove
+ * Removes all [TEST_DAEMON] fiscal records
+ */
+router.post('/test-data/remove', async (req, res) => {
+  try {
+    const result = await purgeFiscalDaemonData();
+    res.json({
+      success: true,
+      message: `Удалено ${result.purgedReceipts} тестовых чеков и ${result.purgedAuditLogs} записей аудита [TEST_DAEMON]`,
+      ...result
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /api/fiscal/test-data/run-wizard
+ * Runs the live 5-scenario fiscal testing suite
+ */
+router.post('/test-data/run-wizard', async (req, res) => {
+  try {
+    const result = await runFiscalTestWizard();
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * GET /api/fiscal/test-data/export
+ * Exports [TEST_DAEMON] data in JSON or CSV
+ */
+router.get('/test-data/export', async (req, res) => {
+  const { format = 'json' } = req.query;
+  try {
+    const status = await getFiscalDaemonStatus();
+    if (format === 'csv') {
+      const rows = status.recentTestReceipts || [];
+      const headers = ['id', 'patient_contact', 'payment_type', 'total_amount', 'fiscal_document_number', 'fiscal_sign', 'shift_number', 'status', 'created_at'];
+      let csv = headers.join(';') + '\n';
+      rows.forEach(r => {
+        csv += `${r.id};"${r.patient_contact || ''}";${r.payment_type};${r.total_amount};${r.fiscal_document_number || ''};${r.fiscal_sign || ''};${r.shift_number || ''};${r.status};${r.created_at}\n`;
+      });
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', 'attachment; filename="fiscal_test_daemon_export.csv"');
+      return res.send(csv);
+    }
+    res.json(status);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

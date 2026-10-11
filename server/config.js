@@ -93,6 +93,30 @@ function getBackupConfig() {
   return settings?.BackupSettings || defaultConfig.BackupSettings;
 }
 
+/**
+ * Dynamically resolves Fiscal Service configuration
+ */
+function getFiscalConfig() {
+  const settings = getAppSettings();
+  return settings?.FiscalService || {
+    Port: 'COM3',
+    BaudRate: 115200,
+    DeviceModel: 'АТОЛ 91Ф',
+    IsMockMode: true,
+    SingleConsumerQueue: true,
+    ExecutionTimeoutSeconds: 35,
+    FnNumber: '9960440301984210',
+    KktRegNumber: '0004928103049182',
+    DefaultTaxType: 6,
+    TaxRegimeName: 'Без НДС (пп. 2 п. 2 ст. 149 НК РФ — медицинские услуги)',
+    PaymentSubjectType: 4,
+    PaymentMethodType: 4,
+    DefaultShiftNumber: 14,
+    BaseFiscalDocumentNumber: 1041,
+    ExternalDaemonUrl: 'http://localhost:5050'
+  };
+}
+
 module.exports = {
   getAppSettings,
   saveAppSettings,
@@ -100,5 +124,6 @@ module.exports = {
   getFirebirdConfig,
   getSqliteConfig,
   getBackupConfig,
+  getFiscalConfig,
   configPath
 };

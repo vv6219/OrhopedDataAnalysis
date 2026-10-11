@@ -17,6 +17,7 @@ public class AtolFiscalEngine : BackgroundService
     private readonly string _fnNumber = "9960440301984210";
     private readonly string _kktRegNumber = "0004928103049182";
     private readonly string _port = "COM3";
+    private readonly int _timeoutSeconds = 35;
 
     public AtolFiscalEngine(IConfiguration config)
     {
@@ -24,6 +25,14 @@ public class AtolFiscalEngine : BackgroundService
         _logger = Log.ForContext<AtolFiscalEngine>();
         _connectionString = config.GetConnectionString("SqliteDb") 
             ?? @"Data Source=..\..\..\db\orthopedic_data_center.sqlite";
+
+        var fiscalSec = config.GetSection("FiscalService");
+        _port = fiscalSec["Port"] ?? "COM3";
+        _fnNumber = fiscalSec["FnNumber"] ?? "9960440301984210";
+        _kktRegNumber = fiscalSec["KktRegNumber"] ?? "0004928103049182";
+        _currentShiftNumber = int.TryParse(fiscalSec["DefaultShiftNumber"], out var s) ? s : 14;
+        _lastFdNumber = long.TryParse(fiscalSec["BaseFiscalDocumentNumber"], out var fd) ? fd : 1041;
+        _timeoutSeconds = int.TryParse(fiscalSec["ExecutionTimeoutSeconds"], out var t) ? t : 35;
 
         // Unbounded single-consumer channel ensures strictly sequential execution on COM port
         _channel = Channel.CreateUnbounded<FiscalTask>(new UnboundedChannelOptions

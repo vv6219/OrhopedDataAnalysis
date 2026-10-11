@@ -99,6 +99,22 @@ async function purgeDaemonData() {
     const paramChanges = await runAsync("DELETE FROM calculation_parameters WHERE param_name LIKE '%[TEST_DAEMON]%'");
     console.log(`✓ Удалено тестовых параметров (calculation_parameters): ${paramChanges}`);
 
+    // 10. Фискальные чеки и аудит ККТ [TEST_DAEMON]
+    const fiscalChanges = await runAsync(`
+      DELETE FROM fiscal_receipts 
+      WHERE patient_contact LIKE '%[TEST_DAEMON]%' 
+         OR error_message LIKE '%[TEST_DAEMON]%'
+         OR transaction_id IN (SELECT id FROM operation_transactions WHERE notes LIKE '%[TEST_DAEMON]%')
+    `);
+    console.log(`✓ Удалено фискальных чеков (fiscal_receipts): ${fiscalChanges}`);
+
+    const fiscalAuditChanges = await runAsync(`
+      DELETE FROM fiscal_audit_logs 
+      WHERE message LIKE '%[TEST_DAEMON]%' 
+         OR properties_json LIKE '%[TEST_DAEMON]%'
+    `);
+    console.log(`✓ Удалено записей аудита ККТ (fiscal_audit_logs): ${fiscalAuditChanges}`);
+
     console.log('--- Очистка тестовых данных [TEST_DAEMON] успешно завершена! ---');
   } catch (err) {
     console.error('Ошибка при очистке тестовых данных:', err.message);

@@ -4,19 +4,12 @@
  * and Serilog-compatible DB audit logging.
  */
 const db = require('./database');
+const { getFiscalConfig } = require('./config');
 const { logFiscalAudit, LogLevels, EventTypes } = require('./fiscalAuditLogger');
 
 class FiscalService {
   constructor() {
-    this.port = 'COM3';
-    this.baudRate = 115200;
-    this.deviceModel = 'АТОЛ 91Ф';
-    this.isMockMode = true; // Set true when physical COM port is absent or in dev
-    this.isShiftOpen = true;
-    this.currentShiftNumber = 14;
-    this.lastFdNumber = 1041;
-    this.fnNumber = '9960440301984210';
-    this.kktRegNumber = '0004928103049182';
+    this.refreshConfig();
     
     // Single-consumer sequential execution queue
     this.queue = [];
@@ -25,7 +18,7 @@ class FiscalService {
     // Log initialization
     logFiscalAudit({
       level: LogLevels.INFO,
-      message: `Инициализирован фискальный сервис для ККТ «${this.deviceModel}» на порту ${this.port} (Режим: ${this.isMockMode ? 'Эмуляция (Mock)' : 'Физический COM'})`,
+      message: `Инициализирован фискальный сервис для ККТ «${this.deviceModel}» на порту ${this.port} из appsettings.json (Режим: ${this.isMockMode ? 'Эмуляция (Mock)' : 'Физический COM'})`,
       eventType: EventTypes.DEVICE_CONNECT,
       devicePort: this.port,
       properties: {
@@ -35,6 +28,25 @@ class FiscalService {
         shiftNumber: this.currentShiftNumber
       }
     });
+  }
+
+  refreshConfig() {
+    const cfg = getFiscalConfig();
+    this.port = cfg.Port || 'COM3';
+    this.baudRate = cfg.BaudRate || 115200;
+    this.deviceModel = cfg.DeviceModel || 'АТОЛ 91Ф';
+    this.isMockMode = cfg.IsMockMode !== undefined ? cfg.IsMockMode : true;
+    this.isShiftOpen = true;
+    this.currentShiftNumber = cfg.DefaultShiftNumber || 14;
+    this.lastFdNumber = cfg.BaseFiscalDocumentNumber || 1041;
+    this.fnNumber = cfg.FnNumber || '9960440301984210';
+    this.kktRegNumber = cfg.KktRegNumber || '0004928103049182';
+    this.taxType = cfg.DefaultTaxType !== undefined ? cfg.DefaultTaxType : 6;
+    this.taxRegimeName = cfg.TaxRegimeName || 'Без НДС (пп. 2 п. 2 ст. 149 НК РФ — медицинские услуги)';
+    this.paymentSubjectType = cfg.PaymentSubjectType || 4;
+    this.paymentMethodType = cfg.PaymentMethodType || 4;
+    this.executionTimeoutSeconds = cfg.ExecutionTimeoutSeconds || 35;
+    this.externalDaemonUrl = cfg.ExternalDaemonUrl || 'http://localhost:5050';
   }
 
   /**

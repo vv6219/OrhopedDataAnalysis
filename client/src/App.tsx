@@ -18,6 +18,8 @@ import StaffPayouts from './pages/StaffPayouts';
 import DaemonTestDataManager from './pages/DaemonTestDataManager';
 import UserGuide from './pages/UserGuide';
 import ServicesBiAnalytics from './pages/ServicesBiAnalytics';
+import FiscalAuditLog from './pages/FiscalAuditLog';
+import FiscalTestWizard from './pages/FiscalTestWizard';
 
 const theme = createTheme({
   palette: {
@@ -202,6 +204,9 @@ function App() {
                 <Route path="/parameters" element={<Parameters />} />
                 <Route path="/admin/firebird-sync" element={<FirebirdSync />} />
                 <Route path="/admin/daemon-data" element={<DaemonTestDataManager />} />
+                <Route path="/fiscal-audit" element={<FiscalAuditLog />} />
+                <Route path="/admin/fiscal-test-wizard" element={<FiscalTestWizard />} />
+                <Route path="/fiscal-test-wizard" element={<FiscalTestWizard />} />
                 <Route path="/sqlite-studio" element={<SqliteStudio />} />
                 <Route path="/db-studio" element={<SqliteStudio />} />
                 {/* Fallback to BI Dashboard */}
