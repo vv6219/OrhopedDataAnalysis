@@ -1,6 +1,6 @@
 import type {} from '@mui/x-data-grid/themeAugmentation';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import { Box, CssBaseline, ThemeProvider, createTheme } from '@mui/material';
+import { Box, CssBaseline, ThemeProvider, createTheme, CircularProgress } from '@mui/material';
 import Sidebar from './components/Sidebar';
 import TopStatusBar from './components/TopStatusBar';
 import Dashboard from './pages/Dashboard';
@@ -21,6 +21,9 @@ import ServicesBiAnalytics from './pages/ServicesBiAnalytics';
 import FiscalAuditLog from './pages/FiscalAuditLog';
 import FiscalTestWizard from './pages/FiscalTestWizard';
 import FiscalSettings from './pages/FiscalSettings';
+import ServerHealth from './pages/ServerHealth';
+import { AuthProvider, useAuth } from './context/AuthContext';
+import LoginModal from './components/LoginModal';
 
 const theme = createTheme({
   palette: {
@@ -163,64 +166,97 @@ const theme = createTheme({
   },
 });
 
+function AppContent() {
+  const { isAuthenticated, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <Box
+        sx={{
+          minHeight: '100vh',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          bgcolor: '#F4F7FA'
+        }}
+      >
+        <CircularProgress sx={{ color: '#0F3C64' }} size={48} thickness={4} />
+      </Box>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <LoginModal />;
+  }
+
+  return (
+    <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: '#F4F7FA' }}>
+      <Sidebar />
+      <Box
+        component="main"
+        sx={{
+          flexGrow: 1,
+          display: 'flex',
+          flexDirection: 'column',
+          minWidth: 0,
+          overflowX: 'hidden'
+        }}
+      >
+        {/* Top Freezed Status Bar with Breadcrumbs & Back Navigation */}
+        <TopStatusBar />
+
+        {/* Main Content Area */}
+        <Box sx={{ flexGrow: 1, p: { xs: 2, sm: 3 } }}>
+          <Routes>
+            {/* Default start on BI Dashboard */}
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/analytics/operations" element={<OperationsAnalytics />} />
+            <Route path="/analytics/services-bi" element={<ServicesBiAnalytics />} />
+            <Route path="/services-bi" element={<ServicesBiAnalytics />} />
+            <Route path="/checkout" element={<CheckoutWizard />} />
+            <Route path="/scheduling" element={<Scheduling />} />
+            <Route path="/staff-payouts" element={<StaffPayouts />} />
+            <Route path="/payouts" element={<StaffPayouts />} />
+            <Route path="/user-guide" element={<UserGuide />} />
+            <Route path="/guide" element={<UserGuide />} />
+            <Route path="/patients" element={<Patients />} />
+            <Route path="/staff" element={<Staff />} />
+            <Route path="/operations" element={<Operations />} />
+            <Route path="/reports" element={<Operations />} />
+            <Route path="/inventory" element={<Inventory />} />
+            <Route path="/parameters" element={<Parameters />} />
+            <Route path="/admin/server-health" element={<ServerHealth />} />
+            <Route path="/server-health" element={<ServerHealth />} />
+            <Route path="/admin/firebird-sync" element={<FirebirdSync />} />
+            <Route path="/admin/daemon-data" element={<DaemonTestDataManager />} />
+            <Route path="/admin/fiscal-settings" element={<FiscalSettings />} />
+            <Route path="/fiscal-settings" element={<FiscalSettings />} />
+            <Route path="/fiscal-audit" element={<FiscalAuditLog />} />
+            <Route path="/admin/fiscal-test-wizard" element={<FiscalTestWizard />} />
+            <Route path="/fiscal-test-wizard" element={<FiscalTestWizard />} />
+            <Route path="/sqlite-studio" element={<SqliteStudio />} />
+            <Route path="/db-studio" element={<SqliteStudio />} />
+            {/* Fallback to BI Dashboard */}
+            <Route path="*" element={<Dashboard />} />
+          </Routes>
+        </Box>
+      </Box>
+    </Box>
+  );
+}
+
 function App() {
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      <BrowserRouter>
-        <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: '#F4F7FA' }}>
-          <Sidebar />
-          <Box
-            component="main"
-            sx={{
-              flexGrow: 1,
-              display: 'flex',
-              flexDirection: 'column',
-              minWidth: 0,
-              overflowX: 'hidden'
-            }}
-          >
-            {/* Top Freezed Status Bar with Breadcrumbs & Back Navigation */}
-            <TopStatusBar />
-
-            {/* Main Content Area */}
-            <Box sx={{ flexGrow: 1, p: { xs: 2, sm: 3 } }}>
-              <Routes>
-                {/* Default start on BI Dashboard */}
-                <Route path="/" element={<Dashboard />} />
-                <Route path="/analytics/operations" element={<OperationsAnalytics />} />
-                <Route path="/analytics/services-bi" element={<ServicesBiAnalytics />} />
-                <Route path="/services-bi" element={<ServicesBiAnalytics />} />
-                <Route path="/checkout" element={<CheckoutWizard />} />
-                <Route path="/scheduling" element={<Scheduling />} />
-                <Route path="/staff-payouts" element={<StaffPayouts />} />
-                <Route path="/payouts" element={<StaffPayouts />} />
-                <Route path="/user-guide" element={<UserGuide />} />
-                <Route path="/guide" element={<UserGuide />} />
-                <Route path="/patients" element={<Patients />} />
-                <Route path="/staff" element={<Staff />} />
-                <Route path="/operations" element={<Operations />} />
-                <Route path="/reports" element={<Operations />} />
-                <Route path="/inventory" element={<Inventory />} />
-                <Route path="/parameters" element={<Parameters />} />
-                <Route path="/admin/firebird-sync" element={<FirebirdSync />} />
-                <Route path="/admin/daemon-data" element={<DaemonTestDataManager />} />
-                <Route path="/admin/fiscal-settings" element={<FiscalSettings />} />
-                <Route path="/fiscal-settings" element={<FiscalSettings />} />
-                <Route path="/fiscal-audit" element={<FiscalAuditLog />} />
-                <Route path="/admin/fiscal-test-wizard" element={<FiscalTestWizard />} />
-                <Route path="/fiscal-test-wizard" element={<FiscalTestWizard />} />
-                <Route path="/sqlite-studio" element={<SqliteStudio />} />
-                <Route path="/db-studio" element={<SqliteStudio />} />
-                {/* Fallback to BI Dashboard */}
-                <Route path="*" element={<Dashboard />} />
-              </Routes>
-            </Box>
-          </Box>
-        </Box>
-      </BrowserRouter>
+      <AuthProvider>
+        <BrowserRouter>
+          <AppContent />
+        </BrowserRouter>
+      </AuthProvider>
     </ThemeProvider>
   );
 }
 
 export default App;
+

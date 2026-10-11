@@ -7,7 +7,7 @@ interface UserGuidePrintProps {
 }
 
 export const UserGuidePrintTemplate = React.forwardRef<HTMLDivElement, UserGuidePrintProps>(
-  ({ version = '1.3.0', date = new Date().toLocaleDateString('ru-RU') }, ref) => {
+  ({ version = '1.4.0', date = new Date().toLocaleDateString('ru-RU') }, ref) => {
     return (
       <Box 
         ref={ref} 
@@ -149,21 +149,21 @@ export const UserGuidePrintTemplate = React.forwardRef<HTMLDivElement, UserGuide
           </Box>
         </Box>
 
-        {/* SECTION 3: БИЗНЕС-ПРОЦЕСС (FLOW) */}
+        {/* SECTION 3: БИЗНЕС-ПРОЦЕСС (FLOW) И КОМБИНАЦИИ ВИЗИТОВ */}
         <Box sx={{ mb: 3 }}>
           <Typography variant="subtitle1" sx={{ fontWeight: 800, color: '#0F3C64', borderBottom: '1.5px solid #CBD5E1', pb: 0.5, mb: 1, fontSize: '11pt' }}>
-            3. Регламентный поток бизнес-процесса (Flow)
+            3. Регламентный поток бизнес-процесса (Flow) и комбинации визитов
           </Typography>
           <Typography variant="body2" sx={{ fontSize: '9.5pt', color: '#2D3748', mb: 1 }}>
-            Порядок обработки сервисов и начисления заработной платы состоит из 6 последовательных шагов:
+            Система поддерживает все варианты оказания услуг и назначений персонала клиники:
           </Typography>
-          <Box component="ol" sx={{ pl: 2.5, m: 0, fontSize: '9pt', color: '#2D3748', '& li': { mb: 0.5 } }}>
-            <li><strong>Оказание сервиса и фиксация визита:</strong> врач или администратор через Мастер оформления визита регистрирует факт оказания сервиса. Сервис попадает в статус «Нерассчитано».</li>
-            <li><strong>Захват в расчет и мягкая блокировка (Soft Lock):</strong> экономист в модуле «Выплаты сотрудникам» выбирает сервисы расчетного месяца. Система захватывает блокировку на 30 минут, исключая двойную оплату.</li>
-            <li><strong>Предварительный расчет (Preview):</strong> система производит мгновенный аудит маржинальности, проверяет фикс-минимумы и лимит бригады (Cap).</li>
-            <li><strong>Атомарный коммит начислений (Commit):</strong> фиксация записей в таблицах <code>procedure_records</code> и <code>staff_payout_accruals</code> с освобождением блокировок.</li>
-            <li><strong>Ручные корректировки и сторно:</strong> возможность внесения премий/удержаний или полного реверсирования ошибочных строк со статусом <code>storno_reversal</code>.</li>
-            <li><strong>Утверждение ведомости и печать А4:</strong> подписание ведомости главным врачом и вывод регламентного бланка на печать.</li>
+          <Box component="ul" sx={{ pl: 2.5, m: 0, fontSize: '8.5pt', color: '#2D3748', mb: 1.5, '& li': { mb: 0.4 } }}>
+            <li><strong>FL-V01 (Single / Solo Doctor):</strong> 1 консультация (5 000 ₽), назначен только врач. Сестре строго 0 ₽, врачу 30% (1 500 ₽). Коммит: 1 процедура, 1 начисление.</li>
+            <li><strong>FL-V02 (Single / Brigade):</strong> 1 операция (PRP 18 000 ₽, расходники 3 500 ₽), бригада (хирург 35% + сестра 10%). Маржа 14 500 ₽. Коммит: 1 процедура, 2 начисления.</li>
+            <li><strong>FL-V03 (Multi / Solo Doctor):</strong> Пакет из 2+ услуг визита (Консультация 5k + Блокада 8k), соло-врач. Сестре 0 ₽ по обеим. Коммит: 2 процедуры, 2 начисления врачу.</li>
+            <li><strong>FL-V04 (Multi / Brigade):</strong> Пакет операций (Артроскопия 35k + PRP 18k = 53k), бригада. Раздельный учет маржи. Коммит: 2 процедуры, 4 начисления.</li>
+            <li><strong>FL-V05 (Appointment Flow):</strong> Прием из расписания (<code>status = 'completed'</code>), прямая привязка к <code>appointment_id</code>.</li>
+            <li><strong>Блокировки и гарантии:</strong> Мягкая блокировка (Soft Lock, 30 мин), защита от дублей (уникальный <code>dedup_hash</code>), ручные надбавки (+500 ₽) и сторно (-1 750 ₽).</li>
           </Box>
         </Box>
 
@@ -185,14 +185,19 @@ export const UserGuidePrintTemplate = React.forwardRef<HTMLDivElement, UserGuide
           </Box>
         </Box>
 
-        {/* SECTION 5: ПОЛНОТЕКСТОВЫЙ ПОИСК */}
+        {/* SECTION 5: СЛУЖБЫ БЭКЕНДА И ТЕСТОВЫЙ КОНТУР */}
         <Box sx={{ mb: 3 }}>
           <Typography variant="subtitle1" sx={{ fontWeight: 800, color: '#0F3C64', borderBottom: '1.5px solid #CBD5E1', pb: 0.5, mb: 1, fontSize: '11pt' }}>
-            5. Сквозной полнотекстовый поиск в реестрах
+            5. Мониторинг служб бэкенда и тестовый контур [TEST_DAEMON]
           </Typography>
-          <Typography variant="body2" sx={{ fontSize: '9.5pt', color: '#2D3748' }}>
-            Все ключевые реестры системы (Картотека пациентов, Склад медикаментов, Параметры расчетов, Журнал фискальных чеков) оснащены полнотекстовым серверным поиском. Ввод любого значения (ФИО, номер ЭМК, телефон, название препарата, номер ФД или маркер <code>TEST_DAEMON</code>) моментально фильтрует данные по всей базе с нормализацией регистра и спецсимволов.
+          <Typography variant="body2" sx={{ fontSize: '9pt', color: '#2D3748', mb: 1 }}>
+            В версию 1.4.0 включены административные инструменты мониторинга инфраструктуры и валидации:
           </Typography>
+          <Box component="ul" sx={{ pl: 2.5, m: 0, fontSize: '8.5pt', color: '#2D3748', '& li': { mb: 0.4 } }}>
+            <li><strong>Службы бэкенда (`/admin/server-health`):</strong> Сквозной мониторинг 6 компонентов (Express порт 5000, SQLite integrity ok, Fiscal Daemon 5050, Firebird МИС 3050, Swagger /api-docs, Hot Backup). Запуск теста всех служб в 1 клик с терминальным логом.</li>
+            <li><strong>Демо-данные [TEST_DAEMON] (`/admin/daemon-data`):</strong> 45 автоматизированных тестов потока (FL-V01 — FL-V05 и FL-01 — FL-14), безопасный сидинг изолированных данных и мгновенная каскадная очистка (Purge).</li>
+            <li><strong>Полнотекстовый поиск:</strong> Мгновенный поиск по всем разделам и сущностям с авто-раскрытием аккордеонов и мульти-токенным фильтром.</li>
+          </Box>
         </Box>
 
         {/* FOOTER & APPROVAL BLOCK (UNBREAKABLE CONTAINER) */}

@@ -28,17 +28,33 @@ const allAsync = (sql, params = []) => new Promise((resolve, reject) => {
  * Purges all [TEST_DAEMON] fiscal data
  */
 async function purgeFiscalDaemonData() {
-  const receiptsChanges = await runAsync(`
-    DELETE FROM fiscal_receipts 
-    WHERE patient_contact LIKE '%[TEST_DAEMON]%' 
-       OR error_message LIKE '%[TEST_DAEMON]%'
-       OR transaction_id IN (SELECT id FROM operation_transactions WHERE notes LIKE '%[TEST_DAEMON]%')
-  `);
-
   const auditChanges = await runAsync(`
     DELETE FROM fiscal_audit_logs 
     WHERE message LIKE '%[TEST_DAEMON]%' 
        OR properties_json LIKE '%[TEST_DAEMON]%'
+       OR receipt_id IN (
+         SELECT id FROM fiscal_receipts 
+         WHERE patient_contact LIKE '%[TEST_DAEMON]%' 
+            OR error_message LIKE '%[TEST_DAEMON]%'
+            OR patient_id IN (SELECT id FROM patients WHERE full_name LIKE '%[TEST_DAEMON]%' OR surname LIKE '%[TEST_DAEMON]%')
+            OR transaction_id IN (
+              SELECT id FROM operation_transactions 
+              WHERE notes LIKE '%[TEST_DAEMON]%' 
+                 OR patient_id IN (SELECT id FROM patients WHERE full_name LIKE '%[TEST_DAEMON]%' OR surname LIKE '%[TEST_DAEMON]%')
+            )
+       )
+  `);
+
+  const receiptsChanges = await runAsync(`
+    DELETE FROM fiscal_receipts 
+    WHERE patient_contact LIKE '%[TEST_DAEMON]%' 
+       OR error_message LIKE '%[TEST_DAEMON]%'
+       OR patient_id IN (SELECT id FROM patients WHERE full_name LIKE '%[TEST_DAEMON]%' OR surname LIKE '%[TEST_DAEMON]%')
+       OR transaction_id IN (
+         SELECT id FROM operation_transactions 
+         WHERE notes LIKE '%[TEST_DAEMON]%' 
+            OR patient_id IN (SELECT id FROM patients WHERE full_name LIKE '%[TEST_DAEMON]%' OR surname LIKE '%[TEST_DAEMON]%')
+       )
   `);
 
   return {

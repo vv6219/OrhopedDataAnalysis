@@ -1492,10 +1492,10 @@ export default function CheckoutWizard() {
                           Юридические параметры чека (54-ФЗ):
                         </Typography>
                         <Typography variant="caption" sx={{ display: 'block', color: '#1E3A8A' }}>
-                          • Ставка: <b>Без НДС</b> (пп. 2 п. 2 ст. 149 НК РФ — медицинские услуги)
+                          • Ставка: <b>Без НДС</b> (пп. 2 п. 2 ст. 149 НК РФ — медицинские сервисы)
                         </Typography>
                         <Typography variant="caption" sx={{ display: 'block', color: '#1E3A8A' }}>
-                          • Предмет расчета: <b>Услуга</b> (тег 1212 = 4) • Способ: <b>Полный расчет</b> (тег 1214 = 4)
+                          • Предмет расчета: <b>Сервис</b> (тег 1212 = 4) • Способ: <b>Полный расчет</b> (тег 1214 = 4)
                         </Typography>
                       </Box>
                     </Box>
@@ -1564,7 +1564,7 @@ export default function CheckoutWizard() {
                       Фискальный чек ККТ «АТОЛ 91Ф» (54-ФЗ)
                     </Typography>
                     <Typography variant="caption" sx={{ color: '#718096' }}>
-                      Медицинские услуги • Без НДС (пп. 2 п. 2 ст. 149 НК РФ)
+                      Медицинские сервисы • Без НДС (пп. 2 п. 2 ст. 149 НК РФ)
                     </Typography>
                   </Box>
                 </Box>

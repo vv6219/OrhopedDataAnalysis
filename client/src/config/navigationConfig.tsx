@@ -25,6 +25,7 @@ import QueryStatsIcon from '@mui/icons-material/QueryStats';
 import PointOfSaleIcon from '@mui/icons-material/PointOfSale';
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
 import TuneIcon from '@mui/icons-material/Tune';
+import DnsIcon from '@mui/icons-material/Dns';
 
 export interface NavItem {
   text: string;
@@ -151,6 +152,18 @@ export const navigationGroups: NavGroup[] = [
     icon: <AdminPanelSettingsIcon sx={{ fontSize: 20 }} />,
     defaultOpen: true,
     items: [
+      {
+        text: 'Службы бэкенда (Health)',
+        path: '/admin/server-health',
+        icon: <DnsIcon sx={{ fontSize: 20, color: '#0284C7' }} />,
+        tooltip: 'Мониторинг и тестирование доступности служб бэкенда (Express, SQLite, Fiscal Daemon, Firebird, Swagger)'
+      },
+      {
+        text: 'Тест служб сервера',
+        path: '/admin/server-health?action=run-tests',
+        icon: <PlayCircleFilledWhiteIcon sx={{ fontSize: 20, color: '#0284C7' }} />,
+        tooltip: 'Запустить сквозной тест доступности всех служб сервера (Express, SQLite, Fiscal Daemon, Firebird)'
+      },
       {
         text: 'FireBird Sync',
         path: '/admin/firebird-sync',
@@ -312,6 +325,12 @@ export const routeMetaMap: Record<string, RouteMeta> = {
     title: 'Параметры клиники',
     groupTitle: 'Базовые данные',
     groupId: 'base_entities',
+    parentPath: '/'
+  },
+  '/admin/server-health': {
+    title: 'Статус и мониторинг сервисов бэкенда',
+    groupTitle: 'Администратор',
+    groupId: 'administrator',
     parentPath: '/'
   },
   '/admin/firebird-sync': {

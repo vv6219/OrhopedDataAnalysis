@@ -510,7 +510,7 @@ export const VisitReportTemplate = React.forwardRef<HTMLDivElement, VisitReportP
                   ИТОГ К ОПЛАТЕ:
                 </Typography>
                 <Typography variant="h6" sx={{ fontWeight: 800, color: '#0F3C64', fontSize: '1.05rem' }}>
-                  {operationPrice.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₽
+                  {totalOperationsPrice.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₽
                 </Typography>
               </Box>
             </Box>

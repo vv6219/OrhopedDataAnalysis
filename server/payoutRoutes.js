@@ -349,7 +349,16 @@ router.post('/preview-calculation', async (req, res) => {
   try {
     const factor = await getMaterialCostFactor();
     const docId = brigade ? Number(brigade.primary_doctor_id || 2) : 2;
-    const nurseId = brigade && brigade.nurse_id ? Number(brigade.nurse_id) : 5;
+    let nurseId = null;
+    if (brigade) {
+      if (brigade.nurse_id !== undefined && brigade.nurse_id !== null && brigade.nurse_id !== 0 && brigade.nurse_id !== 'none') {
+        nurseId = Number(brigade.nurse_id);
+      } else if (!('nurse_id' in brigade)) {
+        nurseId = 5;
+      }
+    } else {
+      nurseId = 5;
+    }
 
     // Fetch doctor and nurse rates for these operations
     const opIds = services.map(s => Number(s.operation_id)).filter(id => !isNaN(id));
@@ -510,6 +519,19 @@ router.post('/commit-calculation', async (req, res) => {
             continue; // Skip already accrued service safely
           }
 
+          // Validate optional FK references to avoid FK constraint errors on simulated test IDs
+          const candidateTxId = (item.source_type === 'transaction' || !item.source_type) ? (item.transaction_id || item.source_id) : null;
+          const txRow = candidateTxId ? await getAsync("SELECT id FROM operation_transactions WHERE id = ?", [candidateTxId]) : null;
+          const validTxId = txRow ? txRow.id : null;
+
+          const candidateAppId = (item.source_type === 'appointment') ? (item.appointment_id || item.source_id) : null;
+          const appRow = candidateAppId ? await getAsync("SELECT id FROM appointments WHERE id = ?", [candidateAppId]) : null;
+          const validAppId = appRow ? appRow.id : null;
+
+          const candidateVisitId = item.visit_id;
+          const visitRow = candidateVisitId ? await getAsync("SELECT id FROM patient_visits WHERE id = ?", [candidateVisitId]) : null;
+          const validVisitId = visitRow ? visitRow.id : null;
+
           // Insert into procedure_records
           const procSql = `
             INSERT INTO procedure_records (
@@ -523,9 +545,9 @@ router.post('/commit-calculation', async (req, res) => {
             item.source_type || 'transaction',
             item.source_id || 0,
             dedupHash,
-            item.visit_id || null,
-            item.source_type === 'transaction' ? item.source_id : null,
-            item.source_type === 'appointment' ? item.source_id : null,
+            validVisitId,
+            validTxId,
+            validAppId,
             item.patient_id,
             item.operation_id,
             serviceDate,
@@ -541,6 +563,8 @@ router.post('/commit-calculation', async (req, res) => {
 
           const procId = procResult.lastID;
           committedProceduresCount++;
+
+          const accrualNotePrefix = notes ? `${notes} | ` : '';
 
           // Insert Doctor accrual
           if (item.doctor_id && item.doctor_payout > 0) {
@@ -559,7 +583,7 @@ router.post('/commit-calculation', async (req, res) => {
               item.doctor_payout,
               item.doctor_applied_min ? 1 : 0,
               item.doctor_payout,
-              `Начисление врачу за процедуру: ${item.operation_name || ''}`
+              `${accrualNotePrefix}Начисление врачу за процедуру: ${item.operation_name || ''}`
             ]);
             createdAccrualIds.push(docAccrResult.lastID);
           }
@@ -581,7 +605,7 @@ router.post('/commit-calculation', async (req, res) => {
               item.nurse_payout,
               item.nurse_applied_min ? 1 : 0,
               item.nurse_payout,
-              `Начисление медсестре за ассистирование: ${item.operation_name || ''}`
+              `${accrualNotePrefix}Начисление медсестре за ассистирование: ${item.operation_name || ''}`
             ]);
             createdAccrualIds.push(nurseAccrResult.lastID);
           }

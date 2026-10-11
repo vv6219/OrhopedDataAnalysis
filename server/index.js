@@ -24,6 +24,14 @@ app.use('/api/analytics/services-bi', servicesBiRoutes);
 const fiscalRoutes = require('./fiscalRoutes');
 app.use('/api/fiscal', fiscalRoutes);
 
+const servicesHealthRoutes = require('./servicesHealthRoutes');
+app.use('/api/admin/services', servicesHealthRoutes);
+
+const { requireAuth, swaggerBasicAuth } = require('./auth');
+const authRoutes = require('./authRoutes');
+app.use('/api/auth', authRoutes);
+app.use('/api/db', requireAuth);
+
 // ============================================================================
 // Swagger OpenAPI 3.0 Configuration
 // ============================================================================
@@ -32,7 +40,7 @@ const swaggerOptions = {
     openapi: '3.0.0',
     info: {
       title: 'Центр Ортопедии Добрушкина — ОртоERP REST API & SQLite Studio',
-      version: '1.3.0',
+      version: '1.4.0',
       description: `
 Интерактивная OpenAPI спецификация серверного API для автоматизации Центра Ортопедии и Травматологии Добрушкина (г. Сочи).
 
@@ -234,7 +242,7 @@ const swaggerOptions = {
 };
 
 const swaggerSpecs = swaggerJsdoc(swaggerOptions);
-app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpecs, {
+app.use('/api-docs', swaggerBasicAuth, swaggerUi.serve, swaggerUi.setup(swaggerSpecs, {
   customCss: '.swagger-ui .topbar { background-color: #0F3C64; } .swagger-ui .topbar-wrapper img { content:url("/MainLogoTransparent.png"); width: 40px; height: 40px; }',
   customSiteTitle: 'ОртоERP API Документация — Добрушкин',
 }));
@@ -2073,7 +2081,7 @@ app.post('/api/transactions', (req, res) => {
           patientId: patient_id,
           patientContact: patient_contact,
           items: opsList.map(op => ({
-            name: op.notes || op.name || 'Медицинская услуга',
+            name: op.notes || op.name || 'Медицинский сервис',
             quantity: op.quantity || 1,
             unit_price: op.unit_price || 0,
             subtotal: op.subtotal || 0

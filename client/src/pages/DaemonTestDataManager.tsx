@@ -474,20 +474,20 @@ export default function DaemonTestDataManager() {
               </Box>
 
               <Typography variant="body2" sx={{ color: '#374151', mb: 2, lineHeight: 1.6 }}>
-                Запускает программу автоматизированного тестирования FL-01 — FL-14:
-                проверка выборки, захвата мягкой блокировки, формул наценки 1.15, фикс-минимумов,
-                ACID коммита, дедупликации и финансовой сходимости в BI.
+                Запускает программу сквозного тестирования FL-V01 — FL-V05 и FL-01 — FL-14:
+                все комбинации одиночных и пакетных услуг визита, назначение соло-врача и полной бригады (врач + ассистент),
+                приемы со статусом completed, формулы наценки $1.15, мягкие блокировки, ACID коммиты и сходимость в BI.
               </Typography>
 
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, bgcolor: '#FFFFFF', p: 1.5, borderRadius: 2, border: '1px solid #DBEAFE' }}>
                 <Typography variant="caption" sx={{ fontWeight: 600, color: '#1E40AF' }}>
-                  • 27 автоматизированных проверок
+                  • 45 автоматизированных проверок
                 </Typography>
                 <Typography variant="caption" sx={{ fontWeight: 600, color: '#1E40AF' }}>
-                  • Сквозная верификация формул и БД
+                  • Все комбинации: Single / Multi услуги × Solo / Brigade персонал
                 </Typography>
                 <Typography variant="caption" sx={{ fontWeight: 600, color: '#1E40AF' }}>
-                  • Детализированный отчет [PASS / FAIL]
+                  • Детализированный отчет [PASS / FAIL] со сходимостью
                 </Typography>
               </Box>
             </CardContent>
@@ -528,7 +528,7 @@ export default function DaemonTestDataManager() {
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
             <Box>
               <Typography variant="h6" sx={{ fontWeight: 700, color: '#0F3C64' }}>
-                Результаты сквозного тестирования потока (FL-01 — FL-14)
+                Результаты сквозного тестирования потока (FL-V01 — FL-V05, FL-01 — FL-14)
               </Typography>
               <Typography variant="body2" sx={{ color: 'text.secondary' }}>
                 Сводный протокол автоматизированной валидации бизнес-логики и формул

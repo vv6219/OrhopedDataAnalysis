@@ -14,11 +14,15 @@ import CircleIcon from '@mui/icons-material/Circle';
 import StorageIcon from '@mui/icons-material/Storage';
 import LocalHospitalIcon from '@mui/icons-material/LocalHospital';
 import MenuBookIcon from '@mui/icons-material/MenuBook';
+import LogoutIcon from '@mui/icons-material/Logout';
+import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
 import { routeMetaMap } from '../config/navigationConfig';
+import { useAuth } from '../context/AuthContext';
 
 export default function TopStatusBar() {
   const location = useLocation();
   const navigate = useNavigate();
+  const { user, logout, isAuthenticated } = useAuth();
 
   const currentMeta = routeMetaMap[location.pathname] || {
     title: 'Страница',
@@ -204,6 +208,44 @@ export default function TopStatusBar() {
             display: { xs: 'none', sm: 'inline-flex' }
           }}
         />
+
+        {/* User & Logout Controls */}
+        {isAuthenticated && (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8, ml: 0.5 }}>
+            <Chip
+              icon={<AdminPanelSettingsIcon sx={{ fontSize: '15px !important', color: '#0F3C64 !important' }} />}
+              label={user || 'Администратор'}
+              size="small"
+              sx={{
+                bgcolor: '#EBF8FF',
+                border: '1px solid #BEE3F8',
+                fontWeight: 700,
+                color: '#0F3C64',
+                fontSize: '0.75rem',
+                height: 28
+              }}
+            />
+            <Tooltip title="Выйти из системы (Завершить сессию)">
+              <IconButton
+                size="small"
+                onClick={logout}
+                sx={{
+                  border: '1px solid #CBD5E1',
+                  bgcolor: '#FFFFFF',
+                  color: '#DC2626',
+                  p: 0.6,
+                  borderRadius: 2,
+                  '&:hover': {
+                    bgcolor: '#FEF2F2',
+                    borderColor: '#DC2626'
+                  }
+                }}
+              >
+                <LogoutIcon sx={{ fontSize: 16 }} />
+              </IconButton>
+            </Tooltip>
+          </Box>
+        )}
       </Box>
     </Box>
   );
