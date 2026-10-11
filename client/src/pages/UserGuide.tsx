@@ -37,6 +37,8 @@ import UnfoldLessIcon from '@mui/icons-material/UnfoldLess';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import LockIcon from '@mui/icons-material/Lock';
 import VerifiedUserIcon from '@mui/icons-material/VerifiedUser';
+import PointOfSaleIcon from '@mui/icons-material/PointOfSale';
+import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
 
 import { UserGuidePrintTemplate } from '../components/UserGuidePrintTemplate';
 
@@ -59,6 +61,7 @@ export default function UserGuide() {
     'section-flow': true,
     'section-input': false,
     'section-screens': false,
+    'section-fiscal': false,
     'section-print': false,
     'section-faq': false,
   });
@@ -154,6 +157,24 @@ export default function UserGuide() {
                   <TableCell><code>service_calculation_locks</code></TableCell>
                   <TableCell><code>source_type</code>, <code>source_id</code>, <code>lock_token</code>, <code>expires_at</code></TableCell>
                   <TableCell>Защищают сервисы от параллельного расчета несколькими операторами (таймаут 30 мин)</TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell sx={{ fontWeight: 600 }}>Профили ККТ «АТОЛ 91Ф»</TableCell>
+                  <TableCell><code>fiscal_profiles</code></TableCell>
+                  <TableCell><code>id</code>, <code>profile_name</code>, <code>port</code>, <code>is_mock</code>, <code>org_name</code>, <code>inn</code>, <code>tax_rate</code></TableCell>
+                  <TableCell>Хранит параметры связи с ККТ, реквизиты клиники для чека, СНО, ставку НДС и кассира</TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell sx={{ fontWeight: 600 }}>Фискальные чеки (54-ФЗ)</TableCell>
+                  <TableCell><code>fiscal_receipts</code></TableCell>
+                  <TableCell><code>id</code>, <code>transaction_id</code>, <code>patient_id</code>, <code>fiscal_document_number</code>, <code>fiscal_sign</code>, <code>is_fiscalized</code></TableCell>
+                  <TableCell>Реестр пробитых чеков: приход/возврат, суммы, ФД №, ФПД, ФН, тег 1008, статусы</TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell sx={{ fontWeight: 600 }}>Аудит ККТ (Serilog)</TableCell>
+                  <TableCell><code>fiscal_audit_logs</code></TableCell>
+                  <TableCell><code>id</code>, <code>log_level</code>, <code>action_name</code>, <code>message</code>, <code>timestamp</code></TableCell>
+                  <TableCell>Структурированный Serilog-журнал всех кассовых событий, вызовов fptr10 и ошибок</TableCell>
                 </TableRow>
               </TableBody>
             </Table>
@@ -377,6 +398,289 @@ export default function UserGuide() {
                 • Полнотекстовый поиск по параметрам и их значениям.
               </Typography>
             </Paper>
+
+            <Paper elevation={0} sx={{ p: 2, border: '1px solid #E2E8F0', borderRadius: 2 }}>
+              <Typography variant="subtitle2" sx={{ fontWeight: 700, color: '#0F3C64' }}>
+                Параметры ККТ АТОЛ 91Ф (`/admin/fiscal-settings`)
+              </Typography>
+              <Typography variant="body2" sx={{ color: '#64748B', mt: 0.5, fontSize: '0.85rem' }}>
+                • Управление кассовыми профилями в базе данных SQLite (таблица <code>fiscal_profiles</code>).<br />
+                • Настройка порта (COM3), скорости обмена (115200) и переключатель режима эмуляции (Mock).<br />
+                • Реквизиты организации в чеке: ИЧП Добрушкин А.М., ИНН, ОГРНИП, адрес и система налогообложения.<br />
+                • Ставка НДС с валидацией, кассир по умолчанию и аудит изменений через Serilog.
+              </Typography>
+            </Paper>
+
+            <Paper elevation={0} sx={{ p: 2, border: '1px solid #E2E8F0', borderRadius: 2 }}>
+              <Typography variant="subtitle2" sx={{ fontWeight: 700, color: '#0F3C64' }}>
+                Мастер тестов ККТ [TEST_DAEMON] (`/admin/fiscal-test-wizard`)
+              </Typography>
+              <Typography variant="body2" sx={{ color: '#64748B', mt: 0.5, fontSize: '0.85rem' }}>
+                • Пошаговая верификация ККТ: 1) связь и статус смены; 2) тестовый чек; 3) Х/Z отчеты; 4) Popper test.<br />
+                • Проверка печати и закрытия чека при обрыве/замятии ленты 57 мм.<br />
+                • Генерация изолированных тестовых чеков прихода и возврата с маркером <code>[TEST_DAEMON]</code>.<br />
+                • Быстрая очистка тестовых данных одной кнопкой без ущерба рабочей отчетности.
+              </Typography>
+            </Paper>
+
+            <Paper elevation={0} sx={{ p: 2, border: '1px solid #E2E8F0', borderRadius: 2 }}>
+              <Typography variant="subtitle2" sx={{ fontWeight: 700, color: '#0F3C64' }}>
+                Журнал аудита ККТ и чеков (`/fiscal-audit`)
+              </Typography>
+              <Typography variant="body2" sx={{ color: '#64748B', mt: 0.5, fontSize: '0.85rem' }}>
+                • Реестр всех пробитых фискальных чеков (DataGrid с поиском по ФД, ФПД, ФН и пациентам).<br />
+                • Просмотр детального чека с QR-кодом, печать дубликата на термоленту 57 мм и экспорт в PDF.<br />
+                • Вкладка «Журнал аудита (Serilog)»: просмотр технических событий драйвера fptr10 и ошибок ККТ.<br />
+                • Оформление возврата прихода (Sell Return) по зарегистрированным чекам.
+              </Typography>
+            </Paper>
+
+            <Paper elevation={0} sx={{ p: 2, border: '1px solid #E2E8F0', borderRadius: 2 }}>
+              <Typography variant="subtitle2" sx={{ fontWeight: 700, color: '#0F3C64' }}>
+                Оформление визита и кассовый расчет (`/checkout`)
+              </Typography>
+              <Typography variant="body2" sx={{ color: '#64748B', mt: 0.5, fontSize: '0.85rem' }}>
+                • Пошаговое оформление визита пациента с привязкой врача, сервисов и расходников.<br />
+                • Интегрированный тумблер «Пробить фискальный чек на ККТ (54-ФЗ)».<br />
+                • Автоподстановка контакта пациента для передачи в ОФД (Тег 1008 — телефон или e-mail).<br />
+                • Выбор типа оплаты (карта, наличные, СБП) и мгновенное получение реквизитов ФД и ФПД.
+              </Typography>
+            </Paper>
+          </Box>
+        </Box>
+      )
+    },
+    {
+      id: 'section-fiscal',
+      category: 'fiscal',
+      title: '6. Фискальный регистратор «АТОЛ 91Ф» и сервис фискализации (54-ФЗ)',
+      subtitle: 'Архитектурный контур, монопольный доступ к COM-порту, Popper Test, чеки, смены и регламент кассира',
+      icon: <PointOfSaleIcon sx={{ color: '#0F3C64' }} />,
+      tags: ['ккт', 'атол', 'атол 91ф', 'фискализация', '54-фз', 'чек', 'фд', 'фпд', 'фн', 'тег 1008', 'офд', 'mock', 'com-порт', 'popper test', 'z-отчет', 'х-отчет', 'смена', 'кассир', 'serilog', 'чеки'],
+      content: (
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+          {/* 6.1. АРХИТЕКТУРНЫЙ КОНТУР */}
+          <Box sx={{ p: 2, bgcolor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 2 }}>
+            <Typography variant="subtitle2" sx={{ fontWeight: 700, color: '#0F3C64', mb: 1 }}>
+              6.1. Архитектурная модель сервиса фискализации и монопольный доступ к COM-порту
+            </Typography>
+            <Typography variant="body2" sx={{ color: '#334155', mb: 1.5, lineHeight: 1.6 }}>
+              Интеграция кассового аппарата <strong>АТОЛ 91Ф</strong> (работающего в режиме фискального регистратора по протоколу ДТО 10) построена по многоуровневой отказоустойчивой схеме:
+            </Typography>
+            <Paper elevation={0} sx={{ p: 2, bgcolor: '#FFFFFF', border: '1px solid #CBD5E1', fontFamily: 'monospace', fontSize: '0.82rem', whiteSpace: 'pre-wrap', lineHeight: 1.5, mb: 1.5 }}>
+{`React SPA (Оформление визита /checkout, порт 5174)
+   │  [✓] Пробить чек на ККТ  •  Тег 1008 (тел/email)  •  Способ оплаты (карта / наличные / СБП)
+   ▼
+Express.js API Gateway (сервер ОртоERP, порт 5000, routes: /api/fiscal/*)
+   │  Контроль транзакций, чтение настроек из SQLite fiscal_profiles, проксирование
+   ▼
+C# .NET 8/9 Fiscal Daemon (OrthoErp.FiscalService, порт 5050 / Kestrel REST API)
+   │  Single-Consumer Queue (Channel<FiscalTask>) — монопольная последовательная очередь
+   ▼
+Физический драйвер Atol DTO 10 (fptr10.dll, COM3, 115200 бод) ИЛИ AtolMockDriver (эмулятор)
+   │
+   ▼
+Таблицы аудита SQLite (fiscal_receipts, fiscal_audit_logs) + Serilog Rolling File Logs`}
+            </Paper>
+
+            <Alert severity="warning" sx={{ mb: 1.5, borderRadius: 1.5 }}>
+              <strong>Монопольный доступ к COM-порту:</strong> Виртуальный COM-порт (COM3) и библиотека <code>fptr10.dll</code> не поддерживают параллельных потоков. Любая попытка параллельного вызова приводит к ошибке «Порт занят» (-6) или блокировке аппарата. Все кассовые операции в ОртоERP строго упорядочены в единую очередь задач (Single-Consumer Queue / FIFO).
+            </Alert>
+
+            <Alert severity="info" sx={{ borderRadius: 1.5 }}>
+              <strong>Критерий истинности фискализации (Popper Test):</strong> Факт обрыва бумаги или замятия ленты 57 мм не отменяет запись документа в Фискальный Накопитель (ФН). Решающим критерием успеха является закрытие документа в ФН (<code>LIBFPTR_PARAM_DOCUMENT_CLOSED: true</code>) и присвоение реквизитов <strong>ФД №</strong> и <strong>ФПД</strong>, а не физическая печать на бумаге.
+            </Alert>
+          </Box>
+
+          {/* 6.2. РЕГЛАМЕНТ КАССИРА ПРИ ОФОРМЛЕНИИ ВИЗИТА */}
+          <Box sx={{ p: 2, bgcolor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 2 }}>
+            <Typography variant="subtitle2" sx={{ fontWeight: 700, color: '#0F3C64', mb: 1 }}>
+              6.2. Регламент кассира: пробитие чека при оформлении визита (`/checkout`)
+            </Typography>
+            <Typography variant="body2" sx={{ color: '#334155', mb: 1.5 }}>
+              При расчете с пациентом за оказанные медицинские сервисы оператор выполняет следующие действия:
+            </Typography>
+
+            <Box component="ol" sx={{ pl: 2.5, m: 0, color: '#334155', '& li': { mb: 1.2, lineHeight: 1.5 } }}>
+              <li>
+                <strong>Шаг 1: Формирование позиций визита.</strong> В мастере <code>/checkout</code> оператор выбирает пациента, лечащего врача и состав медицинских сервисов с фактическими расходниками.
+              </li>
+              <li>
+                <strong>Шаг 2: Включение фискализации.</strong> На этапе «Оплата» оператор активирует чекбокс <strong>«Пробить фискальный чек на ККТ (54-ФЗ)»</strong>.
+              </li>
+              <li>
+                <strong>Шаг 3: Проверка контакта покупателя (Тег 1008).</strong> В поле «Телефон или E-mail пациента» автоматически подставляется контакт из ЭМК (например, <code>+79881234567</code>). Это обязательное требование 54-ФЗ для отправки электронного чека оператором фискальных данных (ОФД).
+              </li>
+              <li>
+                <strong>Шаг 4: Выбор формы оплаты.</strong> Оператор указывает форму расчета:
+                <br />• <strong>Банковская карта (электронные):</strong> терминал эквайринга;
+                <br />• <strong>Наличные:</strong> оплата наличными деньгами в кассу клиники;
+                <br />• <strong>СБП (электронные):</strong> оплата по QR-коду Системы быстрых платежей;
+                <br />• <strong>Безналичный расчет:</strong> по договору / счету организации.
+              </li>
+              <li>
+                <strong>Шаг 5: Пробитие и печать чека.</strong> Оператор нажимает <strong>«Оплатить визит и пробить чек»</strong>:
+                <br />• Сервер передает чек в очередь ККТ, аппарат регистрирует позиции сервисов с указанием ставки НДС (по умолчанию «Без НДС» по ст. 149 НК РФ);
+                <br />• Документ закрывается в ФН, касса печатает чек на ленте 57 мм;
+                <br />• В МИС мгновенно отображаются реквизиты: <strong>№ ФД</strong>, <strong>ФПД</strong>, <strong>№ ФН</strong>, номер смены и QR-код для верификации в ФНС.
+              </li>
+            </Box>
+          </Box>
+
+          {/* 6.3. КАССОВЫЕ СМЕНЫ И РЕГЛАМЕНТНЫЕ ОТЧЕТЫ (X / Z) */}
+          <Box sx={{ p: 2, bgcolor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 2 }}>
+            <Typography variant="subtitle2" sx={{ fontWeight: 700, color: '#0F3C64', mb: 1 }}>
+              6.3. Кассовые смены и регламентные отчеты (Открытие смены, Х-отчет, Z-отчет)
+            </Typography>
+            <Typography variant="body2" sx={{ color: '#334155', mb: 1.5 }}>
+              Работа с кассовой сменой подчиняется строгим правилам налогового законодательства РФ:
+            </Typography>
+
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr 1fr' }, gap: 2 }}>
+              <Paper elevation={0} sx={{ p: 2, border: '1px solid #E2E8F0', borderRadius: 2, bgcolor: '#FFFFFF' }}>
+                <Typography variant="subtitle2" sx={{ fontWeight: 700, color: '#0F3C64', display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <CheckCircleIcon fontSize="small" sx={{ color: '#16A34A' }} /> 1. Открытие смены
+                </Typography>
+                <Typography variant="body2" sx={{ color: '#64748B', mt: 0.8, fontSize: '0.85rem' }}>
+                  Смена открывается автоматически при печати первого чека за день, либо вручную в <strong>Мастере тестов ККТ</strong>. Печатается отчет об открытии смены с фиксацией даты и времени.
+                </Typography>
+              </Paper>
+
+              <Paper elevation={0} sx={{ p: 2, border: '1px solid #E2E8F0', borderRadius: 2, bgcolor: '#FFFFFF' }}>
+                <Typography variant="subtitle2" sx={{ fontWeight: 700, color: '#0F3C64', display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <ReceiptLongIcon fontSize="small" sx={{ color: '#2563EB' }} /> 2. Х-отчет (без гашения)
+                </Typography>
+                <Typography variant="body2" sx={{ color: '#64748B', mt: 0.8, fontSize: '0.85rem' }}>
+                  Промежуточный отчет для кассира. Позволяет в любой момент рабочего дня сверить фактическую сумму наличных и безналичных оплат в кассе без закрытия смены и без отправки данных в ФНС.
+                </Typography>
+              </Paper>
+
+              <Paper elevation={0} sx={{ p: 2, border: '1px solid #E2E8F0', borderRadius: 2, bgcolor: '#FFFFFF' }}>
+                <Typography variant="subtitle2" sx={{ fontWeight: 700, color: '#0F3C64', display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <LockIcon fontSize="small" sx={{ color: '#DC2626' }} /> 3. Z-отчет (с гашением)
+                </Typography>
+                <Typography variant="body2" sx={{ color: '#64748B', mt: 0.8, fontSize: '0.85rem' }}>
+                  Обязательное закрытие смены в конце рабочего дня. Фискальный документ закрытия смены передается в ОФД. <strong>Внимание:</strong> длительность смены не должна превышать 24 часа.
+                </Typography>
+              </Paper>
+            </Box>
+          </Box>
+
+          {/* 6.4. ВОЗВРАТЫ И СТОРНИРОВАНИЕ ЧЕКОВ */}
+          <Box sx={{ p: 2, bgcolor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 2 }}>
+            <Typography variant="subtitle2" sx={{ fontWeight: 700, color: '#0F3C64', mb: 1 }}>
+              6.4. Возврат прихода (Storno чека)
+            </Typography>
+            <Typography variant="body2" sx={{ color: '#334155', mb: 1 }}>
+              Если пациент отказался от сервиса или произошла ошибка в сумме, оформляется чек <strong>«Возврат прихода»</strong> (<code>LIBFPTR_RT_SELL_RETURN</code>):
+            </Typography>
+            <Typography variant="body2" sx={{ color: '#475569', fontSize: '0.88rem' }}>
+              • В разделе <strong>«Журнал чеков»</strong> (<code>/fiscal-audit</code>) оператор выбирает нужный чек и нажимает кнопку <strong>«Оформить возврат прихода»</strong>.<br />
+              • Аппарат пробивает чек возврата с отрицательным движением по регистру оплат и привязкой к реквизитам исходного чека прихода.<br />
+              • В МИС создается зеркальная запись со статусом <code>sell_return</code>, исключающая расхождение между кассой и банковской выпиской.
+            </Typography>
+          </Box>
+
+          {/* 6.5. УПРАВЛЕНИЕ ПАРАМЕТРАМИ ККТ В БД И АУДИТ SERILOG */}
+          <Box sx={{ p: 2, bgcolor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 2 }}>
+            <Typography variant="subtitle2" sx={{ fontWeight: 700, color: '#0F3C64', mb: 1 }}>
+              6.5. Управление параметрами ККТ в БД (`/admin/fiscal-settings`) и аудит Serilog
+            </Typography>
+            <Typography variant="body2" sx={{ color: '#334155', mb: 1.5 }}>
+              Все параметры фискального регистратора перенесены из конфигурационных файлов в реляционную таблицу <code>fiscal_profiles</code>:
+            </Typography>
+
+            <TableContainer component={Paper} elevation={0} sx={{ border: '1px solid #CBD5E1', borderRadius: 2, mb: 1.5 }}>
+              <Table size="small">
+                <TableHead sx={{ bgcolor: '#EDF2F7' }}>
+                  <TableRow>
+                    <TableCell sx={{ fontWeight: 700, color: '#0F3C64' }}>Параметр</TableCell>
+                    <TableCell sx={{ fontWeight: 700, color: '#0F3C64' }}>Значение по умолчанию</TableCell>
+                    <TableCell sx={{ fontWeight: 700, color: '#0F3C64' }}>Назначение и влияние на чек</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  <TableRow>
+                    <TableCell sx={{ fontWeight: 600 }}>Организация в чеке</TableCell>
+                    <TableCell><code>ИЧП Добрушкин А.М.</code></TableCell>
+                    <TableCell>Наименование юридического лица / ИП (тег 1048)</TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell sx={{ fontWeight: 600 }}>Подразделение / Клиника</TableCell>
+                    <TableCell><code>Клиника доктора Добрушкина</code></TableCell>
+                    <TableCell>Торговый объект / место расчетов (тег 1009)</TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell sx={{ fontWeight: 600 }}>Адрес расчетов</TableCell>
+                    <TableCell><code>г. Сочи, ул. Транспортная 65</code></TableCell>
+                    <TableCell>Фактический адрес установки ККТ (тег 1009)</TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell sx={{ fontWeight: 600 }}>ИНН организации</TableCell>
+                    <TableCell><code>450107060083</code></TableCell>
+                    <TableCell>Идентификационный номер налогоплательщика (тег 1018)</TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell sx={{ fontWeight: 600 }}>ОГРНИП</TableCell>
+                    <TableCell><code>323237500208220</code></TableCell>
+                    <TableCell>ОГРН индивидуального предпринимателя</TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell sx={{ fontWeight: 600 }}>Ставка НДС</TableCell>
+                    <TableCell><code>Без НДС (ст. 149 НК РФ)</code></TableCell>
+                    <TableCell>Валидация любого значения (Без НДС, 0%, 20%). Для медицинских сервисов применяется освобождение от НДС</TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell sx={{ fontWeight: 600 }}>Кассир по умолчанию</TableCell>
+                    <TableCell><code>Добрушкин А.М.</code></TableCell>
+                    <TableCell>ФИО кассира (тег 1021) и ИНН кассира (тег 1203)</TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell sx={{ fontWeight: 600 }}>COM-порт и Скорость</TableCell>
+                    <TableCell><code>COM3 • 115200 бод</code></TableCell>
+                    <TableCell>Физический интерфейс связи с ньюджером АТОЛ 91Ф</TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell sx={{ fontWeight: 600 }}>Режим Mock-эмулятора</TableCell>
+                    <TableCell><code>false / true</code></TableCell>
+                    <TableCell>Переключатель между физическим аппаратом и программным эмулятором</TableCell>
+                  </TableRow>
+                </TableBody>
+              </Table>
+            </TableContainer>
+
+            <Typography variant="body2" sx={{ color: '#475569', fontSize: '0.88rem' }}>
+              <strong>Аудиторский след (Serilog):</strong> Любое изменение профиля (смена порта, ИНН, кассира, ставки НДС) атомарно записывается в таблицу <code>fiscal_audit_logs</code> с указанием автора, старых и новых значений, обеспечивая полную прозрачность настроек.
+            </Typography>
+          </Box>
+
+          {/* 6.6. АВТОНОМНЫЙ РЕЖИМ ЭМУЛЯЦИИ И ТЕСТОВЫЙ МАСТЕР */}
+          <Box sx={{ p: 2, bgcolor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 2 }}>
+            <Typography variant="subtitle2" sx={{ fontWeight: 700, color: '#0F3C64', mb: 1 }}>
+              6.6. Автономный режим эмуляции (Mock Mode) и тестовый мастер [TEST_DAEMON]
+            </Typography>
+            <Typography variant="body2" sx={{ color: '#334155', mb: 1.5 }}>
+              Для обеспечения непрерывности работы клиники и проведения безопасного обучения персонала в систему внедрен Mock-контур:
+            </Typography>
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 2 }}>
+              <Paper elevation={0} sx={{ p: 2, border: '1px solid #E2E8F0', borderRadius: 2, bgcolor: '#FFFFFF' }}>
+                <Typography variant="subtitle2" sx={{ fontWeight: 700, color: '#0F3C64' }}>
+                  Бесперебойная работа клиники при сбое ККТ
+                </Typography>
+                <Typography variant="body2" sx={{ color: '#64748B', mt: 0.8, fontSize: '0.85rem' }}>
+                  Если кассовый кабель отключен, закончился ресурс ФН или аппарат находится в ремонте, администратор активирует флаг <strong>«Использовать Mock-эмулятор»</strong> в параметрах. Приложение продолжает оформлять визиты и рассчитывать сдельные выплаты врачам без аварийных остановок.
+                </Typography>
+              </Paper>
+
+              <Paper elevation={0} sx={{ p: 2, border: '1px solid #E2E8F0', borderRadius: 2, bgcolor: '#FFFFFF' }}>
+                <Typography variant="subtitle2" sx={{ fontWeight: 700, color: '#0F3C64' }}>
+                  Мастер тестов ККТ (`/admin/fiscal-test-wizard`)
+                </Typography>
+                <Typography variant="body2" sx={{ color: '#64748B', mt: 0.8, fontSize: '0.85rem' }}>
+                  Позволяет в реальном времени проверить состояние кассы по 4 шагам, сгенерировать изолированные тестовые чеки <code>[TEST_DAEMON]</code> и протестировать поведение системы при обрыве чековой ленты (Popper Test). Тестовые чеки удаляются одной кнопкой.
+                </Typography>
+              </Paper>
+            </Box>
           </Box>
         </Box>
       )
@@ -384,10 +688,10 @@ export default function UserGuide() {
     {
       id: 'section-print',
       category: 'print',
-      title: '6. Печатные регламентные формы и экспорт данных',
-      subtitle: 'Стандарты вывода на печать бланков формата А4, сохранение в PDF и экспорт в MS Excel',
+      title: '7. Печатные регламентные формы и экспорт данных',
+      subtitle: 'Стандарты вывода на печать бланков формата А4, термочеков 57 мм, сохранение в PDF и экспорт в MS Excel',
       icon: <DescriptionIcon sx={{ color: '#0F3C64' }} />,
-      tags: ['печать', 'pdf', 'а4', 'ведомость', 'экспорт', 'excel', 'csv', 'react-to-print'],
+      tags: ['печать', 'pdf', 'а4', 'ведомость', 'экспорт', 'excel', 'csv', 'react-to-print', 'термолента', 'чек'],
       content: (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           <Typography variant="body2" sx={{ color: '#334155', lineHeight: 1.6 }}>
@@ -408,12 +712,23 @@ export default function UserGuide() {
 
           <Box sx={{ p: 2, border: '1px solid #E2E8F0', borderRadius: 2, bgcolor: '#F8FAFC' }}>
             <Typography variant="subtitle2" sx={{ fontWeight: 700, color: '#0F3C64', mb: 1 }}>
-              2. Экспорт данных в CSV (Microsoft Excel)
+              2. Электронный образ и печать дубликата чека ККТ (Термолента 57 мм / А4)
             </Typography>
             <Typography variant="body2" sx={{ color: '#475569', fontSize: '0.88rem' }}>
-              • Файлы выгружаются с кодировкой UTF-8 и байтовым маркером <code>\uFEFF</code>.<br />
+              • В разделе <strong>«Журнал чеков»</strong> (<code>/fiscal-audit</code>) доступен предварительный просмотр точной копии чека ККТ.<br />
+              • Поддерживается вывод на печать дубликата в формате кассовой термоленты шириной 57 мм.<br />
+              • Возможность сохранения официальной фискальной квитанции с QR-кодом проверки чека в PDF для отправки пациенту или в страховую компанию.
+            </Typography>
+          </Box>
+
+          <Box sx={{ p: 2, border: '1px solid #E2E8F0', borderRadius: 2, bgcolor: '#F8FAFC' }}>
+            <Typography variant="subtitle2" sx={{ fontWeight: 700, color: '#0F3C64', mb: 1 }}>
+              3. Экспорт данных в CSV (Microsoft Excel)
+            </Typography>
+            <Typography variant="body2" sx={{ color: '#475569', fontSize: '0.88rem' }}>
+              • Файлы выгружаются с кодировкой UTF-8 и байтовым маркером <code>\\uFEFF</code>.<br />
               • Русскоязычные заголовки колонок, разделитель точка с запятой.<br />
-              • Полная совместимость с 1С:ЗУП, клиент-банками и локальными версиями Excel.
+              • Полная совместимость с 1С:ЗУП, 1С:Бухгалтерия, клиент-банками и локальными версиями Excel.
             </Typography>
           </Box>
         </Box>
@@ -422,10 +737,10 @@ export default function UserGuide() {
     {
       id: 'section-faq',
       category: 'faq',
-      title: '7. Частые вопросы и диагностика неисправностей (FAQ)',
-      subtitle: 'Решение типовых ситуаций, снятие зависших блокировок и регламент резервного копирования',
+      title: '8. Частые вопросы и диагностика неисправностей (FAQ)',
+      subtitle: 'Решение типовых ситуаций, снятие зависших блокировок, сбои ККТ и регламент резервного копирования',
       icon: <HelpOutlineIcon sx={{ color: '#0F3C64' }} />,
-      tags: ['faq', 'ошибки', 'блокировка', 'backup', 'база данных', 'вопросы'],
+      tags: ['faq', 'ошибки', 'блокировка', 'backup', 'база данных', 'вопросы', 'ккт', 'атол', 'com-порт', 'смена 24'],
       content: (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           <Box sx={{ p: 2, border: '1px solid #E2E8F0', borderRadius: 2 }}>
@@ -434,6 +749,36 @@ export default function UserGuide() {
             </Typography>
             <Typography variant="body2" sx={{ color: '#475569', mt: 0.5, fontSize: '0.88rem' }}>
               Мягкая блокировка действует ровно 30 минут. По истечении этого времени система автоматически снимет блокировку при следующем обращении к серверу. Также блокировку можно снять вручную через интерфейс мастера.
+            </Typography>
+          </Box>
+
+          <Box sx={{ p: 2, border: '1px solid #E2E8F0', borderRadius: 2 }}>
+            <Typography variant="subtitle2" sx={{ fontWeight: 700, color: '#0F3C64' }}>
+              Вопрос: Ошибка ККТ: «Порт занят (COM3)» или «Нет связи с ККТ». Как устранить?
+            </Typography>
+            <Typography variant="body2" sx={{ color: '#475569', mt: 0.5, fontSize: '0.88rem' }}>
+              1) Убедитесь, что закрыта сторонняя утилита («Тест драйвера ККТ АТОЛ»), которая могла монопольно захватить COM-порт.<br />
+              2) Проверьте подключение USB-кабеля к аппарату АТОЛ 91Ф и горит ли индикатор питания на ньюджере.<br />
+              3) В разделе <code>/admin/fiscal-settings</code> проверьте номер порта (по умолчанию COM3) и скорость (115200). При необходимости нажмите «Проверить связь».<br />
+              4) Если аппарат временно недоступен, включите тумблер «Использовать Mock-эмулятор», чтобы не останавливать прием пациентов.
+            </Typography>
+          </Box>
+
+          <Box sx={{ p: 2, border: '1px solid #E2E8F0', borderRadius: 2 }}>
+            <Typography variant="subtitle2" sx={{ fontWeight: 700, color: '#0F3C64' }}>
+              Вопрос: В процессе печати чека закончилась или замялась бумага (Popper Test). Фискализирован ли чек?
+            </Typography>
+            <Typography variant="body2" sx={{ color: '#475569', mt: 0.5, fontSize: '0.88rem' }}>
+              Да! В соответствии с архитектурным принципом Popper Test, если документ закрыт в Фискальном Накопителе (получен номер ФД), операция юридически совершена и передана в ОФД. Заправьте новый рулон ленты 57 мм и в Журнале чеков (<code>/fiscal-audit</code>) нажмите <strong>«Печать копии чека»</strong> для выдачи пациенту бумажного дубликата. Повторно пробивать чек через оформление визита <strong>не требуется</strong>!
+            </Typography>
+          </Box>
+
+          <Box sx={{ p: 2, border: '1px solid #E2E8F0', borderRadius: 2 }}>
+            <Typography variant="subtitle2" sx={{ fontWeight: 700, color: '#0F3C64' }}>
+              Вопрос: Ошибка ККТ: «Смена превысила 24 часа». Как продолжить работу?
+            </Typography>
+            <Typography variant="body2" sx={{ color: '#475569', mt: 0.5, fontSize: '0.88rem' }}>
+              По требованиям 54-ФЗ кассовая смена не может длиться более 24 часов. Если смена не была закрыта вчера вечером, касса заблокирует печать чеков прихода. Перейдите в <strong>«Мастер тестов ККТ»</strong> (<code>/admin/fiscal-test-wizard</code>) на Шаг 3 и нажмите <strong>«Сформировать Z-отчет (Закрыть смену)»</strong>. После успешного закрытия смены касса готова к работе, и следующая смена откроется автоматически при первом чеке.
             </Typography>
           </Box>
 
@@ -451,7 +796,7 @@ export default function UserGuide() {
               Вопрос: Как работает тестовый набор демо-данных [TEST_DAEMON]?
             </Typography>
             <Typography variant="body2" sx={{ color: '#475569', mt: 0.5, fontSize: '0.88rem' }}>
-              В разделе <strong>«Администратор → Демо-данные»</strong> доступен автономный контур тестирования. Он создает полностью изолированные карточки пациентов, врачей, сервисы и ведомости с префиксом <code>[TEST_DAEMON]</code>. Они не влияют на базовую отчетность клиники и удаляются одной кнопкой.
+              В разделах <strong>«Администратор → Демо-данные»</strong> и <strong>«Мастер тестов ККТ»</strong> доступен автономный контур тестирования. Он создает полностью изолированные карточки пациентов, врачей, сервисы, ведомости и чеки с префиксом <code>[TEST_DAEMON]</code>. Они не влияют на базовую отчетность клиники и удаляются одной кнопкой.
             </Typography>
           </Box>
         </Box>
@@ -657,6 +1002,17 @@ export default function UserGuide() {
                 cursor: 'pointer',
                 bgcolor: selectedCategory === 'screens' ? '#0F3C64' : '#F1F5F9',
                 color: selectedCategory === 'screens' ? '#FFFFFF' : '#475569'
+              }}
+            />
+            <Chip
+              label="Фискализация и ККТ"
+              size="small"
+              onClick={() => setSelectedCategory('fiscal')}
+              sx={{
+                fontWeight: 700,
+                cursor: 'pointer',
+                bgcolor: selectedCategory === 'fiscal' ? '#0F3C64' : '#F1F5F9',
+                color: selectedCategory === 'fiscal' ? '#FFFFFF' : '#475569'
               }}
             />
             <Chip

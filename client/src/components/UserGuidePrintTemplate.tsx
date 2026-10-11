@@ -110,6 +110,16 @@ export const UserGuidePrintTemplate = React.forwardRef<HTMLDivElement, UserGuide
                 <TableCell sx={{ fontSize: '8.5pt', py: 0.6 }}><code>staff_payout_sheets</code></TableCell>
                 <TableCell sx={{ fontSize: '8.5pt', py: 0.6 }}>Сводные расчетные листы за месяц (черновик, утверждена, выплачена)</TableCell>
               </TableRow>
+              <TableRow>
+                <TableCell sx={{ fontWeight: 700, fontSize: '8.5pt', py: 0.6 }}>ККТ «АТОЛ 91Ф» (Профили)</TableCell>
+                <TableCell sx={{ fontSize: '8.5pt', py: 0.6 }}><code>fiscal_profiles</code></TableCell>
+                <TableCell sx={{ fontSize: '8.5pt', py: 0.6 }}>Параметры связи (COM3, 115200), Mock-режим, реквизиты клиники, СНО, ставка НДС, кассир</TableCell>
+              </TableRow>
+              <TableRow>
+                <TableCell sx={{ fontWeight: 700, fontSize: '8.5pt', py: 0.6 }}>Фискальные чеки (54-ФЗ)</TableCell>
+                <TableCell sx={{ fontSize: '8.5pt', py: 0.6 }}><code>fiscal_receipts</code></TableCell>
+                <TableCell sx={{ fontSize: '8.5pt', py: 0.6 }}>Реестр чеков: приход/возврат, суммы, ФД №, ФПД, ФН, тег 1008, статус фискализации и печати</TableCell>
+              </TableRow>
             </TableBody>
           </Table>
         </Box>
@@ -157,13 +167,31 @@ export const UserGuidePrintTemplate = React.forwardRef<HTMLDivElement, UserGuide
           </Box>
         </Box>
 
-        {/* SECTION 4: ПОЛНОТЕКСТОВЫЙ ПОИСК */}
+        {/* SECTION 4: ФИСКАЛЬНЫЙ РЕГИСТРАТОР АТОЛ 91Ф (54-ФЗ) */}
         <Box sx={{ mb: 3 }}>
           <Typography variant="subtitle1" sx={{ fontWeight: 800, color: '#0F3C64', borderBottom: '1.5px solid #CBD5E1', pb: 0.5, mb: 1, fontSize: '11pt' }}>
-            4. Сквозной полнотекстовый поиск в реестрах
+            4. Фискальный регистратор «АТОЛ 91Ф» и сервис фискализации (54-ФЗ)
+          </Typography>
+          <Typography variant="body2" sx={{ fontSize: '9pt', color: '#2D3748', mb: 1 }}>
+            Система фискализации обеспечивает автоматическую регистрацию расчетов с пациентами через кассовый аппарат <strong>АТОЛ 91Ф</strong> (режим ФР, протокол ДТО 10, COM3, 115200 бод):
+          </Typography>
+          <Box component="ul" sx={{ pl: 2.5, m: 0, fontSize: '8.5pt', color: '#2D3748', '& li': { mb: 0.4 } }}>
+            <li><strong>Монопольная очередь (Single-Consumer Queue):</strong> Физический COM-порт и библиотека <code>fptr10.dll</code> не поддерживают параллельных потоков. Все кассовые запросы обрабатываются через строгую последовательную очередь Kestrel/Channel.</li>
+            <li><strong>Критерий истинности фискализации (Popper Test):</strong> Чек юридически признается закрытым при записи в Фискальный Накопитель (ФН) с получением № ФД и ФПД. Обрыв или замятие бумаги не отменяют фискализацию — в журнале чеков доступна печать бумажного дубликата.</li>
+            <li><strong>Оформление визита и Тег 1008:</strong> При оплате визита (карта, наличные, СБП) телефон/email пациента автоматически передается в ОФД для отправки электронного чека.</li>
+            <li><strong>Регламент смен (X/Z-отчеты):</strong> Смена открывается первым чеком за день. Z-отчет (закрытие смены) формируется в конце дня. Смена не должна превышать 24 часа.</li>
+            <li><strong>Управление параметрами в БД (`fiscal_profiles`):</strong> Реквизиты организации (ИЧП Добрушкин А.М., ИНН 450107060083, ОГРНИП 323237500208220, адрес, СНО, ставка НДС, кассир) управляются централизованно с аудитом в Serilog.</li>
+            <li><strong>Автономный Mock-режим:</strong> Позволяет продолжать оформление приемов и расчет сдельной оплаты врачам при отключенной кассе.</li>
+          </Box>
+        </Box>
+
+        {/* SECTION 5: ПОЛНОТЕКСТОВЫЙ ПОИСК */}
+        <Box sx={{ mb: 3 }}>
+          <Typography variant="subtitle1" sx={{ fontWeight: 800, color: '#0F3C64', borderBottom: '1.5px solid #CBD5E1', pb: 0.5, mb: 1, fontSize: '11pt' }}>
+            5. Сквозной полнотекстовый поиск в реестрах
           </Typography>
           <Typography variant="body2" sx={{ fontSize: '9.5pt', color: '#2D3748' }}>
-            Все ключевые реестры системы (Картотека пациентов, Склад медикаментов, Параметры расчетов) оснащены полнотекстовым серверным поиском. Ввод любого значения (ФИО, номер ЭМК, телефон, название препарата или маркер <code>TEST_DAEMON</code>) моментально фильтрует данные по всей 61 000+ базе с нормализацией регистра и спецсимволов.
+            Все ключевые реестры системы (Картотека пациентов, Склад медикаментов, Параметры расчетов, Журнал фискальных чеков) оснащены полнотекстовым серверным поиском. Ввод любого значения (ФИО, номер ЭМК, телефон, название препарата, номер ФД или маркер <code>TEST_DAEMON</code>) моментально фильтрует данные по всей базе с нормализацией регистра и спецсимволов.
           </Typography>
         </Box>
 
