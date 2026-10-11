@@ -18,6 +18,7 @@ import HistoryIcon from '@mui/icons-material/History';
 import UsbIcon from '@mui/icons-material/Usb';
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
 import SecurityIcon from '@mui/icons-material/Security';
+import BusinessIcon from '@mui/icons-material/Business';
 
 export interface FiscalSettingsProfile {
   id: number;
@@ -37,6 +38,12 @@ export interface FiscalSettingsProfile {
   default_shift_number: number;
   base_fiscal_document_number: number;
   external_daemon_url: string;
+  org_name?: string;
+  clinic_subname?: string;
+  org_address?: string;
+  org_inn?: string;
+  org_ogrnip?: string;
+  fns_site?: string;
   is_active: number;
   notes: string;
   updated_at: string;
@@ -263,6 +270,12 @@ export default function FiscalSettings() {
         default_shift_number: 14,
         base_fiscal_document_number: 1041,
         external_daemon_url: 'http://localhost:5050',
+        org_name: 'ИЧП Добрушкин А.М.',
+        clinic_subname: 'Центр Ортопедии и Травматологии',
+        org_address: 'г. Сочи, ул. Транспортная 65',
+        org_inn: '450107060083',
+        org_ogrnip: '323237500208220',
+        fns_site: 'www.nalog.gov.ru',
         notes: 'Новый профиль ККТ'
       };
 
@@ -757,9 +770,68 @@ export default function FiscalSettings() {
 
           <Divider sx={{ my: 3 }} />
 
-          {/* Section 3: Notes */}
+          {/* Section 3: Organization & Receipt Slip Details */}
+          <Typography variant="subtitle1" sx={{ fontWeight: 800, color: '#0F3C64', mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
+            <BusinessIcon sx={{ color: '#0F3C64' }} />
+            3. Реквизиты организации и печатного чека (54-ФЗ)
+          </Typography>
+
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 2.5, mb: 2.5 }}>
+            <TextField
+              fullWidth
+              label="Наименование организации / ИП (Тег 1048)"
+              value={formData.org_name || ''}
+              onChange={e => handleChange('org_name', e.target.value)}
+              helperText="Официальное наименование налогоплательщика, например: ИЧП Добрушкин А.М."
+            />
+            <TextField
+              fullWidth
+              label="Подзаголовок / Название клиники"
+              value={formData.clinic_subname || ''}
+              onChange={e => handleChange('clinic_subname', e.target.value)}
+              helperText="Торговое обозначение медицинского центра на чеке"
+            />
+          </Box>
+
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '2fr 1fr 1fr' }, gap: 2.5, mb: 2.5 }}>
+            <TextField
+              fullWidth
+              label="Адрес места расчетов (Тег 1009)"
+              value={formData.org_address || ''}
+              onChange={e => handleChange('org_address', e.target.value)}
+              helperText="Адрес установки ККТ и оказания медицинских услуг"
+            />
+            <TextField
+              fullWidth
+              label="ИНН (Тег 1018)"
+              value={formData.org_inn || ''}
+              onChange={e => handleChange('org_inn', e.target.value)}
+              helperText="ИНН пользователя ККТ"
+            />
+            <TextField
+              fullWidth
+              label="ОГРНИП / ОГРН"
+              value={formData.org_ogrnip || ''}
+              onChange={e => handleChange('org_ogrnip', e.target.value)}
+              helperText="Регистрационный номер ИП или организации"
+            />
+          </Box>
+
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr' }, gap: 2.5, mb: 3 }}>
+            <TextField
+              fullWidth
+              label="Адрес сайта ФНС для проверки чека (Тег 1060)"
+              value={formData.fns_site || ''}
+              onChange={e => handleChange('fns_site', e.target.value)}
+              helperText="Адрес официального сайта для верификации фискального документа (например: www.nalog.gov.ru)"
+            />
+          </Box>
+
+          <Divider sx={{ my: 3 }} />
+
+          {/* Section 4: Notes */}
           <Typography variant="subtitle1" sx={{ fontWeight: 800, color: '#0F3C64', mb: 2 }}>
-            3. Служебные примечания к профилю
+            4. Служебные примечания к профилю
           </Typography>
 
           <TextField

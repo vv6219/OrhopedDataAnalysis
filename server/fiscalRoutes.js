@@ -101,6 +101,12 @@ router.post('/settings', async (req, res) => {
     default_shift_number = 14,
     base_fiscal_document_number = 1041,
     external_daemon_url = 'http://localhost:5050',
+    org_name = 'ИЧП Добрушкин А.М.',
+    clinic_subname = 'Центр Ортопедии и Травматологии',
+    org_address = 'г. Сочи, ул. Транспортная 65',
+    org_inn = '450107060083',
+    org_ogrnip = '323237500208220',
+    fns_site = 'www.nalog.gov.ru',
     is_active = 0,
     notes = '',
     updated_by = 'Администратор'
@@ -128,8 +134,9 @@ router.post('/settings', async (req, res) => {
         profile_name, port, baud_rate, device_model, is_mock_mode, single_consumer_queue,
         execution_timeout_seconds, fn_number, kkt_reg_number, default_tax_type, tax_regime_name,
         payment_subject_type, payment_method_type, default_shift_number, base_fiscal_document_number,
-        external_daemon_url, is_active, notes, updated_at, updated_by
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now', 'localtime'), ?)
+        external_daemon_url, org_name, clinic_subname, org_address, org_inn, org_ogrnip, fns_site,
+        is_active, notes, updated_at, updated_by
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now', 'localtime'), ?)
     `;
 
     db.run(sql, [
@@ -149,6 +156,12 @@ router.post('/settings', async (req, res) => {
       Number(default_shift_number) || 14,
       Number(base_fiscal_document_number) || 1041,
       external_daemon_url,
+      org_name,
+      clinic_subname,
+      org_address,
+      org_inn,
+      org_ogrnip,
+      fns_site,
       is_active ? 1 : 0,
       notes || '',
       updated_by || 'Администратор'
@@ -212,6 +225,12 @@ router.put('/settings/:id', (req, res) => {
       default_shift_number: req.body.default_shift_number !== undefined ? Number(req.body.default_shift_number) : oldRow.default_shift_number,
       base_fiscal_document_number: req.body.base_fiscal_document_number !== undefined ? Number(req.body.base_fiscal_document_number) : oldRow.base_fiscal_document_number,
       external_daemon_url: req.body.external_daemon_url !== undefined ? req.body.external_daemon_url : oldRow.external_daemon_url,
+      org_name: req.body.org_name !== undefined ? req.body.org_name : oldRow.org_name,
+      clinic_subname: req.body.clinic_subname !== undefined ? req.body.clinic_subname : oldRow.clinic_subname,
+      org_address: req.body.org_address !== undefined ? req.body.org_address : oldRow.org_address,
+      org_inn: req.body.org_inn !== undefined ? req.body.org_inn : oldRow.org_inn,
+      org_ogrnip: req.body.org_ogrnip !== undefined ? req.body.org_ogrnip : oldRow.org_ogrnip,
+      fns_site: req.body.fns_site !== undefined ? req.body.fns_site : oldRow.fns_site,
       is_active: req.body.is_active !== undefined ? (req.body.is_active ? 1 : 0) : oldRow.is_active,
       notes: req.body.notes !== undefined ? req.body.notes : oldRow.notes,
       updated_by: req.body.updated_by || 'Администратор'
@@ -248,8 +267,9 @@ router.put('/settings/:id', (req, res) => {
           is_mock_mode = ?, single_consumer_queue = ?, execution_timeout_seconds = ?,
           fn_number = ?, kkt_reg_number = ?, default_tax_type = ?, tax_regime_name = ?,
           payment_subject_type = ?, payment_method_type = ?, default_shift_number = ?,
-          base_fiscal_document_number = ?, external_daemon_url = ?, is_active = ?,
-          notes = ?, updated_at = datetime('now', 'localtime'), updated_by = ?
+          base_fiscal_document_number = ?, external_daemon_url = ?,
+          org_name = ?, clinic_subname = ?, org_address = ?, org_inn = ?, org_ogrnip = ?, fns_site = ?,
+          is_active = ?, notes = ?, updated_at = datetime('now', 'localtime'), updated_by = ?
         WHERE id = ?
       `;
 
@@ -270,6 +290,12 @@ router.put('/settings/:id', (req, res) => {
         newValues.default_shift_number,
         newValues.base_fiscal_document_number,
         newValues.external_daemon_url,
+        newValues.org_name,
+        newValues.clinic_subname,
+        newValues.org_address,
+        newValues.org_inn,
+        newValues.org_ogrnip,
+        newValues.fns_site,
         newValues.is_active,
         newValues.notes,
         newValues.updated_by,

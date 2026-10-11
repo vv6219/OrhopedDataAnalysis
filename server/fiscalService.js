@@ -75,6 +75,12 @@ class FiscalService {
           this.paymentMethodType = Number(row.payment_method_type) || 4;
           this.executionTimeoutSeconds = Number(row.execution_timeout_seconds) || 35;
           this.externalDaemonUrl = row.external_daemon_url || 'http://localhost:5050';
+          this.orgName = row.org_name || 'ИЧП Добрушкин А.М.';
+          this.clinicSubname = row.clinic_subname || 'Центр Ортопедии и Травматологии';
+          this.orgAddress = row.org_address || 'г. Сочи, ул. Транспортная 65';
+          this.orgInn = row.org_inn || '450107060083';
+          this.orgOgrnip = row.org_ogrnip || '323237500208220';
+          this.fnsSite = row.fns_site || 'www.nalog.gov.ru';
           this.settingsNotes = row.notes;
           this.settingsUpdatedAt = row.updated_at;
           this.settingsUpdatedBy = row.updated_by;
@@ -122,6 +128,12 @@ class FiscalService {
             queueLength: this.queue.length,
             activeProfileId: this.activeProfileId,
             profileName: this.profileName,
+            orgName: this.orgName,
+            clinicSubname: this.clinicSubname,
+            orgAddress: this.orgAddress,
+            orgInn: this.orgInn,
+            orgOgrnip: this.orgOgrnip,
+            fnsSite: this.fnsSite,
             settingsNotes: this.settingsNotes,
             settingsUpdatedAt: this.settingsUpdatedAt,
             settingsUpdatedBy: this.settingsUpdatedBy

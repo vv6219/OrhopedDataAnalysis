@@ -79,6 +79,12 @@ function initFiscalSchema(db, callback) {
       payment_method_type INTEGER NOT NULL DEFAULT 4,
       default_shift_number INTEGER NOT NULL DEFAULT 14,
       base_fiscal_document_number INTEGER NOT NULL DEFAULT 1041,
+      org_name TEXT NOT NULL DEFAULT 'ИЧП Добрушкин А.М.',
+      clinic_subname TEXT NOT NULL DEFAULT 'Центр Ортопедии и Травматологии',
+      org_address TEXT NOT NULL DEFAULT 'г. Сочи, ул. Транспортная 65',
+      org_inn TEXT NOT NULL DEFAULT '450107060083',
+      org_ogrnip TEXT NOT NULL DEFAULT '323237500208220',
+      fns_site TEXT NOT NULL DEFAULT 'www.nalog.gov.ru',
       external_daemon_url TEXT NOT NULL DEFAULT 'http://localhost:5050',
       is_active INTEGER NOT NULL DEFAULT 1,
       notes TEXT,
@@ -94,11 +100,13 @@ function initFiscalSchema(db, callback) {
             profile_name, port, baud_rate, device_model, is_mock_mode, single_consumer_queue,
             execution_timeout_seconds, fn_number, kkt_reg_number, default_tax_type, tax_regime_name,
             payment_subject_type, payment_method_type, default_shift_number, base_fiscal_document_number,
+            org_name, clinic_subname, org_address, org_inn, org_ogrnip, fns_site,
             external_daemon_url, is_active, notes, updated_at, updated_by
           ) VALUES (
             'Основной профиль (АТОЛ 91Ф)', 'COM3', 115200, 'АТОЛ 91Ф', 1, 1,
             35, '9960440301984210', '0004928103049182', 6, 'Без НДС (пп. 2 п. 2 ст. 149 НК РФ — медицинские услуги)',
             4, 4, 14, 1041,
+            'ИЧП Добрушкин А.М.', 'Центр Ортопедии и Травматологии', 'г. Сочи, ул. Транспортная 65', '450107060083', '323237500208220', 'www.nalog.gov.ru',
             'http://localhost:5050', 1, 'Штатная конфигурация кассы клиники по 54-ФЗ', datetime('now', 'localtime'), 'Система'
           )
         `);

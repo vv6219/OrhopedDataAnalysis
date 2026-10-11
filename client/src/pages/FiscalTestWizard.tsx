@@ -81,9 +81,17 @@ function FiscalTestGridToolbar() {
 }
 
 // Module-level Printable Fiscal Receipt Slip Component (per report-generation skill)
-export const FiscalReceiptSlip = React.forwardRef<HTMLDivElement, { receipt: FiscalReceiptRecord | null }>(
-  ({ receipt }, ref) => {
+export const FiscalReceiptSlip = React.forwardRef<HTMLDivElement, { receipt: FiscalReceiptRecord | null; fiscalInfo?: any }>(
+  ({ receipt, fiscalInfo }, ref) => {
     if (!receipt) return null;
+
+    const orgName = fiscalInfo?.orgName || (receipt as any)?.org_name || 'ИЧП Добрушкин А.М.';
+    const clinicSubname = fiscalInfo?.clinicSubname || (receipt as any)?.clinic_subname || 'Центр Ортопедии и Травматологии';
+    const orgAddress = fiscalInfo?.orgAddress || (receipt as any)?.org_address || 'г. Сочи, ул. Транспортная 65';
+    const orgInn = fiscalInfo?.orgInn || (receipt as any)?.org_inn || '450107060083';
+    const orgOgrnip = fiscalInfo?.orgOgrnip || (receipt as any)?.org_ogrnip || '323237500208220';
+    const fnsSite = fiscalInfo?.fnsSite || (receipt as any)?.fns_site || 'www.nalog.gov.ru';
+    const taxRegime = fiscalInfo?.taxRegime || 'СНО: УСН (пп. 2 п. 2 ст. 149 НК РФ — мед. услуги без НДС)';
 
     let parsedItems: any[] = [];
     if (receipt.items_json) {
@@ -140,22 +148,24 @@ export const FiscalReceiptSlip = React.forwardRef<HTMLDivElement, { receipt: Fis
         {/* Header */}
         <Box sx={{ textAlign: 'center', mb: 2 }}>
           <Typography sx={{ fontWeight: 800, fontSize: '15px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-            Центр Ортопедии и Травматологии
+            {orgName}
           </Typography>
-          <Typography sx={{ fontWeight: 700, fontSize: '13px' }}>
-            Клиника доктора Добрушкина
+          {clinicSubname && (
+            <Typography sx={{ fontWeight: 700, fontSize: '13px' }}>
+              {clinicSubname}
+            </Typography>
+          )}
+          <Typography sx={{ fontSize: '11px', color: '#4A5568' }}>
+            {orgAddress}
           </Typography>
           <Typography sx={{ fontSize: '11px', color: '#4A5568' }}>
-            г. Сочи, ул. Гагарина, д. 23А / Курортный проспект, 72
+            ИНН: {orgInn} • ОГРНИП: {orgOgrnip}
           </Typography>
           <Typography sx={{ fontSize: '11px', color: '#4A5568' }}>
-            ИНН: 232098765432 • ОГРН: 1182375012345
+            {taxRegime}
           </Typography>
           <Typography sx={{ fontSize: '11px', color: '#4A5568' }}>
-            СНО: УСН Доходы (пп. 2 п. 2 ст. 149 НК РФ — мед. услуги без НДС)
-          </Typography>
-          <Typography sx={{ fontSize: '11px', color: '#4A5568' }}>
-            Сайт ФНС: www.nalog.gov.ru
+            Сайт ФНС: {fnsSite}
           </Typography>
         </Box>
 
@@ -1020,7 +1030,7 @@ export default function FiscalTestWizard() {
 
       {/* Hidden container for print-to-pdf rendering (per report-generation skill) */}
       <Box sx={{ display: 'none' }}>
-        <FiscalReceiptSlip ref={printSlipRef} receipt={previewReceipt} />
+        <FiscalReceiptSlip ref={printSlipRef} receipt={previewReceipt} fiscalInfo={fiscalStatus} />
       </Box>
 
       {/* Preview Dialog */}
@@ -1046,7 +1056,7 @@ export default function FiscalTestWizard() {
         </DialogTitle>
 
         <DialogContent dividers sx={{ bgcolor: '#F8FAFC', display: 'flex', justifyContent: 'center', py: 3 }}>
-          <FiscalReceiptSlip receipt={previewReceipt} />
+          <FiscalReceiptSlip receipt={previewReceipt} fiscalInfo={fiscalStatus} />
         </DialogContent>
 
         <DialogActions sx={{ p: 2, display: 'flex', justifyContent: 'space-between' }}>
