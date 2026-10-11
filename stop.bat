@@ -25,5 +25,21 @@ if defined PID (
     echo [ИНФОРМАЦИЯ] Работающий сервер на порту 5000 не обнаружен.
 )
 
+set "FPID="
+echo Поиск процесса на порту 5050 (Фискальный сервис)...
+for /f "tokens=5" %%a in ('netstat -aon ^| findstr :5050 ^| findstr LISTENING') do (
+    set FPID=%%a
+)
+
+if defined FPID (
+    echo Завершение фискального сервиса (PID: %FPID%)...
+    taskkill /F /PID %FPID% >nul 2>&1
+    if %ERRORLEVEL% EQU 0 (
+        echo [УСПЕХ] Фискальный сервис успешно остановлен.
+    )
+) else (
+    echo [ИНФОРМАЦИЯ] Работающий фискальный сервис на порту 5050 не обнаружен.
+)
+
 echo ======================================================================
 timeout /t 3 >nul 2>&1 || ping -n 4 127.0.0.1 >nul

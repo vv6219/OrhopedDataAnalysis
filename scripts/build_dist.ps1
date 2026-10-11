@@ -108,6 +108,20 @@ Get-ChildItem -Path $serverDir -Exclude "node_modules", "package-lock.json", ".g
 }
 Write-Host "  -> Copied Express API server files to server" -ForegroundColor Gray
 
+# 4.3.1 C# Fiscal Service Publish (Release)
+$fiscalProj = Join-Path $serverDir "fiscal_service\OrthoErp.FiscalService\OrthoErp.FiscalService.csproj"
+if (Test-Path $fiscalProj) {
+    Write-Host "  -> Publishing C# Fiscal Service (Release)..." -ForegroundColor Gray
+    $fiscalPublishDir = Join-Path $OutputDir "server\fiscal_service\OrthoErp.FiscalService\publish"
+    New-Item -ItemType Directory -Path $fiscalPublishDir -Force | Out-Null
+    & dotnet publish $fiscalProj -c Release -o $fiscalPublishDir --nologo -v q
+    # Clean obj, bin and logs from target server directory
+    Remove-Item (Join-Path $OutputDir "server\fiscal_service\OrthoErp.FiscalService\obj") -Recurse -Force -ErrorAction SilentlyContinue
+    Remove-Item (Join-Path $OutputDir "server\fiscal_service\OrthoErp.FiscalService\bin") -Recurse -Force -ErrorAction SilentlyContinue
+    Remove-Item (Join-Path $OutputDir "server\fiscal_service\OrthoErp.FiscalService\logs") -Recurse -Force -ErrorAction SilentlyContinue
+    Write-Host "  [OK] C# Fiscal Service published into server\fiscal_service\...\publish" -ForegroundColor Green
+}
+
 # 4.4 SQLite Database with full data
 $sourceDb = Join-Path $dbDir "orthopedic_data_center.sqlite"
 if (-not (Test-Path $sourceDb)) {
@@ -211,7 +225,7 @@ if (-not $NoZip) {
         Remove-Item $zipPath -Force
     }
     Add-Type -AssemblyName System.IO.Compression.FileSystem
-    [System.IO.Compression.ZipFile]::CreateFromDirectory($OutputDir, $zipPath, [System.IO.Compression.CompressionLevel]::Optimal, $true)
+    [System.IO.Compression.ZipFile]::CreateFromDirectory($OutputDir, $zipPath, [System.IO.Compression.CompressionLevel]::Optimal, $false)
     $zipSize = (Get-Item $zipPath).Length / 1MB
     Write-Host "======================================================================" -ForegroundColor Cyan
     Write-Host " STANDALONE DISTRIBUTIVE.ZIP CREATED SUCCESSFULLY!" -ForegroundColor Green
