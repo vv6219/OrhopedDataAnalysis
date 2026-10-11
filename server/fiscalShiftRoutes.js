@@ -4,6 +4,18 @@ const fiscalShiftService = require('./fiscalShiftService');
 const XLSX = require('xlsx');
 
 /**
+ * Encodes Content-Disposition attachment header safely according to RFC 5987 / RFC 6266.
+ * Uses ASCII fallback and UTF-8 encoded filename* to support Russian Cyrillic without header char errors.
+ */
+function formatDispositionHeader(prefix, shift, ext) {
+  const safeAscii = (shift.mnemonic_code || `shift_${shift.id}`).replace(/[^\x20-\x7E]/g, '').replace(/[\s\[\]]/g, '_') || `shift_${shift.id}`;
+  const asciiFilename = `${prefix}_${safeAscii}.${ext}`;
+  const rawRussianFilename = `${prefix}_${shift.mnemonic_code}.${ext}`.replace(/[\r\n"]/g, '');
+  const encodedFilename = encodeURIComponent(rawRussianFilename);
+  return `attachment; filename="${asciiFilename}"; filename*=UTF-8''${encodedFilename}`;
+}
+
+/**
  * GET /api/fiscal/shifts/current
  * Returns the currently active shift (or null if closed) along with 24h lifespan warnings.
  */
@@ -111,7 +123,7 @@ router.get('/:id', async (req, res) => {
 router.get('/:id/export/json', async (req, res) => {
   try {
     const details = await fiscalShiftService.getShiftDetails(req.params.id);
-    res.setHeader('Content-Disposition', `attachment; filename="shift_${details.shift.mnemonic_code}.json"`);
+    res.setHeader('Content-Disposition', formatDispositionHeader('Shift', details.shift, 'json'));
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
     res.json(details);
   } catch (err) {
@@ -206,7 +218,7 @@ router.get('/:id/export/excel', async (req, res) => {
 
     const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
 
-    res.setHeader('Content-Disposition', `attachment; filename="Shift_${shift.mnemonic_code}.xlsx"`);
+    res.setHeader('Content-Disposition', formatDispositionHeader('Shift', shift, 'xlsx'));
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.send(buffer);
   } catch (err) {
