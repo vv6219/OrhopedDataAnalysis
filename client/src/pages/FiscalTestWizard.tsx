@@ -775,7 +775,7 @@ export default function FiscalTestWizard() {
           disabled={loading}
           sx={{ bgcolor: '#0F3C64', px: 3, py: 1.2, fontWeight: 700 }}
         >
-          Запустить мастер тестирования (5 тестов)
+          Запустить мастер тестирования (6 сценариев)
         </Button>
 
         <Button
@@ -797,6 +797,15 @@ export default function FiscalTestWizard() {
           sx={{ px: 2.5, py: 1.2, fontWeight: 700 }}
         >
           Удалить тестовые данные [TEST_DAEMON]
+        </Button>
+
+        <Button
+          variant="outlined"
+          startIcon={<ReceiptLongIcon />}
+          onClick={() => navigate('/admin/fiscal-shifts')}
+          sx={{ borderColor: '#0F3C64', color: '#0F3C64', px: 2, py: 1.2, fontWeight: 700, textTransform: 'none' }}
+        >
+          Журнал смен ККТ
         </Button>
 
         <Box sx={{ ml: 'auto', display: 'flex', gap: 1 }}>

@@ -22,6 +22,7 @@ import FiscalAuditLog from './pages/FiscalAuditLog';
 import FiscalTestWizard from './pages/FiscalTestWizard';
 import FiscalSettings from './pages/FiscalSettings';
 import ServerHealth from './pages/ServerHealth';
+import FiscalShiftsAnalytics from './pages/FiscalShiftsAnalytics';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import LoginModal from './components/LoginModal';
 
@@ -234,6 +235,8 @@ function AppContent() {
             <Route path="/fiscal-audit" element={<FiscalAuditLog />} />
             <Route path="/admin/fiscal-test-wizard" element={<FiscalTestWizard />} />
             <Route path="/fiscal-test-wizard" element={<FiscalTestWizard />} />
+            <Route path="/admin/fiscal-shifts" element={<FiscalShiftsAnalytics />} />
+            <Route path="/fiscal-shifts" element={<FiscalShiftsAnalytics />} />
             <Route path="/sqlite-studio" element={<SqliteStudio />} />
             <Route path="/db-studio" element={<SqliteStudio />} />
             {/* Fallback to BI Dashboard */}

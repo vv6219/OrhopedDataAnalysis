@@ -24,6 +24,9 @@ app.use('/api/analytics/services-bi', servicesBiRoutes);
 const fiscalRoutes = require('./fiscalRoutes');
 app.use('/api/fiscal', fiscalRoutes);
 
+const fiscalShiftRoutes = require('./fiscalShiftRoutes');
+app.use('/api/fiscal/shifts', fiscalShiftRoutes);
+
 const servicesHealthRoutes = require('./servicesHealthRoutes');
 app.use('/api/admin/services', servicesHealthRoutes);
 

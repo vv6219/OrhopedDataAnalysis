@@ -81,6 +81,15 @@ async function purgeDaemonData() {
     `);
     console.log(`✓ Удалено фискальных чеков (fiscal_receipts): ${fiscalChanges}`);
 
+    // 6.1 Кассовые смены ККТ (fiscal_shifts)
+    const fiscalShiftChanges = await runAsync(`
+      DELETE FROM fiscal_shifts 
+      WHERE notes LIKE '%[TEST_DAEMON]%' 
+         OR opened_by LIKE '%[TEST_DAEMON]%'
+         OR mnemonic_code LIKE '%TEST%'
+    `);
+    console.log(`✓ Удалено тестовых смен ККТ (fiscal_shifts): ${fiscalShiftChanges}`);
+
     // 7. Позиции транзакций
     const otiChanges = await runAsync(`
       DELETE FROM operation_transaction_items 

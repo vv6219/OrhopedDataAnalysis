@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
   Box,
@@ -16,13 +17,33 @@ import LocalHospitalIcon from '@mui/icons-material/LocalHospital';
 import MenuBookIcon from '@mui/icons-material/MenuBook';
 import LogoutIcon from '@mui/icons-material/Logout';
 import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
+import PointOfSaleIcon from '@mui/icons-material/PointOfSale';
 import { routeMetaMap } from '../config/navigationConfig';
 import { useAuth } from '../context/AuthContext';
+import FiscalShiftCloseModal from './FiscalShiftCloseModal';
 
 export default function TopStatusBar() {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, logout, isAuthenticated } = useAuth();
+  const [shiftStatus, setShiftStatus] = useState<any>(null);
+  const [closeShiftModalOpen, setCloseShiftModalOpen] = useState(false);
+
+  const fetchShiftStatus = async () => {
+    try {
+      const res = await fetch('/api/fiscal/shifts/current');
+      const data = await res.json();
+      setShiftStatus(data);
+    } catch (e) {
+      // ignore
+    }
+  };
+
+  useEffect(() => {
+    fetchShiftStatus();
+    const interval = setInterval(fetchShiftStatus, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
   const currentMeta = routeMetaMap[location.pathname] || {
     title: 'Страница',
@@ -209,6 +230,44 @@ export default function TopStatusBar() {
           }}
         />
 
+        {/* KKT Shift Badge */}
+        <Tooltip
+          title={
+            shiftStatus?.isOpen
+              ? `Кассовая смена ККТ «${shiftStatus.currentShift?.mnemonic_code}» открыта (${shiftStatus.currentShift?.hours_running || 0} ч). Нажмите для управления, сверки или снятия Z-отчета.`
+              : 'Кассовая смена ККТ закрыта. При первой оплате откроется автоматически. Нажмите для управления.'
+          }
+        >
+          <Chip
+            icon={<PointOfSaleIcon sx={{ fontSize: '15px !important' }} />}
+            label={
+              shiftStatus?.isOpen
+                ? `Смена: ${shiftStatus.currentShift?.mnemonic_code}`
+                : 'Касса: Смена закрыта'
+            }
+            size="small"
+            onClick={() => setCloseShiftModalOpen(true)}
+            clickable
+            sx={{
+              bgcolor: shiftStatus?.isOpen
+                ? (shiftStatus.currentShift?.is_expired ? '#FEE2E2' : '#F0FDF4')
+                : '#F1F5F9',
+              color: shiftStatus?.isOpen
+                ? (shiftStatus.currentShift?.is_expired ? '#DC2626' : '#166534')
+                : '#475569',
+              border: `1px solid ${
+                shiftStatus?.isOpen
+                  ? (shiftStatus.currentShift?.is_expired ? '#FCA5A5' : '#BBF7D0')
+                  : '#CBD5E1'
+              }`,
+              fontWeight: 700,
+              fontSize: '0.75rem',
+              height: 28,
+              cursor: 'pointer'
+            }}
+          />
+        </Tooltip>
+
         {/* User & Logout Controls */}
         {isAuthenticated && (
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8, ml: 0.5 }}>
@@ -247,6 +306,13 @@ export default function TopStatusBar() {
           </Box>
         )}
       </Box>
+
+      {/* Modal for closing shift */}
+      <FiscalShiftCloseModal
+        open={closeShiftModalOpen}
+        onClose={() => setCloseShiftModalOpen(false)}
+        onShiftClosed={fetchShiftStatus}
+      />
     </Box>
   );
 }

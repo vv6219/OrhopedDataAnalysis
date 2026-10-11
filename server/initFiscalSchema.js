@@ -7,12 +7,64 @@ const sqlite3 = require('sqlite3').verbose();
  */
 function initFiscalSchema(db, callback) {
   db.serialize(() => {
-    // 1. Table for fiscal receipts
+    // 1. Table for fiscal shifts (смены ККТ АТОЛ 91Ф)
+    db.run(`CREATE TABLE IF NOT EXISTS fiscal_shifts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      mnemonic_code TEXT NOT NULL UNIQUE,          -- 'СМ-20261011-001'
+      shift_number INTEGER NOT NULL,               -- Сквозной номер смены в ФН (тег 1038)
+      status TEXT NOT NULL DEFAULT 'open',         -- 'open', 'closed', 'expired'
+      opened_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+      opened_by TEXT NOT NULL DEFAULT 'Администратор',
+      closed_at TEXT,
+      closed_by TEXT,
+      duration_minutes INTEGER DEFAULT 0,
+      
+      -- Счетчики операций за смену
+      receipts_count INTEGER DEFAULT 0,
+      returns_count INTEGER DEFAULT 0,
+      
+      -- Финансовые итоги смены (₽)
+      total_income REAL DEFAULT 0.0,
+      cash_income REAL DEFAULT 0.0,
+      card_income REAL DEFAULT 0.0,
+      sbp_income REAL DEFAULT 0.0,
+      total_returns REAL DEFAULT 0.0,
+      
+      -- Сверка кассы при закрытии
+      initial_cash REAL DEFAULT 0.0,
+      expected_cash REAL DEFAULT 0.0,
+      actual_cash REAL,
+      cash_difference REAL DEFAULT 0.0,            -- actual_cash - expected_cash (недостача/излишек)
+      
+      -- Фискальные реквизиты Z-отчета ККТ
+      z_report_number INTEGER,                     -- Номер Z-отчета
+      fiscal_document_number INTEGER,              -- Номер ФД Z-отчета (тег 1040)
+      fiscal_sign TEXT,                            -- ФПД Z-отчета (тег 1077)
+      is_fiscalized INTEGER DEFAULT 0,
+      is_printed INTEGER DEFAULT 0,
+      
+      -- Снапшот Z-отчета и метаданные
+      z_report_json TEXT,                          -- Полный структурированный JSON отчета
+      notes TEXT,
+      created_at TEXT DEFAULT (datetime('now', 'localtime'))
+    )`);
+
+    // Migration for existing tables: add initial_cash column if not present
+    db.run(`ALTER TABLE fiscal_shifts ADD COLUMN initial_cash REAL DEFAULT 0.0`, (err) => {
+      // Column may already exist, ignore error
+    });
+
+    db.run(`CREATE INDEX IF NOT EXISTS idx_fiscal_shifts_code ON fiscal_shifts(mnemonic_code)`);
+    db.run(`CREATE INDEX IF NOT EXISTS idx_fiscal_shifts_status ON fiscal_shifts(status)`);
+    db.run(`CREATE INDEX IF NOT EXISTS idx_fiscal_shifts_opened ON fiscal_shifts(opened_at)`);
+
+    // 2. Table for fiscal receipts
     db.run(`CREATE TABLE IF NOT EXISTS fiscal_receipts (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       transaction_id INTEGER REFERENCES operation_transactions(id) ON DELETE SET NULL,
       visit_id INTEGER REFERENCES patient_visits(id) ON DELETE SET NULL,
       patient_id INTEGER REFERENCES patients(id) ON DELETE SET NULL,
+      shift_id INTEGER REFERENCES fiscal_shifts(id) ON DELETE SET NULL, -- Внешний ключ на смену
       patient_contact TEXT,                    -- Тег 1008 (Телефон / Email)
       receipt_type TEXT NOT NULL DEFAULT 'sell', -- 'sell' (приход), 'sell_return' (возврат)
       payment_type TEXT NOT NULL,              -- 'card', 'cash', 'sbp', 'invoice'
@@ -38,11 +90,25 @@ function initFiscalSchema(db, callback) {
       fiscalized_at TEXT
     )`);
 
+    // Ensure shift_id column exists if table was previously created
+    db.all(`PRAGMA table_info(fiscal_receipts)`, (err, cols) => {
+      if (!err && cols) {
+        const hasShiftId = cols.some(c => c.name === 'shift_id');
+        if (!hasShiftId) {
+          db.run(`ALTER TABLE fiscal_receipts ADD COLUMN shift_id INTEGER REFERENCES fiscal_shifts(id) ON DELETE SET NULL`, () => {
+            db.run(`CREATE INDEX IF NOT EXISTS idx_fiscal_receipts_shift ON fiscal_receipts(shift_id)`);
+          });
+        } else {
+          db.run(`CREATE INDEX IF NOT EXISTS idx_fiscal_receipts_shift ON fiscal_receipts(shift_id)`);
+        }
+      }
+    });
+
     db.run(`CREATE INDEX IF NOT EXISTS idx_fiscal_receipts_tx ON fiscal_receipts(transaction_id)`);
     db.run(`CREATE INDEX IF NOT EXISTS idx_fiscal_receipts_status ON fiscal_receipts(status)`);
     db.run(`CREATE INDEX IF NOT EXISTS idx_fiscal_receipts_created ON fiscal_receipts(created_at)`);
 
-    // 2. Table for detailed Serilog audit logs
+    // 3. Table for detailed Serilog audit logs
     db.run(`CREATE TABLE IF NOT EXISTS fiscal_audit_logs (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       timestamp TEXT DEFAULT (datetime('now', 'localtime')),

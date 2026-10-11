@@ -202,6 +202,12 @@ export const navigationGroups: NavGroup[] = [
         tooltip: 'Удалить все тестовые данные с маркером [TEST_DAEMON]'
       },
       {
+        text: 'Смены ККТ АТОЛ 91Ф',
+        path: '/admin/fiscal-shifts',
+        icon: <PointOfSaleIcon sx={{ fontSize: 20, color: '#0F3C64' }} />,
+        tooltip: 'Журнал и аналитика кассовых смен ККТ АТОЛ 91Ф: мнемоника, X/Z-отчеты, сверка кассы'
+      },
+      {
         text: 'Параметры ККТ АТОЛ 91Ф',
         path: '/admin/fiscal-settings',
         icon: <TuneIcon sx={{ fontSize: 20 }} />,
@@ -365,6 +371,18 @@ export const routeMetaMap: Record<string, RouteMeta> = {
   },
   '/admin/fiscal-test-wizard': {
     title: 'Мастер тестов ККТ [TEST_DAEMON]',
+    groupTitle: 'Администратор',
+    groupId: 'administrator',
+    parentPath: '/'
+  },
+  '/admin/fiscal-shifts': {
+    title: 'Смены ККТ АТОЛ 91Ф',
+    groupTitle: 'Администратор',
+    groupId: 'administrator',
+    parentPath: '/'
+  },
+  '/fiscal-shifts': {
+    title: 'Смены ККТ АТОЛ 91Ф',
     groupTitle: 'Администратор',
     groupId: 'administrator',
     parentPath: '/'

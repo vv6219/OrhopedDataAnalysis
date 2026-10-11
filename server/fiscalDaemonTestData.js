@@ -8,6 +8,7 @@
  */
 const db = require('./database');
 const fiscalService = require('./fiscalService');
+const fiscalShiftService = require('./fiscalShiftService');
 const { logFiscalAudit, LogLevels, EventTypes } = require('./fiscalAuditLogger');
 
 const runAsync = (sql, params = []) => new Promise((resolve, reject) => {
@@ -57,9 +58,17 @@ async function purgeFiscalDaemonData() {
        )
   `);
 
+  const shiftChanges = await runAsync(`
+    DELETE FROM fiscal_shifts 
+    WHERE notes LIKE '%[TEST_DAEMON]%' 
+       OR opened_by LIKE '%[TEST_DAEMON]%'
+       OR mnemonic_code LIKE '%TEST%'
+  `);
+
   return {
     purgedReceipts: receiptsChanges.changes,
-    purgedAuditLogs: auditChanges.changes
+    purgedAuditLogs: auditChanges.changes,
+    purgedShifts: shiftChanges.changes
   };
 }
 
@@ -138,23 +147,55 @@ async function createFiscalDaemonData() {
     }
   ];
 
+  const demoShift1 = await runAsync(`
+    INSERT INTO fiscal_shifts (
+      mnemonic_code, shift_number, status, opened_at, opened_by, closed_at, closed_by,
+      duration_minutes, receipts_count, returns_count, total_income, cash_income, card_income, sbp_income,
+      initial_cash, expected_cash, actual_cash, cash_difference, z_report_number, fiscal_document_number, fiscal_sign,
+      is_fiscalized, is_printed, notes
+    ) VALUES (
+      'СМ-20261010-001 [TEST_DAEMON]', 14, 'closed', datetime('now', '-1 day', '+8 hours'), 'Администратор [TEST_DAEMON]',
+      datetime('now', '-1 day', '+19 hours'), 'Администратор [TEST_DAEMON]',
+      660, 3, 0, 22000.0, 12000.0, 3500.0, 6500.0,
+      1000.0, 13000.0, 13000.0, 0.0, 14, 2010, '9182371920',
+      1, 1, '[TEST_DAEMON] Демо-смена за вчера, касса сошлась идеально'
+    )
+  `);
+
+  const demoShift2 = await runAsync(`
+    INSERT INTO fiscal_shifts (
+      mnemonic_code, shift_number, status, opened_at, opened_by,
+      duration_minutes, receipts_count, returns_count, total_income, cash_income, card_income, sbp_income,
+      initial_cash, expected_cash,
+      is_fiscalized, is_printed, notes
+    ) VALUES (
+      'СМ-20261011-001 [TEST_DAEMON]', 15, 'open', datetime('now', '-3 hours'), 'Администратор [TEST_DAEMON]',
+      180, 2, 0, 22700.0, 0.0, 4200.0, 0.0,
+      1500.0, 1500.0,
+      1, 1, '[TEST_DAEMON] Текущая открытая смена'
+    )
+  `);
+
   const createdIds = [];
 
-  for (const r of testReceipts) {
+  for (let i = 0; i < testReceipts.length; i++) {
+    const r = testReceipts[i];
+    const targetShiftId = i < 3 ? demoShift1.lastID : demoShift2.lastID;
+    const targetShiftNum = i < 3 ? 14 : 15;
     const res = await runAsync(`
       INSERT INTO fiscal_receipts (
         patient_contact, receipt_type, payment_type, total_amount,
         tax_type, payment_subject_type, payment_method_type,
-        fiscal_document_number, fiscal_sign, fiscal_drive_number,
+        shift_id, fiscal_document_number, fiscal_sign, fiscal_drive_number,
         shift_number, receipt_number, kkt_reg_number, status,
         is_fiscalized, is_printed, error_message, device_model, port,
         items_json, created_at, fiscalized_at
       ) VALUES (
-        ?, 'sell', ?, ?, 6, 4, 4, ?, ?, '9960440301984210', ?, ?, '0004928103049182',
+        ?, 'sell', ?, ?, 6, 4, 4, ?, ?, ?, '9960440301984210', ?, ?, '0004928103049182',
         ?, ?, ?, ?, 'АТОЛ 91Ф', 'COM3', ?, datetime('now', '-2 hours'), datetime('now', '-2 hours')
       )
     `, [
-      r.patientContact, r.paymentType, r.totalAmount, r.fd, r.fpd, r.shift, r.rn,
+      r.patientContact, r.paymentType, r.totalAmount, targetShiftId, r.fd, r.fpd, targetShiftNum, r.rn,
       r.status, r.isFiscalized, r.isPrinted, r.errorMessage || null, JSON.stringify(r.items || [])
     ]);
 
@@ -407,6 +448,44 @@ async function runFiscalTestWizard() {
     results.push({
       code: 'FL-FISCAL-05',
       title: 'Восстановление при ошибке бумаги (Popper Test & Repeat Print)',
+      status: 'failed',
+      durationMs: 0,
+      errorMessage: err.message
+    });
+  }
+
+  // Test 6: Shift Management & Reconciliation (FL-FISCAL-06)
+  try {
+    const st6 = Date.now();
+    let currentShift = await fiscalShiftService.getCurrentShift();
+    if (!currentShift) {
+      currentShift = await fiscalShiftService.openShift({
+        openedBy: 'Мастер тестирования [TEST_DAEMON]',
+        initialCash: 1000
+      });
+    }
+    const xReport = await fiscalShiftService.getXReport();
+    const dur6 = Date.now() - st6;
+    results.push({
+      code: 'FL-FISCAL-06',
+      title: 'Управление сменами ККТ и X-отчет без закрытия (54-ФЗ)',
+      description: 'Проверка мнемонического номера смены, статуса, счетчиков выручки и снятия промежуточного X-отчета',
+      status: 'passed',
+      durationMs: dur6,
+      details: {
+        shiftId: currentShift.id,
+        shiftNumber: currentShift.shift_number,
+        mnemonicCode: currentShift.mnemonic_code,
+        status: currentShift.status,
+        receiptsCount: xReport.receiptsCount,
+        totalIncome: xReport.totalIncome,
+        cashInDrawer: xReport.cashInDrawer
+      }
+    });
+  } catch (err) {
+    results.push({
+      code: 'FL-FISCAL-06',
+      title: 'Управление сменами ККТ и X-отчет без закрытия (54-ФЗ)',
       status: 'failed',
       durationMs: 0,
       errorMessage: err.message

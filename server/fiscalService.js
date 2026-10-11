@@ -226,10 +226,14 @@ class FiscalService {
       totalAmount = 0
     } = data;
 
+    // 0. Ensure active valid shift (Auto-opens if closed, checks 24h limit per 54-FZ)
+    const fiscalShiftService = require('./fiscalShiftService');
+    const activeShift = await fiscalShiftService.ensureShiftForReceipt('Администратор');
+
     // 1. Initial State Recovery & Warm-up
     logFiscalAudit({
       level: LogLevels.INFO,
-      message: 'State Recovery: проверка готовности ККТ, сброс незавершенных чеков (cancelReceipt)',
+      message: `State Recovery: проверка готовности ККТ (Смена: ${activeShift.mnemonic_code}), сброс незавершенных чеков (cancelReceipt)`,
       eventType: EventTypes.STATE_RECOVERY,
       transactionId,
       devicePort: this.port
@@ -239,14 +243,16 @@ class FiscalService {
     const receiptId = await new Promise((resolve, reject) => {
       db.run(
         `INSERT INTO fiscal_receipts (
-          transaction_id, visit_id, patient_id, patient_contact, receipt_type,
+          transaction_id, visit_id, patient_id, shift_id, shift_number, patient_contact, receipt_type,
           payment_type, total_amount, tax_type, payment_subject_type, payment_method_type,
           status, is_fiscalized, is_printed, device_model, port, items_json, created_at
-        ) VALUES (?, ?, ?, ?, 'sell', ?, ?, ?, ?, ?, 'processing', 0, 0, ?, ?, ?, datetime('now', 'localtime'))`,
+        ) VALUES (?, ?, ?, ?, ?, ?, 'sell', ?, ?, ?, ?, ?, 'processing', 0, 0, ?, ?, ?, datetime('now', 'localtime'))`,
         [
           transactionId,
           visitId,
           patientId,
+          activeShift.id,
+          activeShift.shift_number,
           patientContact || null,
           paymentType,
           totalAmount,
@@ -454,6 +460,7 @@ class FiscalService {
             fiscal_document_number = ?,
             fiscal_sign = ?,
             fiscal_drive_number = ?,
+            shift_id = COALESCE(shift_id, ?),
             shift_number = ?,
             receipt_number = ?,
             kkt_reg_number = ?,
@@ -466,7 +473,8 @@ class FiscalService {
             fiscalDocNumber,
             fiscalSign,
             this.fnNumber,
-            this.currentShiftNumber,
+            activeShift.id,
+            activeShift.shift_number,
             receiptNumber,
             this.kktRegNumber,
             isPrinted ? 1 : 0,
