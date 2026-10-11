@@ -132,14 +132,14 @@ async function createFiscalDaemonData() {
         fiscal_document_number, fiscal_sign, fiscal_drive_number,
         shift_number, receipt_number, kkt_reg_number, status,
         is_fiscalized, is_printed, error_message, device_model, port,
-        created_at, fiscalized_at
+        items_json, created_at, fiscalized_at
       ) VALUES (
         ?, 'sell', ?, ?, 6, 4, 4, ?, ?, '9960440301984210', ?, ?, '0004928103049182',
-        ?, ?, ?, ?, 'АТОЛ 91Ф', 'COM3', datetime('now', '-2 hours'), datetime('now', '-2 hours')
+        ?, ?, ?, ?, 'АТОЛ 91Ф', 'COM3', ?, datetime('now', '-2 hours'), datetime('now', '-2 hours')
       )
     `, [
       r.patientContact, r.paymentType, r.totalAmount, r.fd, r.fpd, r.shift, r.rn,
-      r.status, r.isFiscalized, r.isPrinted, r.errorMessage || null
+      r.status, r.isFiscalized, r.isPrinted, r.errorMessage || null, JSON.stringify(r.items || [])
     ]);
 
     const receiptId = res.lastID;
@@ -440,7 +440,7 @@ async function getFiscalDaemonStatus() {
   const testReceipts = await allAsync(`
     SELECT * FROM fiscal_receipts 
     WHERE patient_contact LIKE '%[TEST_DAEMON]%' OR error_message LIKE '%[TEST_DAEMON]%'
-    ORDER BY id DESC LIMIT 10
+    ORDER BY id DESC
   `);
 
   return {

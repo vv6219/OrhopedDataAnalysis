@@ -211,8 +211,8 @@ class FiscalService {
         `INSERT INTO fiscal_receipts (
           transaction_id, visit_id, patient_id, patient_contact, receipt_type,
           payment_type, total_amount, tax_type, payment_subject_type, payment_method_type,
-          status, is_fiscalized, is_printed, device_model, port, created_at
-        ) VALUES (?, ?, ?, ?, 'sell', ?, ?, 6, 4, 4, 'processing', 0, 0, ?, ?, datetime('now', 'localtime'))`,
+          status, is_fiscalized, is_printed, device_model, port, items_json, created_at
+        ) VALUES (?, ?, ?, ?, 'sell', ?, ?, ?, ?, ?, 'processing', 0, 0, ?, ?, ?, datetime('now', 'localtime'))`,
         [
           transactionId,
           visitId,
@@ -220,8 +220,12 @@ class FiscalService {
           patientContact || null,
           paymentType,
           totalAmount,
+          this.taxType || 6,
+          this.paymentSubjectType || 4,
+          this.paymentMethodType || 4,
           this.deviceModel,
-          this.port
+          this.port,
+          JSON.stringify(items || [])
         ],
         function(err) {
           if (err) return reject(err);

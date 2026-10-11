@@ -33,6 +33,7 @@ function initFiscalSchema(db, callback) {
       error_message TEXT,
       device_model TEXT DEFAULT 'АТОЛ 91Ф',
       port TEXT DEFAULT 'COM3',
+      items_json TEXT,                         -- Детализированный список товарных позиций / услуг (JSON)
       created_at TEXT DEFAULT (datetime('now', 'localtime')),
       fiscalized_at TEXT
     )`);
