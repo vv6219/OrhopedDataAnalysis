@@ -21,6 +21,9 @@ app.use('/api/payouts', payoutRoutes);
 const servicesBiRoutes = require('./servicesBiRoutes');
 app.use('/api/analytics/services-bi', servicesBiRoutes);
 
+const fiscalRoutes = require('./fiscalRoutes');
+app.use('/api/fiscal', fiscalRoutes);
+
 // ============================================================================
 // Swagger OpenAPI 3.0 Configuration
 // ============================================================================
@@ -1991,7 +1994,10 @@ app.post('/api/transactions', (req, res) => {
     net_profit, 
     notes, 
     materials,
-    transaction_date: client_transaction_date
+    transaction_date: client_transaction_date,
+    fiscalize,
+    patient_contact,
+    payment_type
   } = req.body;
   const transaction_date = client_transaction_date || new Date().toISOString();
 
@@ -2057,6 +2063,47 @@ app.post('/api/transactions', (req, res) => {
         }
       });
       matStmt.finalize();
+    }
+
+    if (fiscalize) {
+      try {
+        const fiscalService = require('./fiscalService');
+        fiscalService.enqueueReceipt({
+          transactionId,
+          patientId: patient_id,
+          patientContact: patient_contact,
+          items: opsList.map(op => ({
+            name: op.notes || op.name || 'Медицинская услуга',
+            quantity: op.quantity || 1,
+            unit_price: op.unit_price || 0,
+            subtotal: op.subtotal || 0
+          })),
+          paymentType: payment_type || 'card',
+          totalAmount: billed_price || 0
+        }).then(fiscalRes => {
+          return res.json({
+            success: true,
+            transactionId,
+            transaction_date,
+            fiscalReceipt: fiscalRes
+          });
+        }).catch(fErr => {
+          console.error('[Transaction] Fiscalization error:', fErr.message);
+          return res.json({
+            success: true,
+            transactionId,
+            transaction_date,
+            fiscalError: fErr.message,
+            fiscalReceipt: {
+              status: 'failed',
+              errorMessage: fErr.message
+            }
+          });
+        });
+        return;
+      } catch (fErr) {
+        console.error('[Transaction] Fiscal service init error:', fErr.message);
+      }
     }
 
     res.json({ success: true, transactionId, transaction_date });

@@ -1,0 +1,6 @@
+@OrthoErp.FiscalService_HostAddress = http://localhost:5086
+
+GET {{OrthoErp.FiscalService_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

@@ -395,6 +395,14 @@ const db = new sqlite3.Database(dbPath, (err) => {
       } catch (err) {
         console.error('Error initializing Staff Payout schema:', err.message);
       }
+
+      // Initialize Atol 91F Fiscal and Serilog Audit Log schema
+      try {
+        const initFiscalSchema = require('./initFiscalSchema');
+        initFiscalSchema(db);
+      } catch (err) {
+        console.error('Error initializing Fiscal schema:', err.message);
+      }
     });
   }
 });

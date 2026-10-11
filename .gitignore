@@ -17,3 +17,7 @@ backups/
 MEDICAL/
 installers/
 tools/node/
+bin/
+obj/
+**/bin/
+**/obj/

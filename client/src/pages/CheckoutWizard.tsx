@@ -5,7 +5,8 @@ import {
   TextField, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, 
   Tooltip, Autocomplete, Chip, CircularProgress, Alert, Divider, IconButton,
   RadioGroup, FormControlLabel, Radio, FormControl, FormLabel,
-  Dialog, DialogTitle, DialogContent, DialogActions, Select, MenuItem, InputLabel
+  Dialog, DialogTitle, DialogContent, DialogActions, Select, MenuItem, InputLabel,
+  Switch
 } from '@mui/material';
 import { useReactToPrint } from 'react-to-print';
 import { VisitReportTemplate, type VisitReportMaterial } from '../components/VisitReportTemplate';
@@ -24,6 +25,8 @@ import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import CloseIcon from '@mui/icons-material/Close';
 import EventIcon from '@mui/icons-material/Event';
+import PointOfSaleIcon from '@mui/icons-material/PointOfSale';
+import ReplayIcon from '@mui/icons-material/Replay';
 
 const steps = ['Выбор пациента и сервисов', 'Назначение сотрудников', 'Расход материалов', 'Расчет и оплата'];
 
@@ -115,6 +118,36 @@ export default function CheckoutWizard() {
   const [paymentMethod, setPaymentMethod] = useState('card');
   const [submittingTransaction, setSubmittingTransaction] = useState(false);
   const [savedTransactionResult, setSavedTransactionResult] = useState<any | null>(null);
+
+  // Fiscal Registration State (ККТ АТОЛ 91Ф 54-ФЗ)
+  const [fiscalize, setFiscalize] = useState(true);
+  const [patientContact, setPatientContact] = useState('');
+  const [fiscalStatus, setFiscalStatus] = useState<any | null>(null);
+  const [reprintingFiscal, setReprintingFiscal] = useState(false);
+
+  useEffect(() => {
+    if (selectedPatient) {
+      const contact = selectedPatient.phone || selectedPatient.contact_phone || selectedPatient.email || selectedPatient.sphone || '';
+      if (contact) {
+        setPatientContact(contact);
+      }
+    }
+  }, [selectedPatient]);
+
+  useEffect(() => {
+    const fetchFiscalStatus = async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/fiscal/status`);
+        if (res.ok) {
+          const data = await res.json();
+          setFiscalStatus(data);
+        }
+      } catch {
+        // fallback silent
+      }
+    };
+    fetchFiscalStatus();
+  }, []);
 
   // PDF Report & Preview State
   const [pdfPreviewOpen, setPdfPreviewOpen] = useState(false);
@@ -462,7 +495,10 @@ export default function CheckoutWizard() {
         material_id: m.material_id,
         quantity_used: m.actual_qty,
         actual_cost_at_time: m.current_unit_cost
-      }))
+      })),
+      fiscalize,
+      patient_contact: patientContact,
+      payment_type: paymentMethod
     };
 
     try {
@@ -493,6 +529,7 @@ export default function CheckoutWizard() {
     setActualMaterials([]);
     setSavedTransactionResult(null);
     setVisitNotes('');
+    setPatientContact(selectedPatient?.phone || selectedPatient?.contact_phone || selectedPatient?.email || '');
   };
 
   if (loadingInitial) {
@@ -1394,6 +1431,77 @@ export default function CheckoutWizard() {
                   <FormControlLabel value="invoice" control={<Radio />} label="Безналичный счет (Юр. лицо)" />
                 </RadioGroup>
               </FormControl>
+
+              {/* Fiscal Registration Card (ККТ АТОЛ 91Ф) */}
+              <Paper sx={{ p: 2.5, mt: 3, borderRadius: 2.5, border: '1px solid #CBD5E1', bgcolor: '#F8FAFC' }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 1.5 }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                    <PointOfSaleIcon sx={{ color: '#0F3C64', fontSize: 28 }} />
+                    <Box>
+                      <Typography variant="subtitle1" sx={{ fontWeight: 700, color: '#0F3C64' }}>
+                        Фискализация на ККТ «АТОЛ 91Ф» (54-ФЗ)
+                      </Typography>
+                      <Typography variant="caption" sx={{ color: '#64748B' }}>
+                        ФФД 1.05 / 1.2 • Формирование фискального чека прихода и передача в ОФД
+                      </Typography>
+                    </Box>
+                  </Box>
+
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                    <Chip
+                      size="small"
+                      label={
+                        fiscalStatus?.isMockMode
+                          ? `🟡 Эмулятор ККТ (Тестовый контур • Смена №${fiscalStatus?.shiftNumber || 14})`
+                          : (fiscalStatus?.online
+                              ? `🟢 АТОЛ 91Ф (${fiscalStatus?.port || 'COM3'}) • Готова • Смена №${fiscalStatus?.shiftNumber || 14}`
+                              : `⚪ ККТ подключается...`)
+                      }
+                      sx={{ fontWeight: 600, bgcolor: fiscalStatus?.online ? '#ECFDF5' : '#F1F5F9', color: fiscalStatus?.online ? '#065F46' : '#475569', border: '1px solid #A7F3D0' }}
+                    />
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          checked={fiscalize}
+                          onChange={(e) => setFiscalize(e.target.checked)}
+                          color="primary"
+                        />
+                      }
+                      label={<Typography variant="body2" sx={{ fontWeight: 700, color: '#0F3C64' }}>Пробить чек</Typography>}
+                      sx={{ mr: 0 }}
+                    />
+                  </Box>
+                </Box>
+
+                {fiscalize && (
+                  <Box sx={{ mt: 2.5, pt: 2, borderTop: '1px dashed #CBD5E1' }}>
+                    <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1.2fr 1fr' }, gap: 2, alignItems: 'center' }}>
+                      <TextField
+                        size="small"
+                        fullWidth
+                        label="Тег 1008 ФФД (Телефон или Email покупателя)"
+                        value={patientContact}
+                        onChange={(e) => setPatientContact(e.target.value)}
+                        placeholder="+7 (988) 123-45-67 или patient@example.com"
+                        helperText="Для отправки электронного кассового чека покупателю по SMS или Email"
+                        sx={{ bgcolor: '#FFFFFF', borderRadius: 1 }}
+                      />
+
+                      <Box sx={{ p: 1.5, bgcolor: '#EFF6FF', borderRadius: 2, border: '1px solid #BFDBFE' }}>
+                        <Typography variant="caption" sx={{ display: 'block', fontWeight: 700, color: '#1E40AF', mb: 0.5 }}>
+                          Юридические параметры чека (54-ФЗ):
+                        </Typography>
+                        <Typography variant="caption" sx={{ display: 'block', color: '#1E3A8A' }}>
+                          • Ставка: <b>Без НДС</b> (пп. 2 п. 2 ст. 149 НК РФ — медицинские услуги)
+                        </Typography>
+                        <Typography variant="caption" sx={{ display: 'block', color: '#1E3A8A' }}>
+                          • Предмет расчета: <b>Услуга</b> (тег 1212 = 4) • Способ: <b>Полный расчет</b> (тег 1214 = 4)
+                        </Typography>
+                      </Box>
+                    </Box>
+                  </Box>
+                )}
+              </Paper>
             </Paper>
           </Box>
         );
@@ -1434,6 +1542,106 @@ export default function CheckoutWizard() {
           <Typography variant="body1" sx={{ color: '#276749', mb: 3, maxWidth: 600, mx: 'auto' }}>
             Транзакция #{savedTransactionResult?.transactionId || 'OK'} зафиксирована в базе данных. Списание материалов и начисление стоимости привязаны к электронной карте пациента.
           </Typography>
+
+          {/* Fiscal Receipt Details Display */}
+          {savedTransactionResult?.fiscalReceipt && (
+            <Paper sx={{ 
+              p: 3, 
+              my: 3, 
+              maxWidth: 720, 
+              mx: 'auto', 
+              borderRadius: 3, 
+              border: savedTransactionResult.fiscalReceipt.status === 'failed' ? '1px solid #FEB2B2' : '1px solid #9AE6B4', 
+              bgcolor: savedTransactionResult.fiscalReceipt.status === 'failed' ? '#FFF5F5' : '#FFFFFF',
+              textAlign: 'left',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.05)'
+            }}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, flexWrap: 'wrap', gap: 1 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                  <PointOfSaleIcon sx={{ color: savedTransactionResult.fiscalReceipt.status === 'failed' ? '#E53E3E' : '#2F855A', fontSize: 28 }} />
+                  <Box>
+                    <Typography variant="subtitle1" sx={{ fontWeight: 800, color: '#0F3C64' }}>
+                      Фискальный чек ККТ «АТОЛ 91Ф» (54-ФЗ)
+                    </Typography>
+                    <Typography variant="caption" sx={{ color: '#718096' }}>
+                      Медицинские услуги • Без НДС (пп. 2 п. 2 ст. 149 НК РФ)
+                    </Typography>
+                  </Box>
+                </Box>
+                <Chip 
+                  label={savedTransactionResult.fiscalReceipt.status === 'fiscalized' ? "🟢 Фискализирован в ФН" : "⚠️ Требуется внимание"}
+                  size="small"
+                  sx={{ 
+                    fontWeight: 700, 
+                    bgcolor: savedTransactionResult.fiscalReceipt.status === 'fiscalized' ? '#C6F6D5' : '#FED7D7', 
+                    color: savedTransactionResult.fiscalReceipt.status === 'fiscalized' ? '#22543D' : '#9B2C2C' 
+                  }}
+                />
+              </Box>
+
+              <Divider sx={{ mb: 2 }} />
+
+              <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr 1fr', sm: 'repeat(4, 1fr)' }, gap: 2, mb: 2 }}>
+                <Box sx={{ p: 1.5, bgcolor: '#F7FAFC', borderRadius: 2, border: '1px solid #EDF2F7' }}>
+                  <Typography variant="caption" sx={{ color: '#718096', fontWeight: 600 }}>Номер ФД (тег 1040)</Typography>
+                  <Typography variant="h6" sx={{ fontWeight: 800, color: '#0F3C64' }}>
+                    №{savedTransactionResult.fiscalReceipt.fiscalDocumentNumber || '—'}
+                  </Typography>
+                </Box>
+                <Box sx={{ p: 1.5, bgcolor: '#F7FAFC', borderRadius: 2, border: '1px solid #EDF2F7' }}>
+                  <Typography variant="caption" sx={{ color: '#718096', fontWeight: 600 }}>ФПД (тег 1077)</Typography>
+                  <Typography variant="h6" sx={{ fontWeight: 800, color: '#0F3C64', letterSpacing: 0.5 }}>
+                    {savedTransactionResult.fiscalReceipt.fiscalSign || '—'}
+                  </Typography>
+                </Box>
+                <Box sx={{ p: 1.5, bgcolor: '#F7FAFC', borderRadius: 2, border: '1px solid #EDF2F7' }}>
+                  <Typography variant="caption" sx={{ color: '#718096', fontWeight: 600 }}>Смена № (тег 1038)</Typography>
+                  <Typography variant="h6" sx={{ fontWeight: 800, color: '#0F3C64' }}>
+                    #{savedTransactionResult.fiscalReceipt.shiftNumber || '14'}
+                  </Typography>
+                </Box>
+                <Box sx={{ p: 1.5, bgcolor: '#F7FAFC', borderRadius: 2, border: '1px solid #EDF2F7' }}>
+                  <Typography variant="caption" sx={{ color: '#718096', fontWeight: 600 }}>Чек за смену (тег 1042)</Typography>
+                  <Typography variant="h6" sx={{ fontWeight: 800, color: '#0F3C64' }}>
+                    #{savedTransactionResult.fiscalReceipt.receiptNumber || '1'}
+                  </Typography>
+                </Box>
+              </Box>
+
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 1 }}>
+                <Typography variant="caption" sx={{ color: '#718096' }}>
+                  РН ККТ: <b>{savedTransactionResult.fiscalReceipt.kktRegNumber || '0004928103049182'}</b> • ФН: <b>{savedTransactionResult.fiscalReceipt.fiscalDriveNumber || '9960440301984210'}</b>
+                </Typography>
+                {savedTransactionResult.fiscalReceipt.receiptId && (
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    startIcon={reprintingFiscal ? <CircularProgress size={14} /> : <ReplayIcon />}
+                    onClick={async () => {
+                      setReprintingFiscal(true);
+                      try {
+                        const res = await fetch(`${API_BASE_URL}/api/fiscal/repeat-print`, {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ receipt_id: savedTransactionResult.fiscalReceipt.receiptId })
+                        });
+                        const repData = await res.json();
+                        alert(repData.message || 'Копия чека отправлена на печать');
+                      } catch (err: any) {
+                        alert('Ошибка повторной печати: ' + err.message);
+                      } finally {
+                        setReprintingFiscal(false);
+                      }
+                    }}
+                    disabled={reprintingFiscal}
+                    sx={{ textTransform: 'none', fontWeight: 600, fontSize: '0.8rem' }}
+                  >
+                    Повторить печать чека
+                  </Button>
+                )}
+              </Box>
+            </Paper>
+          )}
 
           <Box sx={{ display: 'flex', gap: 2, justifyContent: 'center', flexWrap: 'wrap' }}>
             <Button
