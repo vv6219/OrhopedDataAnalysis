@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Box, Typography, Paper, Button, CircularProgress, Alert, Chip,
   Divider, Card, CardContent, Table, TableBody, TableCell, TableContainer,
@@ -16,20 +17,30 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
+import TuneIcon from '@mui/icons-material/Tune';
 
 export default function FiscalTestWizard() {
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [statusData, setStatusData] = useState<any | null>(null);
+  const [fiscalStatus, setFiscalStatus] = useState<any | null>(null);
   const [wizardResults, setWizardResults] = useState<any | null>(null);
   const [alertInfo, setAlertInfo] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
   const [expandedScenario, setExpandedScenario] = useState<string | null>(null);
 
   const fetchStatus = async () => {
     try {
-      const res = await fetch(`${API_BASE_URL}/api/fiscal/test-data/status`);
-      if (res.ok) {
-        const data = await res.json();
+      const [resTest, resStatus] = await Promise.all([
+        fetch(`${API_BASE_URL}/api/fiscal/test-data/status`),
+        fetch(`${API_BASE_URL}/api/fiscal/status`)
+      ]);
+      if (resTest.ok) {
+        const data = await resTest.json();
         setStatusData(data);
+      }
+      if (resStatus.ok) {
+        const status = await resStatus.json();
+        setFiscalStatus(status);
       }
     } catch (err: any) {
       console.error('Error fetching fiscal test status:', err);
@@ -131,7 +142,16 @@ export default function FiscalTestWizard() {
           </Typography>
         </Box>
 
-        <Box sx={{ display: 'flex', gap: 1 }}>
+        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+          <Button
+            variant="outlined"
+            startIcon={<TuneIcon />}
+            onClick={() => navigate('/admin/fiscal-settings')}
+            sx={{ fontWeight: 700, borderColor: '#0F3C64', color: '#0F3C64' }}
+          >
+            Параметры ККТ (БД)
+          </Button>
+
           <Tooltip title="Обновить статус">
             <IconButton onClick={fetchStatus} sx={{ bgcolor: '#FFFFFF', border: '1px solid #E2E8F0' }}>
               <RefreshIcon />
@@ -146,6 +166,34 @@ export default function FiscalTestWizard() {
           {alertInfo.message}
         </Alert>
       )}
+
+      {/* Active Profile Banner */}
+      <Paper sx={{ p: 2, mb: 3, borderRadius: 3, border: '1px solid #BEE3F8', bgcolor: '#EBF8FF', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 2 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
+          <Chip
+            label={fiscalStatus?.isMockMode ? 'MOCK РЕЖИМ' : 'HARDWARE ККТ'}
+            color={fiscalStatus?.isMockMode ? 'primary' : 'warning'}
+            size="small"
+            sx={{ fontWeight: 800 }}
+          />
+          <Typography variant="body2" sx={{ fontWeight: 700, color: '#2B6CB0' }}>
+            Активный профиль из БД: «{fiscalStatus?.profileName || 'Основной профиль (АТОЛ 91Ф)'}»
+          </Typography>
+          <Typography variant="caption" sx={{ color: '#4A5568' }}>
+            • Порт: <strong>{fiscalStatus?.port || 'COM3'}</strong> ({fiscalStatus?.baudRate || 115200} бод) • ФН: {fiscalStatus?.fnNumber || '9960440301984210'} • Смена №{fiscalStatus?.shiftNumber || 14}
+          </Typography>
+        </Box>
+
+        <Button
+          size="small"
+          variant="text"
+          startIcon={<TuneIcon />}
+          onClick={() => navigate('/admin/fiscal-settings')}
+          sx={{ fontWeight: 700, color: '#2B6CB0' }}
+        >
+          Изменить параметры
+        </Button>
+      </Paper>
 
       {/* KPI Stats Cards */}
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr', md: 'repeat(4, 1fr)' }, gap: 2, mb: 3 }}>
@@ -182,11 +230,11 @@ export default function FiscalTestWizard() {
             <Typography variant="caption" sx={{ color: '#718096', fontWeight: 600 }}>
               Режим фискального ядра
             </Typography>
-            <Typography variant="h6" sx={{ fontWeight: 800, color: '#2F855A', mt: 1 }}>
-              Эмуляция (Mock)
+            <Typography variant="h6" sx={{ fontWeight: 800, color: fiscalStatus?.isMockMode ? '#2F855A' : '#C53030', mt: 1 }}>
+              {fiscalStatus?.isMockMode ? 'Эмуляция (Mock)' : 'Физический ККТ'}
             </Typography>
-            <Typography variant="caption" sx={{ color: '#38A169' }}>
-              🟢 COM3 • Готова к тестам
+            <Typography variant="caption" sx={{ color: fiscalStatus?.isMockMode ? '#38A169' : '#E53E3E' }}>
+              {fiscalStatus?.isMockMode ? `🟢 ${fiscalStatus?.port || 'COM3'} • Готова к тестам` : `🔴 ${fiscalStatus?.port || 'COM3'} • Оборудование`}
             </Typography>
           </CardContent>
         </Card>

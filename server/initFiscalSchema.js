@@ -60,6 +60,50 @@ function initFiscalSchema(db, callback) {
     db.run(`CREATE INDEX IF NOT EXISTS idx_fiscal_audit_event ON fiscal_audit_logs(event_type)`);
     db.run(`CREATE INDEX IF NOT EXISTS idx_fiscal_audit_receipt ON fiscal_audit_logs(receipt_id)`);
 
+    // 3. Table for Fiscal Service Device & Operational Settings
+    db.run(`CREATE TABLE IF NOT EXISTS fiscal_device_settings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      profile_name TEXT NOT NULL UNIQUE DEFAULT 'default',
+      port TEXT NOT NULL DEFAULT 'COM3',
+      baud_rate INTEGER NOT NULL DEFAULT 115200,
+      device_model TEXT NOT NULL DEFAULT 'АТОЛ 91Ф',
+      is_mock_mode INTEGER NOT NULL DEFAULT 1,
+      single_consumer_queue INTEGER NOT NULL DEFAULT 1,
+      execution_timeout_seconds INTEGER NOT NULL DEFAULT 35,
+      fn_number TEXT NOT NULL DEFAULT '9960440301984210',
+      kkt_reg_number TEXT NOT NULL DEFAULT '0004928103049182',
+      default_tax_type INTEGER NOT NULL DEFAULT 6,
+      tax_regime_name TEXT NOT NULL DEFAULT 'Без НДС (пп. 2 п. 2 ст. 149 НК РФ — медицинские услуги)',
+      payment_subject_type INTEGER NOT NULL DEFAULT 4,
+      payment_method_type INTEGER NOT NULL DEFAULT 4,
+      default_shift_number INTEGER NOT NULL DEFAULT 14,
+      base_fiscal_document_number INTEGER NOT NULL DEFAULT 1041,
+      external_daemon_url TEXT NOT NULL DEFAULT 'http://localhost:5050',
+      is_active INTEGER NOT NULL DEFAULT 1,
+      notes TEXT,
+      updated_at TEXT DEFAULT (datetime('now', 'localtime')),
+      updated_by TEXT DEFAULT 'Администратор'
+    )`);
+
+    // Seed default settings profile if table is empty
+    db.get('SELECT COUNT(*) as cnt FROM fiscal_device_settings', (err, row) => {
+      if (!err && row && row.cnt === 0) {
+        db.run(`
+          INSERT INTO fiscal_device_settings (
+            profile_name, port, baud_rate, device_model, is_mock_mode, single_consumer_queue,
+            execution_timeout_seconds, fn_number, kkt_reg_number, default_tax_type, tax_regime_name,
+            payment_subject_type, payment_method_type, default_shift_number, base_fiscal_document_number,
+            external_daemon_url, is_active, notes, updated_at, updated_by
+          ) VALUES (
+            'Основной профиль (АТОЛ 91Ф)', 'COM3', 115200, 'АТОЛ 91Ф', 1, 1,
+            35, '9960440301984210', '0004928103049182', 6, 'Без НДС (пп. 2 п. 2 ст. 149 НК РФ — медицинские услуги)',
+            4, 4, 14, 1041,
+            'http://localhost:5050', 1, 'Штатная конфигурация кассы клиники по 54-ФЗ', datetime('now', 'localtime'), 'Система'
+          )
+        `);
+      }
+    });
+
     if (callback) callback();
   });
 }

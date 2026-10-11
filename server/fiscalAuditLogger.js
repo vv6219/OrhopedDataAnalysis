@@ -25,7 +25,11 @@ const EventTypes = {
   PAPER_ERROR: 'paper_error',
   FN_ERROR: 'fn_error',
   CANCELLED: 'cancelled',
-  REPEAT_PRINT: 'repeat_print'
+  REPEAT_PRINT: 'repeat_print',
+  SETTINGS_UPDATED: 'settings_updated',
+  SETTINGS_CREATED: 'settings_created',
+  SETTINGS_DELETED: 'settings_deleted',
+  SETTINGS_ACTIVATED: 'settings_activated'
 };
 
 /**

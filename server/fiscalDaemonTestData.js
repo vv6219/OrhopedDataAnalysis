@@ -343,7 +343,8 @@ async function runFiscalTestWizard() {
   // Test 5: Paper Jam Popper Test & Repeat Print Recovery
   try {
     const st5 = Date.now();
-    // Insert receipt simulating paper error
+    const currentStatus = await fiscalService.getStatus();
+    // Insert receipt simulating paper error with active profile parameters
     const simRes = await runAsync(`
       INSERT INTO fiscal_receipts (
         patient_contact, receipt_type, payment_type, total_amount,
@@ -353,12 +354,21 @@ async function runFiscalTestWizard() {
         is_fiscalized, is_printed, error_message, device_model, port,
         created_at, fiscalized_at
       ) VALUES (
-        '+7 (999) 777-55-66 [TEST_DAEMON]', 'sell', 'card', 2200.0, 6, 4, 4,
-        2099, '9988776655', '9960440301984210', 14, 199, '0004928103049182',
+        '+7 (999) 777-55-66 [TEST_DAEMON]', 'sell', 'card', 2200.0, ?, ?, ?,
+        2099, '9988776655', ?, ?, 199, ?,
         'paper_error', 1, 0, '[TEST_DAEMON] Обрыв ленты при печати. Документ закрыт в ФН',
-        'АТОЛ 91Ф', 'COM3', datetime('now'), datetime('now')
+        ?, ?, datetime('now'), datetime('now')
       )
-    `);
+    `, [
+      currentStatus.taxType || 6,
+      currentStatus.paymentSubjectType || 4,
+      currentStatus.paymentMethodType || 4,
+      currentStatus.fnNumber || '9960440301984210',
+      currentStatus.shiftNumber || 14,
+      currentStatus.kktRegNumber || '0004928103049182',
+      currentStatus.deviceModel || 'АТОЛ 91Ф',
+      currentStatus.port || 'COM3'
+    ]);
     const paperReceiptId = simRes.lastID;
 
     // Execute repeat print
@@ -389,6 +399,7 @@ async function runFiscalTestWizard() {
 
   const passedCount = results.filter(r => r.status === 'passed').length;
   const totalDurationMs = Date.now() - startTotal;
+  const activeStatus = await fiscalService.getStatus();
 
   return {
     success: passedCount === results.length,
@@ -396,6 +407,16 @@ async function runFiscalTestWizard() {
     passedCount,
     failedCount: results.length - passedCount,
     totalDurationMs,
+    activeProfile: {
+      id: activeStatus.activeProfileId,
+      name: activeStatus.profileName,
+      port: activeStatus.port,
+      baudRate: activeStatus.baudRate,
+      isMockMode: activeStatus.isMockMode,
+      fnNumber: activeStatus.fnNumber,
+      kktRegNumber: activeStatus.kktRegNumber,
+      timeoutSeconds: fiscalService.executionTimeoutSeconds
+    },
     scenarios: results
   };
 }

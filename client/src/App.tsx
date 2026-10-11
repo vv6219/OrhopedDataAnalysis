@@ -20,6 +20,7 @@ import UserGuide from './pages/UserGuide';
 import ServicesBiAnalytics from './pages/ServicesBiAnalytics';
 import FiscalAuditLog from './pages/FiscalAuditLog';
 import FiscalTestWizard from './pages/FiscalTestWizard';
+import FiscalSettings from './pages/FiscalSettings';
 
 const theme = createTheme({
   palette: {
@@ -204,6 +205,8 @@ function App() {
                 <Route path="/parameters" element={<Parameters />} />
                 <Route path="/admin/firebird-sync" element={<FirebirdSync />} />
                 <Route path="/admin/daemon-data" element={<DaemonTestDataManager />} />
+                <Route path="/admin/fiscal-settings" element={<FiscalSettings />} />
+                <Route path="/fiscal-settings" element={<FiscalSettings />} />
                 <Route path="/fiscal-audit" element={<FiscalAuditLog />} />
                 <Route path="/admin/fiscal-test-wizard" element={<FiscalTestWizard />} />
                 <Route path="/fiscal-test-wizard" element={<FiscalTestWizard />} />

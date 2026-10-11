@@ -31,6 +31,7 @@ class FiscalService {
   }
 
   refreshConfig() {
+    // Initial fallback from appsettings.json
     const cfg = getFiscalConfig();
     this.port = cfg.Port || 'COM3';
     this.baudRate = cfg.BaudRate || 115200;
@@ -47,12 +48,48 @@ class FiscalService {
     this.paymentMethodType = cfg.PaymentMethodType || 4;
     this.executionTimeoutSeconds = cfg.ExecutionTimeoutSeconds || 35;
     this.externalDaemonUrl = cfg.ExternalDaemonUrl || 'http://localhost:5050';
+
+    // Asynchronously load active parameters from DB table fiscal_device_settings
+    this.refreshFromDb().catch(e => console.warn('[FiscalService] Initial DB settings load warning:', e.message));
+  }
+
+  /**
+   * Refreshes active parameters directly from SQLite table 'fiscal_device_settings'
+   */
+  async refreshFromDb() {
+    return new Promise((resolve) => {
+      db.get('SELECT * FROM fiscal_device_settings WHERE is_active = 1 LIMIT 1', (err, row) => {
+        if (!err && row) {
+          this.activeProfileId = row.id;
+          this.profileName = row.profile_name;
+          this.port = row.port || 'COM3';
+          this.baudRate = Number(row.baud_rate) || 115200;
+          this.deviceModel = row.device_model || 'АТОЛ 91Ф';
+          this.isMockMode = Boolean(row.is_mock_mode);
+          this.currentShiftNumber = Number(row.default_shift_number) || 14;
+          this.fnNumber = row.fn_number || '9960440301984210';
+          this.kktRegNumber = row.kkt_reg_number || '0004928103049182';
+          this.taxType = Number(row.default_tax_type) || 6;
+          this.taxRegimeName = row.tax_regime_name || 'Без НДС (пп. 2 п. 2 ст. 149 НК РФ — медицинские услуги)';
+          this.paymentSubjectType = Number(row.payment_subject_type) || 4;
+          this.paymentMethodType = Number(row.payment_method_type) || 4;
+          this.executionTimeoutSeconds = Number(row.execution_timeout_seconds) || 35;
+          this.externalDaemonUrl = row.external_daemon_url || 'http://localhost:5050';
+          this.settingsNotes = row.notes;
+          this.settingsUpdatedAt = row.updated_at;
+          this.settingsUpdatedBy = row.updated_by;
+        }
+        resolve(this);
+      });
+    });
   }
 
   /**
    * Get current device status
    */
   async getStatus() {
+    await this.refreshFromDb();
+
     return new Promise((resolve) => {
       // Return state with latest shift and counters
       db.get(
@@ -77,9 +114,17 @@ class FiscalService {
             fnNumber: this.fnNumber,
             kktRegNumber: this.kktRegNumber,
             paperStatus: 'ok', // 'ok' | 'near_end' | 'empty'
-            taxRegime: 'Без НДС (пп. 2 п. 2 ст. 149 НК РФ — медицинские услуги)',
+            taxRegime: this.taxRegimeName,
+            taxType: this.taxType,
+            paymentSubjectType: this.paymentSubjectType,
+            paymentMethodType: this.paymentMethodType,
             ffdVersion: '1.2 / 1.05',
-            queueLength: this.queue.length
+            queueLength: this.queue.length,
+            activeProfileId: this.activeProfileId,
+            profileName: this.profileName,
+            settingsNotes: this.settingsNotes,
+            settingsUpdatedAt: this.settingsUpdatedAt,
+            settingsUpdatedBy: this.settingsUpdatedBy
           });
         }
       );

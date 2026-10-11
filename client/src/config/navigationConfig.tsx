@@ -24,6 +24,7 @@ import MenuBookIcon from '@mui/icons-material/MenuBook';
 import QueryStatsIcon from '@mui/icons-material/QueryStats';
 import PointOfSaleIcon from '@mui/icons-material/PointOfSale';
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
+import TuneIcon from '@mui/icons-material/Tune';
 
 export interface NavItem {
   text: string;
@@ -186,6 +187,12 @@ export const navigationGroups: NavGroup[] = [
         path: '/admin/daemon-data?action=purge',
         icon: <DeleteForeverIcon sx={{ fontSize: 20, color: '#DC2626' }} />,
         tooltip: 'Удалить все тестовые данные с маркером [TEST_DAEMON]'
+      },
+      {
+        text: 'Параметры ККТ АТОЛ 91Ф',
+        path: '/admin/fiscal-settings',
+        icon: <TuneIcon sx={{ fontSize: 20 }} />,
+        tooltip: 'Управление профилями и параметрами ККТ АТОЛ 91Ф в базе данных SQLite (CRUD)'
       },
       {
         text: 'Журнал аудита ККТ (Serilog)',
