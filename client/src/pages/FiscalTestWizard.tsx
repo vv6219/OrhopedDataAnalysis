@@ -210,9 +210,9 @@ export const FiscalReceiptSlip = React.forwardRef<HTMLDivElement, { receipt: Fis
           </Typography>
 
           {parsedItems.map((item, idx) => {
-            const qty = item.qty || item.quantity || 1;
-            const price = Number(item.price || item.unit_price || receipt.total_amount);
-            const subtotal = Number(item.subtotal || qty * price);
+            const qty = Number(item.qty !== undefined ? item.qty : (item.quantity !== undefined ? item.quantity : 1)) || 1;
+            const price = Number(item.price !== undefined ? item.price : (item.unit_price !== undefined ? item.unit_price : receipt.total_amount)) || 0;
+            const subtotal = Number(item.subtotal !== undefined ? item.subtotal : (qty * price)) || 0;
 
             return (
               <Box key={idx} sx={{ mb: 1, fontSize: '12px' }}>
@@ -228,7 +228,7 @@ export const FiscalReceiptSlip = React.forwardRef<HTMLDivElement, { receipt: Fis
                   </span>
                 </Box>
                 <Box sx={{ fontSize: '11px', color: '#718096' }}>
-                  Ставка НДС: Без НДС (ст. 149 НК РФ) • УСЛУГА • ПОЛНЫЙ РАСЧЕТ
+                  Ставка НДС: {fiscalInfo?.taxRegime || 'Без НДС (ст. 149 НК РФ)'} • УСЛУГА • ПОЛНЫЙ РАСЧЕТ
                 </Box>
               </Box>
             );
@@ -244,7 +244,7 @@ export const FiscalReceiptSlip = React.forwardRef<HTMLDivElement, { receipt: Fis
             <span>₽{Number(receipt.total_amount).toLocaleString('ru-RU', { minimumFractionDigits: 2 })}</span>
           </Box>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#4A5568', mt: 0.5 }}>
-            <span>В Т.Ч. СУММА БЕЗ НДС:</span>
+            <span>{fiscalInfo?.taxType === 6 || fiscalInfo?.taxType === undefined ? 'В Т.Ч. СУММА БЕЗ НДС:' : `В Т.Ч. СУММА (${fiscalInfo?.taxRegimeName || fiscalInfo?.taxRegime || 'НДС'}):`}</span>
             <span>₽{Number(receipt.total_amount).toLocaleString('ru-RU', { minimumFractionDigits: 2 })}</span>
           </Box>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', fontWeight: 700, mt: 0.5 }}>
@@ -289,15 +289,17 @@ export const FiscalReceiptSlip = React.forwardRef<HTMLDivElement, { receipt: Fis
           <Typography sx={{ fontSize: '10px', color: '#718096', mt: 1, textAlign: 'center' }}>
             Проверка чека в мобильном приложении ФНС России
           </Typography>
-          <Typography sx={{ fontSize: '10px', color: '#2B6CB0', fontWeight: 700, textAlign: 'center' }}>
-            КОНТУР ТЕСТИРОВАНИЯ [TEST_DAEMON]
-          </Typography>
+          {Boolean((receipt.patient_contact && receipt.patient_contact.includes('[TEST_DAEMON]')) || fiscalInfo?.isMockMode) && (
+            <Typography sx={{ fontSize: '10px', color: '#2B6CB0', fontWeight: 700, textAlign: 'center' }}>
+              КОНТУР ТЕСТИРОВАНИЯ [TEST_DAEMON]
+            </Typography>
+          )}
         </Box>
 
         <Divider sx={{ my: 1, borderStyle: 'dashed' }} />
 
         <Box sx={{ textAlign: 'center', fontSize: '11px', color: '#718096' }}>
-          Спасибо за обращение в Центр Ортопедии Добрушкина!
+          Спасибо за обращение в {clinicSubname || orgName || 'Центр Ортопедии'}!
           <br />
           Будьте здоровы!
         </Box>

@@ -143,7 +143,7 @@ export default function FiscalAuditLog() {
   // Filtered rows
   const filteredLogs = useMemo(() => {
     return logs.filter(log => {
-      if (levelFilter !== 'all' && log.level.toLowerCase() !== levelFilter.toLowerCase()) {
+      if (levelFilter !== 'all' && (log.level?.toLowerCase() || '') !== levelFilter.toLowerCase()) {
         return false;
       }
       if (eventTypeFilter !== 'all' && log.event_type !== eventTypeFilter) {

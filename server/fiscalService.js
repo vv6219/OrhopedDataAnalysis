@@ -85,7 +85,25 @@ class FiscalService {
           this.settingsUpdatedAt = row.updated_at;
           this.settingsUpdatedBy = row.updated_by;
         }
-        resolve(this);
+
+        // Recover latest document and shift counters from fiscal_receipts table to ensure monotonic continuity
+        db.get(
+          'SELECT MAX(fiscal_document_number) as max_fd, MAX(shift_number) as max_shift FROM fiscal_receipts WHERE is_fiscalized = 1',
+          [],
+          (statsErr, stats) => {
+            if (!statsErr && stats) {
+              if (stats.max_fd && stats.max_fd >= (this.lastFdNumber || 0)) {
+                this.lastFdNumber = stats.max_fd;
+              } else if (!this.lastFdNumber) {
+                this.lastFdNumber = (row && Number(row.base_fiscal_document_number)) || 1041;
+              }
+              if (stats.max_shift && stats.max_shift >= (this.currentShiftNumber || 0)) {
+                this.currentShiftNumber = stats.max_shift;
+              }
+            }
+            resolve(this);
+          }
+        );
       });
     });
   }
@@ -232,9 +250,9 @@ class FiscalService {
           patientContact || null,
           paymentType,
           totalAmount,
-          this.taxType || 6,
-          this.paymentSubjectType || 4,
-          this.paymentMethodType || 4,
+          this.taxType !== undefined && this.taxType !== null ? this.taxType : 6,
+          this.paymentSubjectType !== undefined && this.paymentSubjectType !== null ? this.paymentSubjectType : 4,
+          this.paymentMethodType !== undefined && this.paymentMethodType !== null ? this.paymentMethodType : 4,
           this.deviceModel,
           this.port,
           JSON.stringify(items || [])
@@ -271,13 +289,13 @@ class FiscalService {
       }];
 
       for (const item of registeredItems) {
-        const qty = Number(item.quantity) || 1;
-        const price = Number(item.unit_price !== undefined ? item.unit_price : item.price) || 0;
-        const subtotal = Number(item.subtotal) || (qty * price);
+        const qty = Number(item.quantity !== undefined ? item.quantity : (item.qty !== undefined ? item.qty : 1)) || 1;
+        const price = Number(item.unit_price !== undefined ? item.unit_price : (item.price !== undefined ? item.price : 0)) || 0;
+        const subtotal = Number(item.subtotal !== undefined ? item.subtotal : (qty * price)) || 0;
 
         logFiscalAudit({
           level: LogLevels.DEBUG,
-          message: `Регистрация позиции: «${item.name}» ${qty} шт. x ₽${price} = ₽${subtotal} (Без НДС ст. 149 НК РФ, Услуга)`,
+          message: `Регистрация позиции: «${item.name}» ${qty} шт. x ₽${price} = ₽${subtotal} (${this.taxRegimeName || 'Без НДС'}, Услуга)`,
           eventType: EventTypes.ITEM_REGISTERED,
           receiptId,
           transactionId,
@@ -287,7 +305,7 @@ class FiscalService {
             quantity: qty,
             price,
             subtotal,
-            taxType: 'LIBFPTR_TAX_NO (Без НДС)',
+            taxType: this.taxRegimeName || 'Без НДС',
             paymentSubject: 'LIBFPTR_PS_SERVICE (Услуга)'
           }
         });
@@ -312,10 +330,116 @@ class FiscalService {
         }
       });
 
+      // Branch: Physical hardware via C# Daemon vs In-Process Mock Engine
+      if (!this.isMockMode && this.externalDaemonUrl) {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), (this.executionTimeoutSeconds || 35) * 1000);
+        try {
+          const daemonRes = await fetch(`${this.externalDaemonUrl}/api/fiscal/receipt`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              transactionId,
+              visitId,
+              patientId,
+              patientContact,
+              paymentType,
+              totalAmount,
+              items: registeredItems.map(it => ({
+                name: it.name || 'Медицинская услуга',
+                quantity: Number(it.quantity !== undefined ? it.quantity : (it.qty !== undefined ? it.qty : 1)) || 1,
+                unitPrice: Number(it.unit_price !== undefined ? it.unit_price : (it.price !== undefined ? it.price : 0)) || 0,
+                subtotal: Number(it.subtotal !== undefined ? it.subtotal : 0) || 0
+              }))
+            }),
+            signal: controller.signal
+          });
+          clearTimeout(timeoutId);
+
+          if (!daemonRes.ok) {
+            const errTxt = await daemonRes.text();
+            throw new Error(`Внешний сервис ККТ вернул ошибку [${daemonRes.status}]: ${errTxt}`);
+          }
+
+          const daemonData = await daemonRes.json();
+          const fiscalDocNumber = daemonData.fiscalDocumentNumber || daemonData.fiscal_document_number || (this.lastFdNumber + 1);
+          this.lastFdNumber = Math.max(this.lastFdNumber || 0, fiscalDocNumber);
+          const fiscalSign = String(daemonData.fiscalSign || daemonData.fiscal_sign || '0000000000');
+          const shiftNumber = daemonData.shiftNumber || daemonData.shift_number || this.currentShiftNumber;
+          const receiptNumber = daemonData.receiptNumber || daemonData.receipt_number || 1;
+          const fnNumber = daemonData.fiscalDriveNumber || daemonData.fn_number || this.fnNumber;
+          const kktRegNumber = daemonData.kktRegNumber || daemonData.kkt_reg_number || this.kktRegNumber;
+          const isPrinted = daemonData.isPrinted !== undefined ? Boolean(daemonData.isPrinted) : true;
+          const durationMs = Date.now() - startTime;
+
+          await new Promise((res, rej) => {
+            db.run(
+              `UPDATE fiscal_receipts SET
+                fiscal_document_number = ?,
+                fiscal_sign = ?,
+                fiscal_drive_number = ?,
+                shift_number = ?,
+                receipt_number = ?,
+                kkt_reg_number = ?,
+                status = 'fiscalized',
+                is_fiscalized = 1,
+                is_printed = ?,
+                fiscalized_at = datetime('now', 'localtime')
+               WHERE id = ?`,
+              [fiscalDocNumber, fiscalSign, fnNumber, shiftNumber, receiptNumber, kktRegNumber, isPrinted ? 1 : 0, receiptId],
+              err => err ? rej(err) : res()
+            );
+          });
+
+          logFiscalAudit({
+            level: LogLevels.INFO,
+            message: `[ФИЗИЧЕСКАЯ ККТ] Чек успешно фискализирован через ДТО 10. ФД №${fiscalDocNumber}, ФПД: ${fiscalSign}, Смена №${shiftNumber}`,
+            eventType: EventTypes.FISCAL_COMPLETE,
+            receiptId,
+            transactionId,
+            devicePort: this.port,
+            durationMs,
+            properties: {
+              fiscalDocumentNumber: fiscalDocNumber,
+              fiscalSign,
+              shiftNumber,
+              receiptNumber,
+              isPrinted,
+              isPhysicalMode: true
+            }
+          });
+
+          return {
+            success: true,
+            receiptId,
+            fiscalDocumentNumber: fiscalDocNumber,
+            fiscalSign,
+            fiscalDriveNumber: fnNumber,
+            shiftNumber,
+            receiptNumber,
+            kktRegNumber,
+            isFiscalized: true,
+            isPrinted,
+            durationMs,
+            status: 'fiscalized'
+          };
+        } catch (daemonErr) {
+          clearTimeout(timeoutId);
+          throw daemonErr;
+        }
+      }
+
       // 6. Close receipt (closeReceipt) + check Popper Test
-      // Increment fiscal document number
+      // Ensure monotonic numbering by verifying current max from DB
+      const maxDocRow = await new Promise(res => {
+        db.get('SELECT MAX(fiscal_document_number) as max_fd FROM fiscal_receipts WHERE is_fiscalized = 1', [], (e, r) => res(r));
+      });
+      if (maxDocRow && maxDocRow.max_fd && maxDocRow.max_fd >= this.lastFdNumber) {
+        this.lastFdNumber = maxDocRow.max_fd;
+      }
       this.lastFdNumber += 1;
       const fiscalDocNumber = this.lastFdNumber;
+
       // Generate 10-digit cryptographic fiscal sign (ФПД)
       const fiscalSign = String(Math.floor(1000000000 + Math.random() * 9000000000));
       const receiptNumber = (fiscalDocNumber % 150) + 1;

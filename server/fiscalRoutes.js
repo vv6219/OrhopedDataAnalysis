@@ -443,11 +443,21 @@ router.get('/audit-logs', (req, res) => {
 
   db.all(query, params, (err, rows) => {
     if (err) return res.status(500).json({ error: err.message });
-    // Parse properties_json for convenience
-    const parsed = rows.map(r => ({
-      ...r,
-      properties: r.properties_json ? JSON.parse(r.properties_json) : null
-    }));
+    // Parse properties_json safely for convenience
+    const parsed = rows.map(r => {
+      let props = null;
+      if (r.properties_json) {
+        try {
+          props = JSON.parse(r.properties_json);
+        } catch (_) {
+          props = { raw: r.properties_json };
+        }
+      }
+      return {
+        ...r,
+        properties: props
+      };
+    });
     res.json(parsed);
   });
 });
