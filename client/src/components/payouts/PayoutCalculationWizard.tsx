@@ -709,7 +709,7 @@ export function PayoutCalculationWizard({ onCalculationCommitted, onCancel }: Pa
           </Typography>
           <Typography variant="body1" sx={{ color: '#4A5568', textAlign: 'center', maxWidth: 600 }}>
             Успешно обработано <strong>{commitResult?.committedProceduresCount || previewItems.length}</strong> сервисов и создано{' '}
-            <strong>{commitResult?.createdAccrualsCount}</strong> персональных начислений для участников бригады.
+            <strong>{commitResult?.createdAccrualsCount}</strong> начислений сотрудникам бригады.
           </Typography>
 
           <Box sx={{ display: 'flex', gap: 2, mt: 3 }}>

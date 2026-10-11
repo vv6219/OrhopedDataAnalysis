@@ -1319,10 +1319,11 @@ export default function StaffPayouts() {
 
           <DataGrid
             autoHeight
+            showToolbar
             rows={sheets}
             columns={sheetColumns}
             loading={sheetsLoading}
-            pageSizeOptions={[10, 25, 50]}
+            pageSizeOptions={[10, 25, 50, 100]}
             initialState={{
               pagination: { paginationModel: { pageSize: 10 } }
             }}
@@ -1382,7 +1383,7 @@ export default function StaffPayouts() {
             Выбрано строк к включению в ведомость: <strong>{selectedIdsArray.length}</strong>.
           </Typography>
           <Typography variant="caption" sx={{ color: '#64748B' }}>
-            Если выбрано несколько специалистов, система автоматически создаст персональную расчетную ведомость для каждого из них.
+            Если выбрано несколько сотрудников, система автоматически создаст отдельную расчетную ведомость для каждого из них.
           </Typography>
           <TextField
             label="Примечание / назначение ведомости"

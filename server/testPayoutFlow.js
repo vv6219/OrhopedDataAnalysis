@@ -1,11 +1,12 @@
 /**
  * testPayoutFlow.js
  * Автоматизированный раннер тестирования сквозного бизнес-процесса модуля
- * «Расчет выплат медицинскому персоналу» (Программа проверок FL-01 — FL-14).
+ * «Расчет выплат медицинским сотрудникам» (Программа проверок FL-01 — FL-14).
  */
 
 const http = require('http');
 const db = require('./database');
+const { seedDaemonTestData } = require('./seedDaemonTestData');
 
 const BASE_URL = 'http://localhost:5000';
 
@@ -70,8 +71,16 @@ async function runTestSuite() {
 
   try {
     // -------------------------------------------------------------------------
-    // Инициализация: Динамический поиск ВСЕХ тестовых сущностей [TEST_DAEMON]
+    // Инициализация: Проверка наличия данных [TEST_DAEMON] и авто-сидинг при необходимости
     // -------------------------------------------------------------------------
+    const existingDaemonDoc = await getAsync("SELECT id FROM staff WHERE full_name LIKE '%Иванов%' AND full_name LIKE '%[TEST_DAEMON]%' LIMIT 1");
+    const initialUnbilled = await apiRequest('GET', '/api/payouts/unbilled-services?search=%5BTEST_DAEMON%5D');
+    if (!existingDaemonDoc || !initialUnbilled.body?.services?.length) {
+      console.log('ℹ Тестовый контур [TEST_DAEMON] отсутствует или очередь пуста. Автоматический запуск seedDaemonTestData()...');
+      await seedDaemonTestData();
+    }
+
+    // Динамический поиск ВСЕХ тестовых сущностей [TEST_DAEMON]
     const daemonDoc = await getAsync("SELECT id, full_name FROM staff WHERE full_name LIKE '%Иванов%' AND full_name LIKE '%[TEST_DAEMON]%' LIMIT 1");
     const daemonNurse = await getAsync("SELECT id, full_name FROM staff WHERE full_name LIKE '%Васильева%' AND full_name LIKE '%[TEST_DAEMON]%' LIMIT 1");
     const daemonDoc2 = await getAsync("SELECT id, full_name FROM staff WHERE full_name LIKE '%Смирнов%' AND full_name LIKE '%[TEST_DAEMON]%' LIMIT 1");
