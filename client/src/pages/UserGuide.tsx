@@ -38,6 +38,7 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import LockIcon from '@mui/icons-material/Lock';
 import VerifiedUserIcon from '@mui/icons-material/VerifiedUser';
 import PointOfSaleIcon from '@mui/icons-material/PointOfSale';
+import CreditCardIcon from '@mui/icons-material/CreditCard';
 import DnsIcon from '@mui/icons-material/Dns';
 import SmartToyIcon from '@mui/icons-material/SmartToy';
 
@@ -567,111 +568,269 @@ export default function UserGuide() {
     {
       id: 'section-fiscal',
       category: 'fiscal',
-      title: '6. Фискальный регистратор «АТОЛ 91Ф» и сервис фискализации (54-ФЗ)',
-      subtitle: 'Архитектурный контур, монопольный доступ к COM-порту, Popper Test, чеки, смены и регламент кассира',
+      title: '6. Единый кассовый узел клиники: Банковский эквайринг «Альфа-Банк» (Arcus-2) и Фискализация «АТОЛ 91Ф» (54-ФЗ)',
+      subtitle: 'Архитектурный паритет, двухфазная оплата визита, Defining (конфигурация), Using (регламент кассира) и Testing (диагностика)',
       icon: <PointOfSaleIcon sx={{ color: '#0F3C64' }} />,
-      tags: ['ккт', 'атол', 'атол 91ф', 'фискализация', '54-фз', 'чек', 'фд', 'фпд', 'фн', 'тег 1008', 'офд', 'mock', 'com-порт', 'popper test', 'z-отчет', 'х-отчет', 'смена', 'смены', 'кассир', 'serilog', 'калькулятор купюр', 'сверка кассы', '24 часа', 'мнемонический номер'],
+      tags: ['эквайринг', 'альфа-банк', 'pos-терминал', 'arcus-2', 'inpas', 'ккт', 'атол', 'атол 91ф', 'фискализация', '54-фз', 'чек', 'слип', 'фд', 'фпд', 'фн', 'тег 1008', 'тег 1081', 'сбп', 'qr-код', 'команда 00', 'команда 05', 'команда 26', 'сверка итогов', 'reversal', 'void', 'defining', 'using', 'testing', 'mock', 'com-порт', 'z-отчет', 'х-отчет', 'кассир', 'сервисная панель', 'мастер тестирования'],
       searchableText: `
-        Фискальный регистратор АТОЛ 91Ф ДТО 10 54-ФЗ fptr10.dll COM3 115200 Single-Consumer Queue
-        React SPA /checkout Express.js API Gateway C# .NET Fiscal Daemon OrthoErp.FiscalService порт 5050
-        Монопольный доступ к COM-порту ошибка Порт занят -6 строгая последовательная очередь задач
-        Критерий истинности фискализации Popper Test обрыв ленты замятие бумаги не отменяет запись в ФН
-        ФД № ФПД закрытие документа LIBFPTR_PARAM_DOCUMENT_CLOSED: true печать дубликата в журнале
-        Тег 1008 телефон email пациента отправка в ОФД форма оплаты карта наличные СБП безналичный
-        Регламент кассира открытие смены X-отчет без гашения Z-отчет с гашением длительность смены до 24 часов
-        Мнемонический номер смены СМ-YYYYMMDD-NNN авто-открытие смены при первом чеке
-        Калькулятор купюр и монет 5000 2000 1000 500 200 100 сверка наличности излишек недостача
-        Печать Z-отчета термолента 80мм бухгалтерский акт А4 журнал смен /admin/fiscal-shifts экспорт Excel JSON
-        Возврат прихода LIBFPTR_RT_SELL_RETURN sell_return зеркальная запись в МИС
-        Управление профилями fiscal_profiles ИЧП Добрушкин А.М. ИНН 450107060083 ОГРНИП 323237500208220
-        Автономный режим эмуляции Mock Mode бесперебойная работа при отключенной кассе
+        Единый кассовый узел клиники эквайринг Альфа-Банк АТОЛ 91Ф 54-ФЗ ФФД 1.2
+        1. DEFINING ОПРЕДЕЛЕНИЕ И АРХИТЕКТУРНАЯ КОНФИГУРАЦИЯ
+        Протокол Arcus-2 INPAS ДТО 10 fptr10.dll pos.exe arcade.dll
+        Таблицы pos_terminal_settings fiscal_profiles pos_transactions fiscal_receipts
+        Аппаратные интерфейсы COM4 COM3 115200 бод TCP/IP Ethernet 192.168.1.150:8888 USB-HID
+        Путь к драйверу driver_executable_path C:\\Arcus2\\pos.exe C:\\sc552\\pos.exe C:\\DualConnector\\pos.exe C:\\inpas\\pos.exe
+        Проверка наличия файла GET /api/pos/check-driver
+        Банковские реквизиты Terminal ID TID ALFA_770192 Merchant ID MID MERCH_884102 Валюта 643 RUB
+        Режимы работы Физический терминал Real Hardware vs Эмуляция Mock Mode
+        Сценарии симуляции Успех 00 Недостаточно средств 51 Отмена клиентом 99 Таймаут PIN 68
+        Идемпотентность transaction_uuid GUID дедупликация RRN 12 цифр Код авторизации AuthCode маска 4276********1094
+        2. USING ИСПОЛЬЗОВАНИЕ И РЕГЛАМЕНТ КАССИРА
+        Оформление визита /checkout выбор услуг и расходников BOM
+        Двухфазная оплата Two-Phase Commit Фаза 1 Банковская авторизация Команда 00 ввод PIN СБП QR печать 2 банковских слипов
+        Фаза 2 Фискализация чека на ККТ АТОЛ 91Ф признак безналичного расчета Тег 1081 контакт покупателя Тег 1008 ОФД
+        Закрытие документа ФД № ФПД ФН № QR-код фиксация в БД
+        Отмена и возврат Reversal Void отмена в текущей смене без комиссии возврат прихода sell_return
+        Сверка итогов с банком Команда 26 Settlement слип сверки закрытие банковского дня
+        Кассовая смена ККТ 24 часа лимит X-отчет Z-отчет с гашением калькулятор купюр и монет акт А4
+        3. TESTING ТЕСТИРОВАНИЕ ДИАГНОСТИКА И УСТРАНЕНИЕ НЕПОЛАДОК
+        Сервисная панель диагностики PosDeviceCard Команда 05 Host Ping Echo Test 5 шагов проверки:
+        1 Шлюз Express API 2 Исполняемый модуль драйвера pos.exe 3 Порт COM4 4 Пинг хоста RTT ms 5 Криптографические ключи
+        Кнопка перехода в Параметры эквайринга кнопка переключения в Mock
+        Мастер тестирования эквайринга /admin/pos-test-wizard тестовый платеж 1.00 100.00 руб печать слипа react-to-print
+        Таблица неисправностей Файл не найден Порт занят -6 Сбой связи 96 Отказ карты 51 Смена превысила 24 часа 0x48
       `,
       content: (
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
-          <Box sx={{ p: 2, bgcolor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 2 }}>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+          {/* Header Overview Card */}
+          <Paper elevation={0} sx={{ p: 2.5, bgcolor: '#F0F9FF', border: '1px solid #BAE6FD', borderRadius: 2 }}>
+            <Typography variant="subtitle1" sx={{ fontWeight: 800, color: '#0369A1', mb: 0.5, display: 'flex', alignItems: 'center', gap: 1 }}>
+              <CreditCardIcon /> Концепция распределённого кассового узла клиники
+            </Typography>
+            <Typography variant="body2" sx={{ color: '#0C4A6E', lineHeight: 1.6 }}>
+              В «Центре Ортопедии и Травматологии Добрушкина» кассовый узел представляет собой синхронную связку двух физических аппаратов: 
+              <strong> банковского POS-терминала эквайринга АО «Альфа-Банк»</strong> (протоколы Arcus-2 / INPAS) и 
+              <strong> фискального регистратора «АТОЛ 91Ф»</strong> (протокол ДТО 10 / 54-ФЗ).
+              Оба устройства обладают полной архитектурной симметрией: поддержка физического режима и автономного режима эмуляции (Mock Mode), хранение профилей в SQLite, выделенные панели диагностики и суточная сверка итогов.
+            </Typography>
+          </Paper>
+
+          {/* PART 1: DEFINING */}
+          <Box sx={{ p: 2.5, bgcolor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 2 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
+              <Chip label="ЧАСТЬ 1" size="small" sx={{ bgcolor: '#0F3C64', color: '#FFFFFF', fontWeight: 800 }} />
+              <Typography variant="h6" sx={{ fontWeight: 800, color: '#0F3C64', fontSize: '1.05rem' }}>
+                Defining: Архитектура, аппаратная конфигурация и параметры оборудования
+              </Typography>
+            </Box>
+
+            <Typography variant="body2" sx={{ color: '#334155', mb: 2, lineHeight: 1.6 }}>
+              Конфигурация кассового узла хранится в базе данных SQLite в таблицах <code>pos_terminal_settings</code> (эквайринг) и <code>fiscal_profiles</code> (ККТ). Это обеспечивает мгновенное переключение рабочих мест и независимость от перезапуска сервера:
+            </Typography>
+
+            <TableContainer component={Paper} elevation={0} sx={{ border: '1px solid #E2E8F0', borderRadius: 2, mb: 2.5 }}>
+              <Table size="small">
+                <TableHead sx={{ bgcolor: '#F1F5F9' }}>
+                  <TableRow>
+                    <TableCell sx={{ fontWeight: 700, color: '#0F3C64' }}>Параметр конфигурации</TableCell>
+                    <TableCell sx={{ fontWeight: 700, color: '#0F3C64' }}>Эквайринг (Альфа-Банк POS)</TableCell>
+                    <TableCell sx={{ fontWeight: 700, color: '#0F3C64' }}>Онлайн-касса (АТОЛ 91Ф)</TableCell>
+                    <TableCell sx={{ fontWeight: 700, color: '#0F3C64' }}>Назначение и роль в МИС</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  <TableRow>
+                    <TableCell sx={{ fontWeight: 600 }}>Протокол обмена</TableCell>
+                    <TableCell><code>Arcus-2</code> / <code>INPAS DualConnector</code></TableCell>
+                    <TableCell><code>АТОЛ ДТО 10 (fptr10.dll)</code></TableCell>
+                    <TableCell>Низкоуровневый протокол управления аппаратом</TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell sx={{ fontWeight: 600 }}>Физический интерфейс</TableCell>
+                    <TableCell>Последовательный порт <code>COM4</code> (115200 бод) / IP</TableCell>
+                    <TableCell>Виртуальный порт <code>COM3</code> (115200 бод)</TableCell>
+                    <TableCell>Монопольный канал связи через кабель USB-Serial</TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell sx={{ fontWeight: 600 }}>Путь к драйверу</TableCell>
+                    <TableCell><code>driver_executable_path</code> (напр. <code>C:\Arcus2\pos.exe</code>)</TableCell>
+                    <TableCell>Системная библиотека <code>fptr10.dll</code> в GAC</TableCell>
+                    <TableCell>Исполняемый модуль формирования пакетов команд</TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell sx={{ fontWeight: 600 }}>Идентификаторы</TableCell>
+                    <TableCell>TID: <code>ALFA_770192</code>, MID: <code>MERCH_884102</code></TableCell>
+                    <TableCell>Заводской номер ККТ, номер ФН (15/36 мес.)</TableCell>
+                    <TableCell>Регистрационные реквизиты в банке и ФНС</TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell sx={{ fontWeight: 600 }}>Режимы работы</TableCell>
+                    <TableCell>🟢 Физический POS $\leftrightarrow$ 🟡 Эмуляция (Mock)</TableCell>
+                    <TableCell>🟢 Физический ККТ $\leftrightarrow$ 🟡 Эмуляция (Mock)</TableCell>
+                    <TableCell>Возможность автономной работы без оборудования</TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell sx={{ fontWeight: 600 }}>Идемпотентность</TableCell>
+                    <TableCell><code>transaction_uuid</code> (UUID v4), RRN, AuthCode</TableCell>
+                    <TableCell><code>dedup_hash</code>, номер ФД и ФПД</TableCell>
+                    <TableCell>Защита от повторного списания и двойных чеков</TableCell>
+                  </TableRow>
+                </TableBody>
+              </Table>
+            </TableContainer>
+
             <Typography variant="subtitle2" sx={{ fontWeight: 700, color: '#0F3C64', mb: 1 }}>
-              6.1. Архитектурная модель сервиса фискализации и монопольный доступ к COM-порту
+              Настройка пути к драйверу и онлайн-валидация:
             </Typography>
             <Typography variant="body2" sx={{ color: '#334155', mb: 1.5, lineHeight: 1.6 }}>
-              Интеграция кассового аппарата <strong>АТОЛ 91Ф</strong> (работающего в режиме фискального регистратора по протоколу ДТО 10) построена по многоуровневой отказоустойчивой схеме:
+              В разделе <strong>«Параметры эквайринга «АО «АЛЬФА-БАНК»»</strong> (<code>/admin/pos-settings</code>) путь к исполняемому файлу драйвера настраивается индивидуально для каждого профиля. Доступна кнопка онлайн-проверки наличия файла на диске (<code>GET /api/pos/check-driver</code>) и быстрые пресеты:
             </Typography>
-            <Paper elevation={0} sx={{ p: 2, bgcolor: '#FFFFFF', border: '1px solid #CBD5E1', fontFamily: 'monospace', fontSize: '0.82rem', whiteSpace: 'pre-wrap', lineHeight: 1.5, mb: 1.5 }}>
-{`React SPA (Оформление визита /checkout, порт 5174/5175)
-   │  [✓] Пробить чек на ККТ  •  Тег 1008 (тел/email)  •  Способ оплаты (карта / наличные / СБП)
-   ▼
-Express.js API Gateway (сервер ОртоERP, порт 5000, routes: /api/fiscal/*)
-   │  Контроль транзакций, чтение настроек из SQLite fiscal_profiles, проксирование
-   ▼
-C# .NET Fiscal Daemon (OrthoErp.FiscalService, порт 5050 / Kestrel REST API)
-   │  Single-Consumer Queue (Channel<FiscalTask>) — монопольная последовательная очередь
-   ▼
-Физический драйвер Atol DTO 10 (fptr10.dll, COM3, 115200 бод) ИЛИ AtolMockDriver (эмулятор)
-   │
-   ▼
-Таблицы аудита SQLite (fiscal_receipts, fiscal_audit_logs) + Serilog Rolling File Logs`}
+            <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: 1.5 }}>
+              <Chip label="C:\Arcus2\pos.exe (Arcus-2 по умолчанию)" size="small" variant="outlined" />
+              <Chip label="C:\sc552\pos.exe (Кассовый протокол SC552)" size="small" variant="outlined" />
+              <Chip label="C:\DualConnector\pos.exe (INPAS DualConnector)" size="small" variant="outlined" />
+              <Chip label="C:\inpas\pos.exe (INPAS SmartSale)" size="small" variant="outlined" />
+            </Box>
+          </Box>
+
+          {/* PART 2: USING */}
+          <Box sx={{ p: 2.5, bgcolor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 2 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
+              <Chip label="ЧАСТЬ 2" size="small" sx={{ bgcolor: '#16A34A', color: '#FFFFFF', fontWeight: 800 }} />
+              <Typography variant="h6" sx={{ fontWeight: 800, color: '#0F3C64', fontSize: '1.05rem' }}>
+                Using: Регламент кассира-администратора, двухфазная оплата (Эквайринг + Чек) и сверка итогов
+              </Typography>
+            </Box>
+
+            <Typography variant="body2" sx={{ color: '#334155', mb: 2, lineHeight: 1.6 }}>
+              При расчете за медицинские сервисы в мастере <code>/checkout</code> реализуется строгая <strong>двухфазная финансовая транзакция (Two-Phase Commit)</strong>, исключающая расхождение между банковским счетом и кассовой книгой:
+            </Typography>
+
+            <Box component="ol" sx={{ pl: 2.5, m: 0, color: '#334155', '& li': { mb: 1.5, lineHeight: 1.6 } }}>
+              <li>
+                <strong>Шаг 1: Формирование визита пациента.</strong> В мастере <code>/checkout</code> оператор выбирает пациента, лечащего врача, перечень медицинских сервисов и списание фактических медикаментов по спецификации BOM.
+              </li>
+              <li>
+                <strong>Шаг 2: Выбор безналичной оплаты.</strong> На шаге «Оплата» кассир выбирает форму <strong>«Банковская карта»</strong> или <strong>«СБП (QR на экране терминала)»</strong> и оставляет активным тумблер <strong>«Пробить фискальный чек на ККТ (54-ФЗ)»</strong>. В поле Тег 1008 автоматически подставляется телефон/email пациента из ЭМК.
+              </li>
+              <li>
+                <strong>Шаг 3: Фаза 1 — Авторизация на POS-терминале Альфа-Банка (Команда 00).</strong>
+                <Box sx={{ mt: 0.5, pl: 1, borderLeft: '3px solid #2563EB', fontSize: '0.88rem', color: '#1E293B' }}>
+                  • Терминал активирует PIN-пад, предлагает приложить карту или сканировать QR.<br />
+                  • Пациент вводит PIN-код (таймаут ожидания 60–90 сек).<br />
+                  • Процессинг Альфа-Банка возвращает ответ: <strong>Код 00 (Одобрено)</strong>, RRN транзакции (12 цифр) и Код авторизации.<br />
+                  • Печатается 2 экземпляра банковского слипа: один выдается пациенту, второй подписывается и остается в кассе.
+                </Box>
+              </li>
+              <li>
+                <strong>Шаг 4: Фаза 2 — Фискализация на ККТ «АТОЛ 91Ф» (54-ФЗ).</strong>
+                <Box sx={{ mt: 0.5, pl: 1, borderLeft: '3px solid #16A34A', fontSize: '0.88rem', color: '#1E293B' }}>
+                  • При успешной авторизации МИС передает чек в ККТ с признаком безналичного расчета (<strong>Тег 1081</strong>).<br />
+                  • Фискальный накопитель регистрирует документ и присваивает реквизиты: <strong>№ ФД</strong>, <strong>ФПД</strong>, <strong>№ ФН</strong>.<br />
+                  • Печатается кассовый чек с фискальным QR-кодом, данные уходят в ОФД.<br />
+                  • В базе SQLite создается атомарная связка: запись в <code>pos_transactions</code> и запись в <code>fiscal_receipts</code>.
+                </Box>
+              </li>
+              <li>
+                <strong>Шаг 5: Отмена и возврат средств (Reversal / Void vs Refund).</strong>
+                <Box sx={{ mt: 0.5, pl: 1, borderLeft: '3px solid #DC2626', fontSize: '0.88rem', color: '#1E293B' }}>
+                  • <em>Отмена внутри смены (Reversal / Void):</em> Если пациент отказался от процедуры до закрытия банковского дня, операция отменяется без комиссии банка, сумма разблокируется мгновенно.<br />
+                  • <em>Возврат после закрытия смены (Refund):</em> Пробивается фискальный чек «Возврат прихода» (<code>LIBFPTR_RT_SELL_RETURN</code>), деньги возвращаются банком на карту в срок до 3 рабочих дней.
+                </Box>
+              </li>
+              <li>
+                <strong>Шаг 6: Закрытие кассовой смены и сверка итогов дня (Команда 26).</strong>
+                <Box sx={{ mt: 0.5, pl: 1, borderLeft: '3px solid #D97706', fontSize: '0.88rem', color: '#1E293B' }}>
+                  • <em>Сверка итогов эквайринга:</em> По нажатию «Сверка итогов» терминал отправляет в банк команду 26, закрывает банковский день и печатает отчет со сводкой выручки по картам МИР, Visa, Mastercard, СБП.<br />
+                  • <em>Закрытие смены ККТ (Z-отчет):</em> В мастере <code>/admin/fiscal-shifts</code> кассир закрывает смену (контроль лимита 24ч), выполняет пересчет купюр и монет в калькуляторе и сличает сумму безналичных оплат Z-отчета со слипом сверки Альфа-Банка.
+                </Box>
+              </li>
+            </Box>
+          </Box>
+
+          {/* PART 3: TESTING */}
+          <Box sx={{ p: 2.5, bgcolor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 2 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
+              <Chip label="ЧАСТЬ 3" size="small" sx={{ bgcolor: '#7C3AED', color: '#FFFFFF', fontWeight: 800 }} />
+              <Typography variant="h6" sx={{ fontWeight: 800, color: '#0F3C64', fontSize: '1.05rem' }}>
+                Testing: Сервисная панель диагностики, тест хоста (Команда 05), мастер тестирования и устранение неполадок
+              </Typography>
+            </Box>
+
+            <Typography variant="body2" sx={{ color: '#334155', mb: 2, lineHeight: 1.6 }}>
+              Для гарантированной бесперебойной работы на точке приёма пациентов в систему встроены инструменты пошаговой аппаратной диагностики:
+            </Typography>
+
+            <Typography variant="subtitle2" sx={{ fontWeight: 700, color: '#0F3C64', mb: 1 }}>
+              3.1. Сервисная панель диагностики эквайринга: Тест связи с процессингом (Команда 05)
+            </Typography>
+            <Typography variant="body2" sx={{ color: '#334155', mb: 1.5, lineHeight: 1.6 }}>
+              При нажатии кнопки <strong>«Тест связи с процессингом (Команда 05)»</strong> запускается пошаговый диагностический протокол с замером задержки отклика (RTT ms) и проверкой 5 технологических уровней:
+            </Typography>
+
+            <Paper elevation={0} sx={{ p: 2, bgcolor: '#FFFFFF', border: '1px solid #CBD5E1', borderRadius: 2, mb: 2 }}>
+              <Box component="ol" sx={{ pl: 2.5, m: 0, color: '#1E293B', '& li': { mb: 0.8, fontSize: '0.88rem' } }}>
+                <li><strong>1. Сетевой шлюз МИС (Node.js API):</strong> Проверка доступности внутреннего маршрута <code>/api/pos/test-host</code> (RTT &lt; 2 мс).</li>
+                <li><strong>2. Исполняемый модуль драйвера:</strong> Проверка физического присутствия файла <code>pos.exe</code> по настроенному пути. При ошибке прямо из окна доступна кнопка <em>«Изменить путь к файлу драйвера в «Параметры эквайринга «АО «АЛЬФА-БАНК»»</em>.</li>
+                <li><strong>3. Интерфейс подключения к терминалу:</strong> Проверка готовности COM-порта (COM4, 115200 бод) или IP/Ethernet сокета.</li>
+                <li><strong>4. Сеанс связи с хостом АО «Альфа-Банк» (Команда 05):</strong> Отправка Echo-запроса, замер задержки сети процессинга, получение кода ответа <code>00 (Успех)</code>.</li>
+                <li><strong>5. Проверка криптографических ключей:</strong> Подтверждение актуальности сессионных и мастер-ключей терминала.</li>
+              </Box>
             </Paper>
 
-            <Alert severity="warning" sx={{ mb: 1.5, borderRadius: 1.5 }}>
-              <strong>Монопольный доступ к COM-порту:</strong> Виртуальный COM-порт (COM3) и библиотека <code>fptr10.dll</code> не поддерживают параллельных потоков. Любая попытка параллельного вызова приводит к ошибке «Порт занят» (-6) или блокировке аппарата. Все кассовые операции в ОртоERP строго упорядочены в единую очередь задач (Single-Consumer Queue / FIFO).
-            </Alert>
-
-            <Alert severity="info" sx={{ borderRadius: 1.5 }}>
-              <strong>Критерий истинности фискализации (Popper Test):</strong> Факт обрыва бумаги или замятия ленты 57 мм не отменяет запись документа в Фискальный Накопитель (ФН). Решающим критерием успеха является закрытие документа в ФН (<code>LIBFPTR_PARAM_DOCUMENT_CLOSED: true</code>) и присвоение реквизитов <strong>ФД №</strong> и <strong>ФПД</strong>, а не физическая печать на бумаге.
-            </Alert>
-          </Box>
-
-          <Box sx={{ p: 2, bgcolor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 2 }}>
             <Typography variant="subtitle2" sx={{ fontWeight: 700, color: '#0F3C64', mb: 1 }}>
-              6.2. Регламент кассира: пробитие чека при оформлении визита (`/checkout`)
-            </Typography>
-            <Typography variant="body2" sx={{ color: '#334155', mb: 1.5 }}>
-              При расчете с пациентом за оказанные медицинские сервисы оператор выполняет следующие действия:
-            </Typography>
-
-            <Box component="ol" sx={{ pl: 2.5, m: 0, color: '#334155', '& li': { mb: 1.2, lineHeight: 1.5 } }}>
-              <li>
-                <strong>Шаг 1: Формирование позиций визита.</strong> В мастере <code>/checkout</code> оператор выбирает пациента, лечащего врача и состав медицинских сервисов с фактическими расходниками.
-              </li>
-              <li>
-                <strong>Шаг 2: Включение фискализации.</strong> На этапе «Оплата» оператор активирует чекбокс <strong>«Пробить фискальный чек на ККТ (54-ФЗ)»</strong>.
-              </li>
-              <li>
-                <strong>Шаг 3: Проверка контакта покупателя (Тег 1008).</strong> В поле «Телефон или E-mail пациента» автоматически подставляется контакт из ЭМК (например, <code>+79881234567</code>). Это обязательное требование 54-ФЗ для отправки электронного чека оператором фискальных данных (ОФД).
-              </li>
-              <li>
-                <strong>Шаг 4: Выбор формы оплаты.</strong> Оператор указывает форму расчета (банковская карта, наличные, СБП, безналичный расчет).
-              </li>
-              <li>
-                <strong>Шаг 5: Пробитие и печать чека.</strong> Оператор нажимает <strong>«Оплатить визит и пробить чек»</strong>. Документ закрывается в ФН, касса печатает чек, а в МИС фиксируются реквизиты: <strong>№ ФД</strong>, <strong>ФПД</strong>, <strong>№ ФН</strong> и QR-код.
-              </li>
-            </Box>
-          </Box>
-
-          <Box sx={{ p: 2, bgcolor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 2 }}>
-            <Typography variant="subtitle2" sx={{ fontWeight: 700, color: '#0F3C64', mb: 1 }}>
-              6.3. Управление кассовыми сменами, сверка наличности и Z-отчет (54-ФЗ)
+              3.2. Мастер тестирования эквайринга (`/admin/pos-test-wizard`)
             </Typography>
             <Typography variant="body2" sx={{ color: '#334155', mb: 1.5, lineHeight: 1.6 }}>
-              Подсистема управления кассовыми сменами в ОртоERP реализует строгий регламент Федерального закона № 54-ФЗ с автоматизацией жизненного цикла смены и кассовой дисциплины:
+              Встроенный мастер тестирования позволяет персоналу и системному администратору безопасно протестировать весь финансовый контур:
             </Typography>
-
-            <Box component="ul" sx={{ pl: 2.5, m: 0, color: '#334155', '& li': { mb: 1.2, lineHeight: 1.5 } }}>
-              <li>
-                <strong>Автоматическое открытие смены:</strong> Смена открывается автоматически при пробитии первого фискального чека за день, либо вручную через бейдж кассы в шапке или в разделе <code>/admin/fiscal-shifts</code>. Номер смены формируется в мнемоническом формате: <code>СМ-YYYYMMDD-NNN</code> (например, <code>СМ-20261011-001</code>).
-              </li>
-              <li>
-                <strong>Контроль 24-часового лимита смены (54-ФЗ):</strong> Согласно ст. 4.3 54-ФЗ, продолжительность смены не может превышать 24 часа. В шапке системы отображается таймер обратного отсчета с цветовой индикацией (зеленый &gt; 2ч, желтый &lt; 2ч, красный — смена истекла). По истечении 24 часов фискализация новых чеков блокируется до закрытия смены Z-отчетом.
-              </li>
-              <li>
-                <strong>Промежуточный X-отчет (без гашения):</strong> Позволяет в любой момент проверить текущую выручку по типам оплат (наличные, карта, СБП) и сумму в денежном ящике без закрытия смены.
-              </li>
-              <li>
-                <strong>Закрытие смены (Z-отчет) и сверка кассы:</strong> Мастер закрытия смены включает встроенный <em>калькулятор купюр и монет</em> (5000, 2000, 1000, 500, 200, 100 ₽, монеты). Система сравнивает фактическую сумму с расчетным остатком и автоматически определяет излишек, недостачу или точное совпадение.
-              </li>
-              <li>
-                <strong>Печать и архивация отчетов:</strong> Предусмотрены два режима печати: чек Z-отчета на узкой термоленте (80 мм / 58 мм) для кассовой книги и полностраничный бухгалтерский акт А4 с подписями кассира и главбуха. Все смены архивируются в таблице <code>fiscal_shifts</code> с возможностью выгрузки в Excel и JSON.
-              </li>
+            <Box component="ul" sx={{ pl: 2.5, m: 0, color: '#334155', '& li': { mb: 0.8, fontSize: '0.88rem' } }}>
+              <li><strong>Тестовые транзакции:</strong> Быстрые кнопки для пробных оплат на 1.00 ₽, 100.00 ₽ или произвольную сумму.</li>
+              <li><strong>Симуляция сбойных сценариев в Mock-режиме:</strong> Тестирование реакции интерфейса на отказ карты («Недостаточно средств — код 51», «Отмена клиентом на PIN-паде — код 99», «Таймаут ввода PIN-кода — код 68»).</li>
+              <li><strong>Печать банковского слипа:</strong> Интерактивный шаблон печати слипа через <code>react-to-print</code> со всеми реквизитами (TID, MID, RRN, AuthCode, маска карты).</li>
+              <li><strong>Журнал транзакций:</strong> Таблица с фильтрацией, поиском, подсчетом итогов и экспортом в Excel/CSV.</li>
             </Box>
+
+            <Typography variant="subtitle2" sx={{ fontWeight: 700, color: '#0F3C64', mt: 2, mb: 1 }}>
+              3.3. Таблица типовых неисправностей и регламент устранения
+            </Typography>
+            <TableContainer component={Paper} elevation={0} sx={{ border: '1px solid #E2E8F0', borderRadius: 2 }}>
+              <Table size="small">
+                <TableHead sx={{ bgcolor: '#F1F5F9' }}>
+                  <TableRow>
+                    <TableCell sx={{ fontWeight: 700, color: '#0F3C64' }}>Симптом / Ошибка</TableCell>
+                    <TableCell sx={{ fontWeight: 700, color: '#0F3C64' }}>Причина</TableCell>
+                    <TableCell sx={{ fontWeight: 700, color: '#0F3C64' }}>Регламент устранения</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  <TableRow>
+                    <TableCell sx={{ fontWeight: 600, color: '#DC2626' }}>Файл не найден по пути C:\Arcus2\pos.exe</TableCell>
+                    <TableCell>Драйвер установлен в другой каталог или отсутствует</TableCell>
+                    <TableCell>В окне ошибки нажать «Изменить путь к файлу драйвера», выбрать пресет (напр. <code>C:\sc552\pos.exe</code>) или переключить профиль в Mock</TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell sx={{ fontWeight: 600, color: '#DC2626' }}>Порт занят (-6) / Таймаут COM-порта</TableCell>
+                    <TableCell>Порт COM3/COM4 захвачен сторонней утилитой (ДТО Тест, Putty)</TableCell>
+                    <TableCell>Закрыть сторонние приложения, переподключить USB-кабель, проверить диспетчер устройств Windows</TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell sx={{ fontWeight: 600, color: '#DC2626' }}>Сбой связи с процессингом (Код 96/99)</TableCell>
+                    <TableCell>Нет доступа в интернет или регламентные работы на хосте банка</TableCell>
+                    <TableCell>Проверить сетевой шлюз клиники, выполнить пинг хоста Альфа-Банка, перезагрузить терминал</TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell sx={{ fontWeight: 600, color: '#DC2626' }}>Смена ККТ превысила 24 часа (Код 0x48)</TableCell>
+                    <TableCell>Смена открыта более 24 часов назад (требование 54-ФЗ)</TableCell>
+                    <TableCell>Перейти в <code>/admin/fiscal-shifts</code>, нажать «Закрыть смену (Z-отчет)», затем открыть новую смену</TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell sx={{ fontWeight: 600, color: '#D97706' }}>Отказ карты пациентом (Код 51/68/99)</TableCell>
+                    <TableCell>Недостаточно средств, таймаут PIN или отмена на PIN-паде</TableCell>
+                    <TableCell>Предложить пациенту повторить попытку, использовать другую карту или оплатить через СБП (QR)</TableCell>
+                  </TableRow>
+                </TableBody>
+              </Table>
+            </TableContainer>
           </Box>
         </Box>
       )
