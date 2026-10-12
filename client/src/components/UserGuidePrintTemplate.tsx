@@ -217,7 +217,7 @@ export const UserGuidePrintTemplate = React.forwardRef<HTMLDivElement, UserGuide
               </Typography>
               <Box sx={{ borderBottom: '1px solid #718096', height: 28, mb: 0.5 }} />
               <Typography variant="caption" sx={{ color: '#718096', fontSize: '8pt' }}>
-                Добрушкин В.А. / «___» ________ 2026 г.
+                Добрушкин А.М. / «___» ________ 2026 г.
               </Typography>
             </Box>
 

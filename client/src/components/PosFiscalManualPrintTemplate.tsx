@@ -246,7 +246,7 @@ export const PosFiscalManualPrintTemplate = React.forwardRef<HTMLDivElement, Pos
               </Typography>
               <Box sx={{ borderBottom: '1px solid #718096', height: 24, mb: 0.3 }} />
               <Typography variant="caption" sx={{ color: '#718096', fontSize: '7.5pt' }}>
-                Добрушкин В.А. / «___» ________ 2026 г.
+                Добрушкин А.М. / «___» ________ 2026 г.
               </Typography>
             </Box>
 
