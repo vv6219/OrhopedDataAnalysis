@@ -69,6 +69,18 @@ export const navigationGroups: NavGroup[] = [
         tooltip: 'Расчет и ведомости выплат врачам и медсестрам на основе визитов и сервисов'
       },
       {
+        text: 'Журнал и Аналитика смен',
+        path: '/admin/fiscal-shifts',
+        icon: <PointOfSaleIcon sx={{ fontSize: 20, color: '#0F3C64' }} />,
+        tooltip: 'Журнал и аналитика кассовых смен ККТ АТОЛ 91Ф: мнемоника, X/Z-отчеты, сверка кассы'
+      },
+      {
+        text: 'Журнал аудита ККТ',
+        path: '/fiscal-audit',
+        icon: <ReceiptLongIcon sx={{ fontSize: 20 }} />,
+        tooltip: 'Журнал аудита фискальных операций ККТ АТОЛ 91Ф (Serilog / 54-ФЗ)'
+      },
+      {
         text: 'Отчетность и документы',
         path: '/reports',
         icon: <AssessmentIcon sx={{ fontSize: 20 }} />,
@@ -202,22 +214,10 @@ export const navigationGroups: NavGroup[] = [
         tooltip: 'Удалить все тестовые данные с маркером [TEST_DAEMON]'
       },
       {
-        text: 'Смены ККТ АТОЛ 91Ф',
-        path: '/admin/fiscal-shifts',
-        icon: <PointOfSaleIcon sx={{ fontSize: 20, color: '#0F3C64' }} />,
-        tooltip: 'Журнал и аналитика кассовых смен ККТ АТОЛ 91Ф: мнемоника, X/Z-отчеты, сверка кассы'
-      },
-      {
         text: 'Параметры ККТ АТОЛ 91Ф',
         path: '/admin/fiscal-settings',
         icon: <TuneIcon sx={{ fontSize: 20 }} />,
         tooltip: 'Управление профилями и параметрами ККТ АТОЛ 91Ф в базе данных SQLite (CRUD)'
-      },
-      {
-        text: 'Журнал аудита ККТ (Serilog)',
-        path: '/fiscal-audit',
-        icon: <ReceiptLongIcon sx={{ fontSize: 20 }} />,
-        tooltip: 'Журнал аудита фискальных операций ККТ АТОЛ 91Ф (Serilog / 54-ФЗ)'
       },
       {
         text: 'Мастер тестов ККТ [TEST_DAEMON]',
@@ -238,10 +238,10 @@ export const navigationGroups: NavGroup[] = [
         tooltip: 'Удалить все фискальные данные с маркером [TEST_DAEMON]'
       },
       {
-        text: 'Запуск тестов ККТ (5 тестов)',
+        text: 'Запуск тестов ККТ (6 сценариев)',
         path: '/admin/fiscal-test-wizard?action=run-test',
         icon: <PlayCircleFilledWhiteIcon sx={{ fontSize: 20, color: '#2563EB' }} />,
-        tooltip: 'Запустить 5 сквозных сценариев тестирования ККТ АТОЛ 91Ф'
+        tooltip: 'Запустить 6 сквозных сценариев тестирования ККТ АТОЛ 91Ф'
       }
     ]
   }
@@ -364,9 +364,9 @@ export const routeMetaMap: Record<string, RouteMeta> = {
     parentPath: '/'
   },
   '/fiscal-audit': {
-    title: 'Журнал аудита ККТ (Serilog)',
-    groupTitle: 'Администратор',
-    groupId: 'administrator',
+    title: 'Журнал аудита ККТ',
+    groupTitle: 'Сервисы',
+    groupId: 'operations_and_wizards',
     parentPath: '/'
   },
   '/admin/fiscal-test-wizard': {
@@ -376,15 +376,15 @@ export const routeMetaMap: Record<string, RouteMeta> = {
     parentPath: '/'
   },
   '/admin/fiscal-shifts': {
-    title: 'Смены ККТ АТОЛ 91Ф',
-    groupTitle: 'Администратор',
-    groupId: 'administrator',
+    title: 'Журнал и Аналитика смен',
+    groupTitle: 'Сервисы',
+    groupId: 'operations_and_wizards',
     parentPath: '/'
   },
   '/fiscal-shifts': {
-    title: 'Смены ККТ АТОЛ 91Ф',
-    groupTitle: 'Администратор',
-    groupId: 'administrator',
+    title: 'Журнал и Аналитика смен',
+    groupTitle: 'Сервисы',
+    groupId: 'operations_and_wizards',
     parentPath: '/'
   }
 };
