@@ -24,6 +24,7 @@ import FiscalSettings from './pages/FiscalSettings';
 import ServerHealth from './pages/ServerHealth';
 import FiscalShiftsAnalytics from './pages/FiscalShiftsAnalytics';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { FiscalProvider } from './context/FiscalContext';
 import LoginModal from './components/LoginModal';
 
 const theme = createTheme({
@@ -253,9 +254,11 @@ function App() {
     <ThemeProvider theme={theme}>
       <CssBaseline />
       <AuthProvider>
-        <BrowserRouter>
-          <AppContent />
-        </BrowserRouter>
+        <FiscalProvider>
+          <BrowserRouter>
+            <AppContent />
+          </BrowserRouter>
+        </FiscalProvider>
       </AuthProvider>
     </ThemeProvider>
   );

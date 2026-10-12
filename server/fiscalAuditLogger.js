@@ -15,6 +15,7 @@ const LogLevels = {
 const EventTypes = {
   DEVICE_CONNECT: 'device_connect',
   DEVICE_STATUS: 'device_status',
+  DEVICE_ERROR: 'device_error',
   STATE_RECOVERY: 'state_recovery',
   RECEIPT_QUEUED: 'receipt_queued',
   RECEIPT_OPEN: 'receipt_open',

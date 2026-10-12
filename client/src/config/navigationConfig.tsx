@@ -26,6 +26,8 @@ import PointOfSaleIcon from '@mui/icons-material/PointOfSale';
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
 import TuneIcon from '@mui/icons-material/Tune';
 import DnsIcon from '@mui/icons-material/Dns';
+import ScienceIcon from '@mui/icons-material/Science';
+import UsbIcon from '@mui/icons-material/Usb';
 
 export interface NavItem {
   text: string;
@@ -33,6 +35,8 @@ export interface NavItem {
   icon: React.ReactElement;
   tooltip: string;
   isExternal?: boolean;
+  defaultOpen?: boolean;
+  children?: NavItem[];
 }
 
 export interface NavGroup {
@@ -40,6 +44,7 @@ export interface NavGroup {
   title: string;
   icon: React.ReactElement;
   defaultOpen: boolean;
+  tooltip?: string;
   items: NavItem[];
 }
 
@@ -49,48 +54,49 @@ export const navigationGroups: NavGroup[] = [
     title: 'Сервисы',
     icon: <AutoAwesomeMotionIcon sx={{ fontSize: 20 }} />,
     defaultOpen: true,
+    tooltip: 'Операционные процессы: оформление визитов, расписание врачей, кассовые смены, выплаты зарплат и отчетность',
     items: [
       {
         text: 'Оформление визита (Wizard)',
         path: '/checkout',
         icon: <LocalHospitalIcon sx={{ fontSize: 20 }} />,
-        tooltip: 'Пошаговый мастер регистрации визита и калькуляции'
+        tooltip: 'Пошаговый мастер оформления визита: выбор пациента и доктора, добавление медицинских услуг, расчет себестоимости и скидок, печать фискального чека ККТ'
       },
       {
         text: 'Расписание и прием',
         path: '/scheduling',
         icon: <EventIcon sx={{ fontSize: 20 }} />,
-        tooltip: 'Календарь записей и расписание врачей'
+        tooltip: 'Календарь приемов и расписание врачей: планирование слотов по кабинетам, отслеживание визитов, регистрация явки и перенос записей'
       },
       {
         text: 'Выплаты сотрудникам',
         path: '/staff-payouts',
         icon: <AccountBalanceWalletIcon sx={{ fontSize: 20 }} />,
-        tooltip: 'Расчет и ведомости выплат врачам и медсестрам на основе визитов и сервисов'
+        tooltip: 'Расчет и ведомости выплат: автоматический расчет заработной платы врачей и ассистентов на основе выполненных услуг, ставок и нормативов'
       },
       {
         text: 'Журнал и Аналитика смен',
         path: '/admin/fiscal-shifts',
         icon: <PointOfSaleIcon sx={{ fontSize: 20, color: '#0F3C64' }} />,
-        tooltip: 'Журнал и аналитика кассовых смен ККТ АТОЛ 91Ф: мнемоника, X/Z-отчеты, сверка кассы'
+        tooltip: 'Кассовые смены ККТ АТОЛ 91Ф: открытие и закрытие смен с Z-отчетом, автоматическая мнемоническая нумерация, сверка кассы и X-отчеты'
       },
       {
         text: 'Журнал аудита ККТ',
         path: '/fiscal-audit',
         icon: <ReceiptLongIcon sx={{ fontSize: 20 }} />,
-        tooltip: 'Журнал аудита фискальных операций ККТ АТОЛ 91Ф (Serilog / 54-ФЗ)'
+        tooltip: 'Журнал аудита фискальных операций 54-ФЗ: поминутный журнал взаимодействия с ККТ через Serilog, фискальные признаки (ФД/ФП) и статусы чеков'
       },
       {
         text: 'Отчетность и документы',
         path: '/reports',
         icon: <AssessmentIcon sx={{ fontSize: 20 }} />,
-        tooltip: 'Печать протоколов и аналитических отчетов'
+        tooltip: 'Генератор документов и отчетов: формирование сводных справок, протоколов лечения, реестров услуг и экспорт документов в PDF и Excel'
       },
       {
         text: 'Инструкция пользователя',
         path: '/user-guide',
         icon: <MenuBookIcon sx={{ fontSize: 20, color: '#0F3C64' }} />,
-        tooltip: 'Интерактивное руководство пользователя, архитектура сущностей, параметры и регламент расчетов'
+        tooltip: 'Интерактивное руководство пользователя: описание функционала МИС, справочников, архитектуры данных и пошаговых регламентов расчетов'
       }
     ]
   },
@@ -99,36 +105,43 @@ export const navigationGroups: NavGroup[] = [
     title: 'Базовые данные',
     icon: <FolderSpecialIcon sx={{ fontSize: 20 }} />,
     defaultOpen: true,
+    tooltip: 'Нормативно-справочная информация (НСИ): картотека пациентов, врачи, каталог услуг, склад медикаментов и параметры',
     items: [
       {
         text: 'Пациенты (ЭМК картотека)',
         path: '/patients',
         icon: <PeopleIcon sx={{ fontSize: 20 }} />,
-        tooltip: 'Реестр пациентов и электронные медицинские карты'
+        tooltip: 'Электронная медицинская карта (ЭМК): реестр пациентов клиники, паспортные данные, контакты, история визитов и прикрепленные файлы'
       },
       {
         text: 'Сотрудники и врачи',
         path: '/staff',
         icon: <BadgeIcon sx={{ fontSize: 20 }} />,
-        tooltip: 'Реестр сотрудников, врачей и ассистентов'
+        tooltip: 'Кадровый реестр персонала: врачи, ассистенты, специализации, процентные ставки оплат и индивидуальные параметры доступа'
       },
       {
         text: 'Каталог сервисов',
         path: '/operations',
         icon: <LocalHospitalIcon sx={{ fontSize: 20 }} />,
-        tooltip: 'Справочник сервисов и технологических карт BOM'
+        tooltip: 'Справочник медицинских услуг: прейскурант клиники, технологические карты BOM, расходные материалы, себестоимость и длительность'
       },
       {
         text: 'Склад материалов и медикаментов',
         path: '/inventory',
         icon: <InventoryIcon sx={{ fontSize: 20 }} />,
-        tooltip: 'Учет складских остатков и медикаментов'
+        tooltip: 'Учет складских остатков: мониторинг остатков медикаментов, лимиты запасов и автоматическое списание по технологическим картам визитов'
       },
       {
         text: 'Параметры клиники',
         path: '/parameters',
         icon: <SettingsIcon sx={{ fontSize: 20 }} />,
-        tooltip: 'Системные настройки и коэффициенты'
+        tooltip: 'Системные настройки клиники: реквизиты организации, коэффициенты наценок, нормы времени и глобальные системные коэффициенты'
+      },
+      {
+        text: 'Параметры ККТ АТОЛ 91Ф',
+        path: '/admin/fiscal-settings',
+        icon: <TuneIcon sx={{ fontSize: 20 }} />,
+        tooltip: 'Конфигурация фискального регистратора: управление профилями подключения, COM-портом, скоростью обмена и параметрами в базе SQLite'
       }
     ]
   },
@@ -137,24 +150,25 @@ export const navigationGroups: NavGroup[] = [
     title: 'Аналитика',
     icon: <BarChartIcon sx={{ fontSize: 20 }} />,
     defaultOpen: true,
+    tooltip: 'Управленческая и финансовая аналитика: BI дашборды, маржинальный анализ услуг, доходы и расходы клиники',
     items: [
       {
         text: 'BI Дашборд',
         path: '/',
         icon: <DashboardIcon sx={{ fontSize: 20 }} />,
-        tooltip: 'Главный экран аналитики и KPI'
+        tooltip: 'Главный экран аналитики: оперативные KPI клиники, динамика выручки, загрузка кабинетов и агрегированные финансовые метрики'
       },
       {
         text: 'Анализ сервисов',
         path: '/analytics/operations',
         icon: <AssessmentIcon sx={{ fontSize: 20 }} />,
-        tooltip: 'Глубокий финансовый и маржинальный анализ сервисов'
+        tooltip: 'Финансовый анализ услуг: маржинальность, себестоимость технологических карт, объемы оказания и доходность медицинских направлений'
       },
       {
         text: 'BI Сервисы и Выплаты',
         path: '/analytics/services-bi',
         icon: <QueryStatsIcon sx={{ fontSize: 20 }} />,
-        tooltip: 'Глубокая аналитика сервисов, выплат и доходности'
+        tooltip: 'Многомерный BI-анализ: корреляция выручки от оказанных услуг и расходов на выплаты врачам, маржинальная прибыль клиники'
       }
     ]
   },
@@ -163,85 +177,95 @@ export const navigationGroups: NavGroup[] = [
     title: 'Администратор',
     icon: <AdminPanelSettingsIcon sx={{ fontSize: 20 }} />,
     defaultOpen: true,
+    tooltip: 'Системное администрирование: здоровье служб сервера, синхронизация с Firebird, SQLite Studio и профили ККТ',
     items: [
       {
         text: 'Службы бэкенда (Health)',
         path: '/admin/server-health',
         icon: <DnsIcon sx={{ fontSize: 20, color: '#0284C7' }} />,
-        tooltip: 'Мониторинг и тестирование доступности служб бэкенда (Express, SQLite, Fiscal Daemon, Firebird, Swagger)'
-      },
-      {
-        text: 'Тест служб сервера',
-        path: '/admin/server-health?action=run-tests',
-        icon: <PlayCircleFilledWhiteIcon sx={{ fontSize: 20, color: '#0284C7' }} />,
-        tooltip: 'Запустить сквозной тест доступности всех служб сервера (Express, SQLite, Fiscal Daemon, Firebird)'
+        tooltip: 'Мониторинг и диагностика серверов: проверка доступности Express API, базы SQLite, демона ККТ, сервера Firebird и REST-документации'
       },
       {
         text: 'FireBird Sync',
         path: '/admin/firebird-sync',
         icon: <SyncAltIcon sx={{ fontSize: 20 }} />,
-        tooltip: 'Мастер синхронизации медицинской БД Firebird (MEDICAL.FDB)'
+        tooltip: 'Мастер синхронизации баз данных: перенос и сопоставление пациентов и услуг из внешней базы Firebird (MEDICAL.FDB) в локальную SQLite'
       },
       {
         text: 'SQLite Studio (БД)',
         path: '/sqlite-studio',
         icon: <StorageIcon sx={{ fontSize: 20 }} />,
-        tooltip: 'Менеджер базы данных SQLite: таблицы, структура, SQL-консоль'
+        tooltip: 'Интегрированный менеджер SQLite: просмотр таблиц, схемы данных, индексов и интерактивная SQL-консоль для выполнения запросов'
       },
       {
         text: 'OpenAPI (Swagger)',
         path: `${API_BASE_URL}/api-docs`,
         icon: <CodeIcon sx={{ fontSize: 20 }} />,
-        tooltip: 'Интерактивная REST API документация Swagger UI (в новой вкладке)',
+        tooltip: 'Интерактивная REST API документация: онлайн-тестирование эндпоинтов бэкенда и схемы JSON в интерфейсе Swagger UI (в новой вкладке)',
         isExternal: true
+      }
+    ]
+  },
+  {
+    id: 'tests',
+    title: 'ТЕСТЫ',
+    icon: <ScienceIcon sx={{ fontSize: 20, color: '#D97706' }} />,
+    defaultOpen: false,
+    tooltip: 'Изолированный тестовый контур: сквозные тесты бэкенда, демо-данные [TEST_DAEMON] и сценарии верификации ККТ',
+    items: [
+      {
+        text: 'Тест служб сервера',
+        path: '/admin/server-health?action=run-tests',
+        icon: <PlayCircleFilledWhiteIcon sx={{ fontSize: 20, color: '#0284C7' }} />,
+        tooltip: 'Запустить сквозной тест серверов: автоматическая проверка готовности служб Express, SQLite, Fiscal Daemon и Firebird'
       },
       {
         text: 'Демо-данные [TEST_DAEMON]',
         path: '/admin/daemon-data',
         icon: <SmartToyIcon sx={{ fontSize: 20 }} />,
-        tooltip: 'Панель управления демо-данными: создание, очистка и запуск тестов'
+        tooltip: 'Панель управления демо-данными: создание, просмотр, очистка и тестирование изолированного контура [TEST_DAEMON]'
       },
       {
         text: 'Заполнить демо-данные',
         path: '/admin/daemon-data?action=seed',
         icon: <AddCircleIcon sx={{ fontSize: 20, color: '#16A34A' }} />,
-        tooltip: 'Заполнить БД тестовыми демо-данными (3 периода, PRP, сторно)'
+        tooltip: 'Заполнить тестовые данные: пакетная генерация 3 периодов визитов, записей PRP-терапии и сторнированных операций'
       },
       {
         text: 'Удалить демо-данные',
         path: '/admin/daemon-data?action=purge',
         icon: <DeleteForeverIcon sx={{ fontSize: 20, color: '#DC2626' }} />,
-        tooltip: 'Удалить все тестовые данные с маркером [TEST_DAEMON]'
-      },
-      {
-        text: 'Параметры ККТ АТОЛ 91Ф',
-        path: '/admin/fiscal-settings',
-        icon: <TuneIcon sx={{ fontSize: 20 }} />,
-        tooltip: 'Управление профилями и параметрами ККТ АТОЛ 91Ф в базе данных SQLite (CRUD)'
+        tooltip: 'Очистить тестовые данные: безопасное удаление всех записей с маркером [TEST_DAEMON] без затрагивания реальной истории'
       },
       {
         text: 'Мастер тестов ККТ [TEST_DAEMON]',
         path: '/admin/fiscal-test-wizard',
         icon: <PointOfSaleIcon sx={{ fontSize: 20 }} />,
-        tooltip: 'Мастер верификации и тестирования фискализации [TEST_DAEMON]'
+        tooltip: 'Мастер тестирования фискализации: интерактивная симуляция пробития чеков, возвратов и верификация протокола ККТ'
+      },
+      {
+        text: 'Тест связи с ККТ «АТОЛ 91Ф»',
+        path: '/admin/fiscal-test-wizard?action=test-connection',
+        icon: <UsbIcon sx={{ fontSize: 20, color: '#D97706' }} />,
+        tooltip: 'Проверка связи с ККТ «АТОЛ 91Ф»: пинг COM-порта, опрос статуса смены, номера ФН и готовности печатающего механизма'
       },
       {
         text: 'Заполнить тестовые чеки',
         path: '/admin/fiscal-test-wizard?action=seed',
         icon: <AddCircleIcon sx={{ fontSize: 20, color: '#16A34A' }} />,
-        tooltip: 'Сгенерировать набор тестовых чеков ККТ [TEST_DAEMON]'
+        tooltip: 'Сгенерировать тестовые чеки: добавление пакета чеков с различными способами оплат для тестирования очереди фискализации'
       },
       {
         text: 'Удалить тестовые чеки',
         path: '/admin/fiscal-test-wizard?action=purge',
         icon: <DeleteForeverIcon sx={{ fontSize: 20, color: '#DC2626' }} />,
-        tooltip: 'Удалить все фискальные данные с маркером [TEST_DAEMON]'
+        tooltip: 'Удалить тестовые чеки: мгновенная очистка всех сгенерированных фискальных чеков с системным маркером [TEST_DAEMON]'
       },
       {
-        text: 'Запуск тестов ККТ (6 сценариев)',
+        text: 'Запуск тестов ККТ (7 сценариев)',
         path: '/admin/fiscal-test-wizard?action=run-test',
         icon: <PlayCircleFilledWhiteIcon sx={{ fontSize: 20, color: '#2563EB' }} />,
-        tooltip: 'Запустить 6 сквозных сценариев тестирования ККТ АТОЛ 91Ф'
+        tooltip: 'Запуск 7 сценариев верификации ККТ: пинг оборудования, открытие смены, приход, возврат, безналичный расчет, X-отчет и закрытие смены с Z-отчетом'
       }
     ]
   }
@@ -333,6 +357,18 @@ export const routeMetaMap: Record<string, RouteMeta> = {
     groupId: 'base_entities',
     parentPath: '/'
   },
+  '/admin/fiscal-settings': {
+    title: 'Параметры ККТ АТОЛ 91Ф',
+    groupTitle: 'Базовые данные',
+    groupId: 'base_entities',
+    parentPath: '/'
+  },
+  '/fiscal-settings': {
+    title: 'Параметры ККТ АТОЛ 91Ф',
+    groupTitle: 'Базовые данные',
+    groupId: 'base_entities',
+    parentPath: '/'
+  },
   '/admin/server-health': {
     title: 'Статус и мониторинг сервисов бэкенда',
     groupTitle: 'Администратор',
@@ -359,8 +395,8 @@ export const routeMetaMap: Record<string, RouteMeta> = {
   },
   '/admin/daemon-data': {
     title: 'Управление демо-данными [TEST_DAEMON]',
-    groupTitle: 'Администратор',
-    groupId: 'administrator',
+    groupTitle: 'ТЕСТЫ',
+    groupId: 'tests',
     parentPath: '/'
   },
   '/fiscal-audit': {
@@ -371,8 +407,14 @@ export const routeMetaMap: Record<string, RouteMeta> = {
   },
   '/admin/fiscal-test-wizard': {
     title: 'Мастер тестов ККТ [TEST_DAEMON]',
-    groupTitle: 'Администратор',
-    groupId: 'administrator',
+    groupTitle: 'ТЕСТЫ',
+    groupId: 'tests',
+    parentPath: '/'
+  },
+  '/admin/tests': {
+    title: 'Тесты и демо-данные [TEST_DAEMON]',
+    groupTitle: 'ТЕСТЫ',
+    groupId: 'tests',
     parentPath: '/'
   },
   '/admin/fiscal-shifts': {

@@ -271,6 +271,36 @@ async function runFiscalTestWizard() {
   const results = [];
   const startTotal = Date.now();
 
+  // Test 0: Connect & Device Ping (FL-FISCAL-00)
+  try {
+    const connResult = await fiscalService.testConnection();
+    results.push({
+      code: 'FL-FISCAL-00',
+      title: 'Проверка связи с ККТ «АТОЛ 91Ф» (Пинг и готовность оборудования)',
+      description: `Проверка доступности ${connResult.port} (${connResult.baudRate} бод), опрос статуса устройства и проверка режима (${connResult.modeLabel})`,
+      status: connResult.success ? 'passed' : 'failed',
+      durationMs: connResult.latencyMs,
+      details: {
+        mode: connResult.modeLabel,
+        port: connResult.port,
+        baudRate: connResult.baudRate,
+        paperStatus: connResult.paperStatusLabel,
+        fnNumber: connResult.fnNumber,
+        kktRegNumber: connResult.kktRegNumber,
+        message: connResult.message
+      },
+      errorMessage: connResult.error || undefined
+    });
+  } catch (err) {
+    results.push({
+      code: 'FL-FISCAL-00',
+      title: 'Проверка связи с ККТ «АТОЛ 91Ф» (Пинг и готовность оборудования)',
+      status: 'failed',
+      durationMs: 0,
+      errorMessage: err.message
+    });
+  }
+
   // Test 1: Connect & State Recovery
   try {
     const st1 = Date.now();

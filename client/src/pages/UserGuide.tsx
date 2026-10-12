@@ -74,7 +74,7 @@ export default function UserGuide() {
 
   const handlePrintTrigger = useReactToPrint({
     contentRef: printRef,
-    documentTitle: `Руководство_пользователя_ОртоERP_v1.4.0_${new Date().toISOString().slice(0, 10)}`,
+    documentTitle: `Руководство_пользователя_ОртоERP_v1.4.1_${new Date().toISOString().slice(0, 10)}`,
     pageStyle: `
       @page {
         size: A4 portrait;
@@ -1007,7 +1007,7 @@ C# .NET Fiscal Daemon (OrthoErp.FiscalService, порт 5050 / Kestrel REST API)
     <Box sx={{ display: 'flex', flexDirection: 'column', width: '100%', maxWidth: '1440px', margin: '0 auto', gap: 3, pb: 6 }}>
       {/* Hidden A4 Printable Template for react-to-print */}
       <Box sx={{ display: 'none' }}>
-        <UserGuidePrintTemplate ref={printRef} version="1.4.0" />
+        <UserGuidePrintTemplate ref={printRef} version="1.4.1" />
       </Box>
 
       {/* Top Header & Actions */}
@@ -1018,7 +1018,7 @@ C# .NET Fiscal Daemon (OrthoErp.FiscalService, порт 5050 / Kestrel REST API)
               Инструкция пользователя МИС «ОртоERP»
             </Typography>
             <Chip
-              label="v1.4.0"
+              label="v1.4.1"
               size="small"
               sx={{ bgcolor: '#EBF8FF', color: '#0F3C64', fontWeight: 800, border: '1px solid #BEE3F8' }}
             />

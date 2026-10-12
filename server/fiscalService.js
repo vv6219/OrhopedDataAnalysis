@@ -3,9 +3,86 @@
  * Handles Single-Consumer Queue, State Recovery, Tag 1008, Tax exemptions,
  * and Serilog-compatible DB audit logging.
  */
+const { exec } = require('child_process');
 const db = require('./database');
 const { getFiscalConfig } = require('./config');
 const { logFiscalAudit, LogLevels, EventTypes } = require('./fiscalAuditLogger');
+
+/**
+ * Inspects physical serial port hardware in Windows PnP
+ * @param {string} portName e.g. 'COM3'
+ * @returns {Promise<{ found: boolean, isHardwareReady: boolean, isBluetooth: boolean, deviceName: string, manufacturer: string, service: string, error?: string }>}
+ */
+function inspectPortDevice(portName) {
+  return new Promise((resolve) => {
+    if (process.platform !== 'win32') {
+      return resolve({ found: false, isHardwareReady: false, isBluetooth: false, deviceName: 'Non-Windows', error: 'Поддерживается только в Windows' });
+    }
+
+    const cleanPort = (portName || 'COM3').replace(/[^a-zA-Z0-9]/g, '');
+    const psCmd = `powershell -NoProfile -ExecutionPolicy Bypass -Command "$p = Get-CimInstance Win32_PnPEntity | Where-Object { $_.Name -like '*(${cleanPort})*' } | Select-Object -First 1; if ($p) { @{ found = $true; name = $p.Name; manufacturer = $p.Manufacturer; service = $p.Service; deviceId = $p.DeviceID } | ConvertTo-Json -Compress } else { @{ found = $false } | ConvertTo-Json -Compress }"`;
+
+    exec(psCmd, { timeout: 3500 }, (err, stdout) => {
+      if (err || !stdout) {
+        return resolve({
+          found: false,
+          isHardwareReady: false,
+          isBluetooth: false,
+          deviceName: `Порт ${portName}`,
+          error: (err && err.message) || 'Таймаут опроса Windows PnP'
+        });
+      }
+      try {
+        const info = JSON.parse(stdout.trim());
+        if (!info.found) {
+          return resolve({
+            found: false,
+            isHardwareReady: false,
+            isBluetooth: false,
+            deviceName: `Порт ${portName} отсутствует`,
+            error: `Порт ${portName} не найден среди устройств Windows`
+          });
+        }
+
+        const name = String(info.name || '');
+        const mfg = String(info.manufacturer || '');
+        const devId = String(info.deviceId || '');
+        const srv = String(info.service || '');
+
+        const isBluetooth = srv.toUpperCase() === 'BTHMODEM' || devId.toUpperCase().includes('BTHENUM') || name.toLowerCase().includes('bluetooth');
+
+        // Check if device is real ATOL or physical Fiscal device
+        const isLikelyAtol = !isBluetooth && (
+          name.toLowerCase().includes('atol') ||
+          name.toLowerCase().includes('атол') ||
+          mfg.toLowerCase().includes('atol') ||
+          mfg.toLowerCase().includes('атол') ||
+          devId.includes('VID_2912') ||
+          name.toLowerCase().includes('cp210') ||
+          devId.includes('VID_10C4')
+        );
+
+        return resolve({
+          found: true,
+          isHardwareReady: isLikelyAtol,
+          isBluetooth,
+          deviceName: name,
+          manufacturer: mfg,
+          service: srv,
+          deviceId: devId
+        });
+      } catch (parseErr) {
+        return resolve({
+          found: false,
+          isHardwareReady: false,
+          isBluetooth: false,
+          deviceName: `Ошибка разбора`,
+          error: parseErr.message
+        });
+      }
+    });
+  });
+}
 
 class FiscalService {
   constructor() {
@@ -127,7 +204,7 @@ class FiscalService {
           const shift = (row && row.max_shift) ? row.max_shift : this.currentShiftNumber;
 
           resolve({
-            online: true,
+            online: this.isMockMode ? true : Boolean(this.lastHardwareOnline),
             isMockMode: this.isMockMode,
             deviceModel: this.deviceModel,
             port: this.port,
@@ -581,6 +658,271 @@ class FiscalService {
         });
       });
     });
+  }
+
+  /**
+   * Test connection to Atol 91F (Mock mode or Real Hardware via External Daemon / COM port)
+   */
+  async testConnection(profileId = null) {
+    const startTime = Date.now();
+    await this.refreshFromDb();
+
+    let targetIsMock = this.isMockMode;
+    let targetDeviceModel = this.deviceModel;
+    let targetPort = this.port;
+    let targetBaudRate = this.baudRate;
+    let targetFnNumber = this.fnNumber;
+    let targetKktRegNumber = this.kktRegNumber;
+    let targetDaemonUrl = this.externalDaemonUrl;
+    let targetProfileName = this.profileName;
+
+    if (profileId) {
+      const pRow = await new Promise(res => {
+        db.get('SELECT * FROM fiscal_device_settings WHERE id = ?', [Number(profileId)], (e, r) => res(r));
+      });
+      if (pRow) {
+        targetIsMock = Boolean(pRow.is_mock_mode);
+        targetDeviceModel = pRow.device_model || this.deviceModel;
+        targetPort = pRow.port || this.port;
+        targetBaudRate = pRow.baud_rate || this.baudRate;
+        targetFnNumber = pRow.fn_number || this.fnNumber;
+        targetKktRegNumber = pRow.kkt_reg_number || this.kktRegNumber;
+        targetDaemonUrl = pRow.external_daemon_url || this.externalDaemonUrl;
+        targetProfileName = pRow.profile_name || this.profileName;
+      }
+    }
+
+    if (targetIsMock) {
+      const durationMs = Date.now() - startTime;
+      const status = await this.getStatus();
+
+      logFiscalAudit({
+        level: LogLevels.INFO,
+        message: `[Тест связи] Проверка связи с ККТ «${targetDeviceModel}» (Профиль: "${targetProfileName}", Режим: Эмулятор ККТ / Mock): успешно (${durationMs}мс)`,
+        eventType: EventTypes.DEVICE_CONNECT,
+        devicePort: targetPort,
+        durationMs,
+        properties: {
+          profileId,
+          profileName: targetProfileName,
+          isMockMode: true,
+          port: targetPort,
+          baudRate: targetBaudRate,
+          fnNumber: targetFnNumber,
+          kktRegNumber: targetKktRegNumber,
+          shiftNumber: status.shiftNumber
+        }
+      });
+
+      return {
+        success: true,
+        isMockMode: true,
+        mode: 'mock',
+        modeLabel: 'Эмулятор ККТ (Mock)',
+        deviceModel: targetDeviceModel,
+        port: targetPort,
+        baudRate: targetBaudRate,
+        latencyMs: Math.max(durationMs, 5),
+        fnNumber: targetFnNumber,
+        kktRegNumber: targetKktRegNumber,
+        isShiftOpen: status.isShiftOpen,
+        shiftNumber: status.shiftNumber,
+        lastFiscalDocument: status.lastFiscalDocument,
+        paperStatus: 'ok',
+        paperStatusLabel: 'В норме (бумага установлена)',
+        ffdVersion: '1.2 / 1.05',
+        queueLength: this.queue.length,
+        daemonUrl: targetDaemonUrl,
+        message: `Связь с эмулятором ККТ «${targetDeviceModel}» (${targetPort}, ${targetBaudRate} бод) успешно подтверждена. Все фискальные контуры активны.`
+      };
+    }
+
+    // -------------------------------------------------------------------------
+    // REAL HARDWARE MODE (isMockMode === false)
+    // -------------------------------------------------------------------------
+    const portInfo = await inspectPortDevice(targetPort);
+    const latencyMs = Math.max(Date.now() - startTime, 15);
+
+    if (!portInfo.found || !portInfo.isHardwareReady) {
+      this.lastHardwareOnline = false;
+      const detailMsg = !portInfo.found
+        ? `Порт ${targetPort} не найден в операционной системе Windows.`
+        : portInfo.isBluetooth
+        ? `К порту ${targetPort} привязан Bluetooth-модем («${portInfo.deviceName}»), а не физический кассовый аппарат «${targetDeviceModel}».`
+        : `На порту ${targetPort} подключено стороннее устройство «${portInfo.deviceName}», которое не опознано как ККТ «${targetDeviceModel}».`;
+
+      logFiscalAudit({
+        level: LogLevels.WARNING,
+        message: `[Тест связи] Физическая ККТ «${targetDeviceModel}» на ${targetPort} не обнаружена: ${detailMsg}`,
+        eventType: EventTypes.DEVICE_ERROR,
+        devicePort: targetPort,
+        durationMs: latencyMs,
+        properties: {
+          profileId,
+          profileName: targetProfileName,
+          isMockMode: false,
+          port: targetPort,
+          baudRate: targetBaudRate,
+          portInfo
+        }
+      });
+
+      return {
+        success: false,
+        isMockMode: false,
+        mode: 'hardware',
+        modeLabel: 'Реальное подключение (COM-порт / АТОЛ 91Ф)',
+        deviceModel: targetDeviceModel,
+        port: targetPort,
+        baudRate: targetBaudRate,
+        latencyMs,
+        hardwareDetected: false,
+        portDeviceName: portInfo.deviceName,
+        fnNumber: 'Не доступен (нет связи)',
+        kktRegNumber: 'Не доступен',
+        isShiftOpen: false,
+        paperStatus: 'error',
+        paperStatusLabel: 'Оборудование не подключено',
+        daemonUrl: targetDaemonUrl,
+        error: detailMsg,
+        message: `ОШИБКА ПОДКЛЮЧЕНИЯ: Физический кассовый аппарат «${targetDeviceModel}» на порту ${targetPort} не подключен к ПК! ${detailMsg} Подключите ККТ по кабелю USB/COM или переключите тумблер в режим «Эмулятор ККТ (Mock data)».`
+      };
+    }
+
+    // Physical ATOL device is present on port, query daemon or device
+    const daemonUrl = targetDaemonUrl || 'http://localhost:5050';
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 6000);
+
+      const daemonRes = await fetch(`${daemonUrl}/api/fiscal/status`, {
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+
+      const totalLatency = Date.now() - startTime;
+
+      if (!daemonRes.ok) {
+        throw new Error(`Демон ККТ вернул HTTP ${daemonRes.status}: ${daemonRes.statusText}`);
+      }
+
+      const daemonData = await daemonRes.json();
+      this.lastHardwareOnline = true;
+
+      logFiscalAudit({
+        level: LogLevels.INFO,
+        message: `[Тест связи] Успешное физическое подключение к ККТ «${daemonData.DeviceModel || targetDeviceModel}» на порту ${targetPort} (${totalLatency}мс)`,
+        eventType: EventTypes.DEVICE_CONNECT,
+        devicePort: targetPort,
+        durationMs: totalLatency,
+        properties: {
+          profileId,
+          profileName: targetProfileName,
+          isMockMode: false,
+          daemonUrl,
+          portInfo,
+          daemonData
+        }
+      });
+
+      return {
+        success: true,
+        isMockMode: false,
+        mode: 'hardware',
+        modeLabel: 'Реальное оборудование (COM-порт)',
+        deviceModel: daemonData.DeviceModel || daemonData.deviceModel || targetDeviceModel,
+        port: targetPort,
+        baudRate: targetBaudRate,
+        latencyMs: totalLatency,
+        hardwareDetected: true,
+        portDeviceName: portInfo.deviceName,
+        fnNumber: daemonData.FnNumber || daemonData.fnNumber || targetFnNumber,
+        kktRegNumber: daemonData.KktRegNumber || daemonData.kktRegNumber || targetKktRegNumber,
+        isShiftOpen: Boolean(daemonData.IsShiftOpen ?? daemonData.isShiftOpen ?? this.isShiftOpen),
+        shiftNumber: daemonData.ShiftNumber || daemonData.shiftNumber || this.currentShiftNumber,
+        paperStatus: daemonData.PaperStatus || daemonData.paperStatus || 'ok',
+        paperStatusLabel: 'В норме (бумага установлена)',
+        ffdVersion: daemonData.FfdVersion || daemonData.ffdVersion || '1.2 / 1.05',
+        daemonUrl,
+        message: `Реальная ККТ «${daemonData.DeviceModel || targetDeviceModel}» на порту ${targetPort} («${portInfo.deviceName}») успешно отвечает! Отклик: ${totalLatency}мс.`
+      };
+    } catch (daemonErr) {
+      this.lastHardwareOnline = false;
+      const totalLatency = Date.now() - startTime;
+      logFiscalAudit({
+        level: LogLevels.ERROR,
+        message: `[Тест связи] Ошибка связи с драйвером ККТ на ${daemonUrl} (${targetPort}): ${daemonErr.message}`,
+        eventType: EventTypes.DEVICE_ERROR,
+        devicePort: targetPort,
+        durationMs: totalLatency,
+        exception: daemonErr
+      });
+
+      return {
+        success: false,
+        isMockMode: false,
+        mode: 'hardware',
+        modeLabel: 'Реальное оборудование (COM-порт)',
+        deviceModel: targetDeviceModel,
+        port: targetPort,
+        baudRate: targetBaudRate,
+        latencyMs: totalLatency,
+        hardwareDetected: true,
+        portDeviceName: portInfo.deviceName,
+        fnNumber: 'Не доступен',
+        kktRegNumber: 'Не доступен',
+        paperStatus: 'error',
+        paperStatusLabel: 'Служба ККТ не отвечает',
+        daemonUrl,
+        error: daemonErr.message,
+        message: `Устройство «${portInfo.deviceName}» обнаружено на порту ${targetPort}, но служба драйвера ККТ (${daemonUrl}) не отвечает: ${daemonErr.message}.`
+      };
+    }
+  }
+
+  /**
+   * Toggles or sets mock mode across the active profile or a specified profile in SQLite
+   */
+  async setMockMode(isMockMode, updatedBy = 'Администратор', profileId = null) {
+    const val = isMockMode ? 1 : 0;
+    await new Promise((resolve, reject) => {
+      const sql = profileId
+        ? `UPDATE fiscal_device_settings 
+           SET is_mock_mode = ?, updated_at = datetime('now', 'localtime'), updated_by = ? 
+           WHERE id = ?`
+        : `UPDATE fiscal_device_settings 
+           SET is_mock_mode = ?, updated_at = datetime('now', 'localtime'), updated_by = ? 
+           WHERE is_active = 1`;
+      const params = profileId ? [val, updatedBy, Number(profileId)] : [val, updatedBy];
+
+      db.run(sql, params, function(err) {
+        if (err) return reject(err);
+        resolve();
+      });
+    });
+
+    await this.refreshFromDb();
+
+    logFiscalAudit({
+      level: LogLevels.WARN,
+      message: `Переключение режима фискализации ККТ «${this.deviceModel}»: ${this.isMockMode ? 'Эмулятор ККТ (Mock)' : 'Реальное подключение (COM-порт)'} [${updatedBy}]`,
+      eventType: EventTypes.SETTINGS_UPDATED,
+      devicePort: this.port,
+      properties: {
+        isMockMode: this.isMockMode,
+        port: this.port,
+        baudRate: this.baudRate,
+        updatedBy
+      }
+    });
+
+    return {
+      success: true,
+      isMockMode: this.isMockMode,
+      mode: this.isMockMode ? 'mock' : 'hardware',
+      modeLabel: this.isMockMode ? 'Эмулятор ККТ (Mock)' : 'Реальное подключение (COM-порт)',
+      message: `Режим фискализации переключен на «${this.isMockMode ? 'Эмулятор ККТ (Mock)' : 'Реальное подключение (COM-порт)'}»`
+    };
   }
 }
 

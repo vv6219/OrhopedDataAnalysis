@@ -43,7 +43,7 @@ const swaggerOptions = {
     openapi: '3.0.0',
     info: {
       title: 'Центр Ортопедии Добрушкина — ОртоERP REST API & SQLite Studio',
-      version: '1.4.0',
+      version: '1.4.1',
       description: `
 Интерактивная OpenAPI спецификация серверного API для автоматизации Центра Ортопедии и Травматологии Добрушкина (г. Сочи).
 

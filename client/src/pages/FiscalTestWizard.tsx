@@ -18,6 +18,7 @@ import {
 import { QRCodeSVG } from 'qrcode.react';
 import { useReactToPrint } from 'react-to-print';
 import { API_BASE_URL } from '../config/apiConfig';
+import FiscalDeviceCard from '../components/FiscalDeviceCard';
 
 // Icons
 import PointOfSaleIcon from '@mui/icons-material/PointOfSale';
@@ -318,6 +319,7 @@ export default function FiscalTestWizard() {
   const [wizardResults, setWizardResults] = useState<any | null>(null);
   const [alertInfo, setAlertInfo] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
   const [expandedScenario, setExpandedScenario] = useState<string | null>(null);
+  const [autoTestConn, setAutoTestConn] = useState(false);
 
   // Receipt Preview & Print Dialog State
   const [previewReceipt, setPreviewReceipt] = useState<FiscalReceiptRecord | null>(null);
@@ -372,6 +374,8 @@ export default function FiscalTestWizard() {
       handleRemoveData();
     } else if (action === 'run-test') {
       handleRunWizard();
+    } else if (action === 'test-connection') {
+      setAutoTestConn(true);
     }
   }, []);
 
@@ -678,33 +682,12 @@ export default function FiscalTestWizard() {
         </Alert>
       )}
 
-      {/* Active Profile Banner */}
-      <Paper sx={{ p: 2, mb: 3, borderRadius: 3, border: '1px solid #BEE3F8', bgcolor: '#EBF8FF', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 2 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
-          <Chip
-            label={fiscalStatus?.isMockMode ? 'MOCK РЕЖИМ' : 'HARDWARE ККТ'}
-            color={fiscalStatus?.isMockMode ? 'primary' : 'warning'}
-            size="small"
-            sx={{ fontWeight: 800 }}
-          />
-          <Typography variant="body2" sx={{ fontWeight: 700, color: '#2B6CB0' }}>
-            Активный профиль из БД: «{fiscalStatus?.profileName || 'Основной профиль (АТОЛ 91Ф)'}»
-          </Typography>
-          <Typography variant="caption" sx={{ color: '#4A5568' }}>
-            • Порт: <strong>{fiscalStatus?.port || 'COM3'}</strong> ({fiscalStatus?.baudRate || 115200} бод) • ФН: {fiscalStatus?.fnNumber || '9960440301984210'} • Смена №{fiscalStatus?.shiftNumber || 14}
-          </Typography>
-        </Box>
-
-        <Button
-          size="small"
-          variant="text"
-          startIcon={<TuneIcon />}
-          onClick={() => navigate('/admin/fiscal-settings')}
-          sx={{ fontWeight: 700, color: '#2B6CB0' }}
-        >
-          Изменить параметры
-        </Button>
-      </Paper>
+      {/* Фискализация на ККТ «АТОЛ 91Ф» (54-ФЗ) Card with Mode Switch & Connection Test */}
+      <FiscalDeviceCard
+        autoTest={autoTestConn}
+        onStatusChange={(st) => setFiscalStatus(st)}
+        sx={{ mb: 3 }}
+      />
 
       {/* KPI Stats Cards */}
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr', md: 'repeat(4, 1fr)' }, gap: 2, mb: 3 }}>

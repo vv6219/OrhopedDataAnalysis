@@ -3,10 +3,11 @@ import {
   Box, Typography, Paper, Button, TextField, Switch, FormControlLabel,
   MenuItem, Select, FormControl, InputLabel, Card, CardContent, Chip,
   Divider, IconButton, Tooltip, Alert, Dialog, DialogTitle,
-  DialogContent, DialogActions, Tab, Tabs, FormHelperText
+  DialogContent, DialogActions, Tab, Tabs, FormHelperText, CircularProgress
 } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import { API_BASE_URL } from '../config/apiConfig';
+import FiscalDeviceCard from '../components/FiscalDeviceCard';
 import PointOfSaleIcon from '@mui/icons-material/PointOfSale';
 import SaveIcon from '@mui/icons-material/Save';
 import AddCircleIcon from '@mui/icons-material/AddCircle';
@@ -19,6 +20,10 @@ import UsbIcon from '@mui/icons-material/Usb';
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
 import SecurityIcon from '@mui/icons-material/Security';
 import BusinessIcon from '@mui/icons-material/Business';
+import SpeedIcon from '@mui/icons-material/Speed';
+import ErrorIcon from '@mui/icons-material/Error';
+import { useFiscal } from '../context/FiscalContext';
+import type { ConnectionTestResult } from '../components/FiscalDeviceCard';
 
 export interface FiscalSettingsProfile {
   id: number;
@@ -94,6 +99,14 @@ const METHOD_TYPES = [
 
 export default function FiscalSettings() {
   const navigate = useNavigate();
+  const {
+    fiscalStatus,
+    activeProfile: globalActiveProfile,
+    setMockMode: setGlobalMockMode,
+    activateProfile: activateGlobalProfile,
+    testConnection: testGlobalConnection
+  } = useFiscal();
+
   const [profiles, setProfiles] = useState<FiscalSettingsProfile[]>([]);
   const [, setActiveProfileId] = useState<number | null>(null);
   const [selectedProfile, setSelectedProfile] = useState<FiscalSettingsProfile | null>(null);
@@ -103,6 +116,12 @@ export default function FiscalSettings() {
   const [alert, setAlert] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
   const [auditLogs, setAuditLogs] = useState<AuditRecord[]>([]);
   const [activeTab, setActiveTab] = useState(0);
+
+  // Connection Test & Mode Switch State for Profile Cards
+  const [testingProfileId, setTestingProfileId] = useState<number | null>(null);
+  const [switchingProfileId, setSwitchingProfileId] = useState<number | null>(null);
+  const [connectionTestDialogOpen, setConnectionTestDialogOpen] = useState(false);
+  const [connectionTestResult, setConnectionTestResult] = useState<ConnectionTestResult | null>(null);
 
   // New Profile Dialog
   const [openNewDialog, setOpenNewDialog] = useState(false);
@@ -156,6 +175,27 @@ export default function FiscalSettings() {
     fetchProfiles();
     fetchAuditLogs();
   }, []);
+
+  // Sync selectedProfile and formData with globalActiveProfile when it updates
+  useEffect(() => {
+    if (globalActiveProfile && selectedProfile && selectedProfile.id === globalActiveProfile.id) {
+      if (selectedProfile.is_mock_mode !== globalActiveProfile.is_mock_mode) {
+        setSelectedProfile(prev => prev ? ({ ...prev, is_mock_mode: globalActiveProfile.is_mock_mode }) : null);
+        setFormData(prev => ({ ...prev, is_mock_mode: globalActiveProfile.is_mock_mode }));
+      }
+    }
+  }, [globalActiveProfile]);
+
+  // Sync selectedProfile and formData with fiscalStatus when the active profile mode changes
+  useEffect(() => {
+    if (fiscalStatus && selectedProfile && selectedProfile.is_active === 1) {
+      const mockVal = fiscalStatus.isMockMode ? 1 : 0;
+      if (selectedProfile.is_mock_mode !== mockVal) {
+        setSelectedProfile(prev => prev ? ({ ...prev, is_mock_mode: mockVal }) : null);
+        setFormData(prev => ({ ...prev, is_mock_mode: mockVal }));
+      }
+    }
+  }, [fiscalStatus]);
 
   const handleSelectProfile = (profile: FiscalSettingsProfile) => {
     setSelectedProfile(profile);
@@ -230,13 +270,8 @@ export default function FiscalSettings() {
     setSaving(true);
     setAlert(null);
     try {
-      const res = await fetch(`${API_BASE_URL}/api/fiscal/settings/${profileId}/activate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ updated_by: 'Администратор' })
-      });
-      const data = await res.json();
-      if (res.ok) {
+      const data = await activateGlobalProfile(profileId, 'Администратор');
+      if (data.success) {
         setAlert({ type: 'success', message: data.message });
         await fetchProfiles();
         await fetchAuditLogs();
@@ -247,6 +282,96 @@ export default function FiscalSettings() {
       setAlert({ type: 'error', message: err.message });
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleToggleProfileMockMode = async (profile: FiscalSettingsProfile, newIsMockMode: boolean) => {
+    setSwitchingProfileId(profile.id);
+    setAlert(null);
+    try {
+      const res = await setGlobalMockMode(newIsMockMode, profile.id, 'Администратор (Профили оборудования)');
+      if (res.success) {
+        setAlert({
+          type: 'success',
+          message: `Режим профиля «${profile.profile_name}» переключен: ${newIsMockMode ? '🟢 Эмулятор ККТ (Mock)' : '🔴 Реальное подключение (COM)'}`
+        });
+        await fetchProfiles();
+        await fetchAuditLogs();
+      } else {
+        setAlert({ type: 'error', message: res.error || 'Ошибка смены режима профиля' });
+      }
+    } catch (err: any) {
+      setAlert({ type: 'error', message: err.message });
+    } finally {
+      setSwitchingProfileId(null);
+    }
+  };
+
+  const handleTestConnectionForProfile = async (profile: FiscalSettingsProfile) => {
+    setTestingProfileId(profile.id);
+    setConnectionTestDialogOpen(true);
+    setConnectionTestResult(null);
+    try {
+      const result = await testGlobalConnection(profile.id);
+      setConnectionTestResult(result);
+      await fetchProfiles();
+    } catch (err: any) {
+      setConnectionTestResult({
+        success: false,
+        isMockMode: Boolean(profile.is_mock_mode),
+        modeLabel: profile.is_mock_mode ? 'Эмулятор ККТ (Mock)' : 'Реальное оборудование (COM-порт)',
+        deviceModel: profile.device_model || 'АТОЛ 91Ф',
+        port: profile.port || 'COM3',
+        baudRate: profile.baud_rate || 115200,
+        latencyMs: 0,
+        message: `Ошибка проверки связи: ${err.message}`,
+        error: err.message
+      });
+    } finally {
+      setTestingProfileId(null);
+    }
+  };
+
+  const handleSwitchToMockFromDialog = async () => {
+    if (!connectionTestResult) return;
+    const targetId = testingProfileId || globalActiveProfile?.id || selectedProfile?.id;
+    if (!targetId) return;
+    const target = profiles.find(p => p.id === targetId);
+    if (target) {
+      await handleToggleProfileMockMode(target, true);
+      await handleTestConnectionForProfile({ ...target, is_mock_mode: 1 });
+    }
+  };
+
+  const handleToggleFormMockMode = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const newIsMockMode = event.target.checked;
+    const newMockVal = newIsMockMode ? 1 : 0;
+
+    // 1. Update local form data and selected profile immediately
+    setFormData(prev => ({ ...prev, is_mock_mode: newMockVal }));
+    if (selectedProfile) {
+      setSelectedProfile(prev => prev ? ({ ...prev, is_mock_mode: newMockVal }) : null);
+      setProfiles(prev => prev.map(p => p.id === selectedProfile.id ? { ...p, is_mock_mode: newMockVal } : p));
+
+      // 2. Persist to DB and sync with Global State
+      setSwitchingProfileId(selectedProfile.id);
+      try {
+        const res = await setGlobalMockMode(newIsMockMode, selectedProfile.id, 'Администратор (Параметры ККТ - Режим Mock)');
+        if (res.success) {
+          setAlert({
+            type: 'success',
+            message: `Режим профиля «${selectedProfile.profile_name}» переключен: ${newIsMockMode ? '🟢 Эмулятор ККТ (Mock)' : '🔴 Реальное подключение (COM)'}. Синхронизировано с БД и глобальным стейтом!`
+          });
+          await fetchProfiles();
+          await fetchAuditLogs();
+        } else {
+          setAlert({ type: 'error', message: res.error || 'Ошибка изменения режима' });
+        }
+      } catch (err: any) {
+        setAlert({ type: 'error', message: `Ошибка синхронизации: ${err.message}` });
+      } finally {
+        setSwitchingProfileId(null);
+      }
     }
   };
 
@@ -390,6 +515,13 @@ export default function FiscalSettings() {
         </Alert>
       )}
 
+      {/* Фискализация на ККТ «АТОЛ 91Ф» (54-ФЗ) Card with Mode Switch & Connection Test */}
+      <FiscalDeviceCard
+        onStatusChange={() => fetchProfiles()}
+        showNavigationButtons={false}
+        sx={{ mb: 3 }}
+      />
+
       {/* Profiles Cards / Selector */}
       <Box sx={{ mb: 3 }}>
         <Typography variant="subtitle2" sx={{ fontWeight: 700, color: '#4A5568', mb: 1.5, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
@@ -420,7 +552,7 @@ export default function FiscalSettings() {
                     <Typography variant="h6" sx={{ fontWeight: 700, color: '#0F3C64', fontSize: '1.05rem' }}>
                       {p.profile_name}
                     </Typography>
-                    {isActive && (
+                    {isActive ? (
                       <Chip
                         icon={<CheckCircleIcon sx={{ fontSize: '14px !important' }} />}
                         label="АКТИВНЫЙ"
@@ -428,6 +560,17 @@ export default function FiscalSettings() {
                         size="small"
                         sx={{ fontWeight: 800, fontSize: '0.72rem' }}
                       />
+                    ) : (
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        color="success"
+                        startIcon={<CheckCircleIcon sx={{ fontSize: 14 }} />}
+                        onClick={(e) => { e.stopPropagation(); handleActivate(p.id); }}
+                        sx={{ fontSize: '0.72rem', fontWeight: 700, py: 0.2, px: 1, minHeight: 'auto', borderRadius: 1.5 }}
+                      >
+                        Сделать активным
+                      </Button>
                     )}
                   </Box>
 
@@ -447,22 +590,83 @@ export default function FiscalSettings() {
                     />
                   </Box>
 
-                  <Typography variant="caption" sx={{ color: '#718096', display: 'block', mt: 1 }}>
-                    ФН: {p.fn_number} • Таймаут: {p.execution_timeout_seconds}с
-                  </Typography>
+                  {/* Mode Switch & Connection Test Box (Same style as Wizard / FiscalDeviceCard) */}
+                  <Box
+                    onClick={(e) => e.stopPropagation()}
+                    sx={{
+                      p: 1.5,
+                      mt: 1.5,
+                      borderRadius: 2,
+                      bgcolor: p.is_mock_mode ? '#F8FAFC' : '#FEF3C7',
+                      border: '1px solid',
+                      borderColor: p.is_mock_mode ? '#CBD5E1' : '#F59E0B',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 1.2
+                    }}
+                  >
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <Tooltip title="Переключение режима фискализации для данного профиля: виртуальный Mock-драйвер или физический порт">
+                        <FormControlLabel
+                          control={
+                            <Switch
+                              size="small"
+                              checked={!p.is_mock_mode}
+                              onChange={(e) => handleToggleProfileMockMode(p, !e.target.checked)}
+                              disabled={switchingProfileId === p.id}
+                              color="warning"
+                            />
+                          }
+                          label={
+                            <Box sx={{ display: 'flex', flexDirection: 'column' }}>
+                              <Typography
+                                variant="body2"
+                                sx={{
+                                  fontWeight: 700,
+                                  fontSize: '0.8rem',
+                                  color: !p.is_mock_mode ? '#B45309' : '#0F3C64',
+                                  lineHeight: 1.2
+                                }}
+                              >
+                                {!p.is_mock_mode ? 'Реальное подключение (COM)' : 'Эмулятор ККТ (Mock)'}
+                              </Typography>
+                              <Typography variant="caption" sx={{ color: '#64748B', fontSize: '0.7rem' }}>
+                                {!p.is_mock_mode ? `Физический порт ${p.port}` : 'Виртуальный драйвер 54-ФЗ'}
+                              </Typography>
+                            </Box>
+                          }
+                          sx={{ m: 0 }}
+                        />
+                      </Tooltip>
+                      {switchingProfileId === p.id && <CircularProgress size={14} />}
+                    </Box>
 
-                  {!isActive && isSelected && (
                     <Button
                       size="small"
-                      variant="outlined"
-                      color="success"
-                      startIcon={<CheckCircleIcon />}
-                      onClick={(e) => { e.stopPropagation(); handleActivate(p.id); }}
-                      sx={{ mt: 1.5, width: '100%', fontWeight: 700 }}
+                      variant={!p.is_mock_mode ? 'contained' : 'outlined'}
+                      color={!p.is_mock_mode ? 'warning' : 'primary'}
+                      fullWidth
+                      startIcon={testingProfileId === p.id ? <CircularProgress size={14} color="inherit" /> : <UsbIcon sx={{ fontSize: 16 }} />}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleTestConnectionForProfile(p);
+                      }}
+                      disabled={testingProfileId === p.id || switchingProfileId === p.id}
+                      sx={{
+                        fontWeight: 700,
+                        fontSize: '0.78rem',
+                        textTransform: 'none',
+                        borderRadius: 1.5,
+                        py: 0.6
+                      }}
                     >
-                      Сделать активным
+                      {testingProfileId === p.id ? 'Проверка связи...' : 'Проверить связь'}
                     </Button>
-                  )}
+                  </Box>
+
+                  <Typography variant="caption" sx={{ color: '#718096', display: 'block', mt: 1.5 }}>
+                    ФН: {p.fn_number} • Таймаут: {p.execution_timeout_seconds}с
+                  </Typography>
                 </CardContent>
               </Card>
             );
@@ -589,26 +793,74 @@ export default function FiscalSettings() {
           </Box>
 
           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 2.5, mb: 3 }}>
-            <Paper sx={{ p: 2, bgcolor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 2 }}>
-              <FormControlLabel
-                control={
-                  <Switch
-                    checked={Boolean(formData.is_mock_mode)}
-                    onChange={e => handleChange('is_mock_mode', e.target.checked ? 1 : 0)}
-                    color="primary"
-                  />
-                }
-                label={
-                  <Box>
-                    <Typography sx={{ fontWeight: 700, color: '#0F3C64' }}>
-                      Режим программной эмуляции (Mock Mode)
-                    </Typography>
-                    <Typography variant="caption" sx={{ color: '#718096' }}>
-                      Включен: операции чеков симулируются без физического обращения к порту ККТ.
-                    </Typography>
-                  </Box>
-                }
-              />
+            <Paper
+              sx={{
+                p: 2,
+                bgcolor: formData.is_mock_mode ? '#F0FDF4' : '#FFFBEB',
+                border: '1px solid',
+                borderColor: formData.is_mock_mode ? '#86EFAC' : '#FDE68A',
+                borderRadius: 2,
+                transition: 'all 0.2s ease',
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'space-between'
+              }}
+            >
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={Boolean(formData.is_mock_mode)}
+                      onChange={handleToggleFormMockMode}
+                      disabled={switchingProfileId === selectedProfile?.id}
+                      color={formData.is_mock_mode ? 'primary' : 'warning'}
+                    />
+                  }
+                  label={
+                    <Box>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Typography sx={{ fontWeight: 700, color: formData.is_mock_mode ? '#166534' : '#92400E' }}>
+                          Режим программной эмуляции (Mock Mode)
+                        </Typography>
+                        {switchingProfileId === selectedProfile?.id && <CircularProgress size={14} />}
+                      </Box>
+                      <Typography variant="caption" sx={{ color: '#64748B', display: 'block', mt: 0.5 }}>
+                        {formData.is_mock_mode
+                          ? `🟢 Включен (Mock): операции чеков симулируются виртуальным драйвером 54-ФЗ без обращения к порту ККТ.`
+                          : `🔴 Выключен (COM): операции чеков отправляются на физический кассовый аппарат на порту ${formData.port || 'COM3'} (${formData.baud_rate || 115200} бод).`}
+                      </Typography>
+                    </Box>
+                  }
+                  sx={{ m: 0, flex: 1 }}
+                />
+
+                <Chip
+                  label={formData.is_mock_mode ? '🟢 Mock Mode' : '🔴 Реальный COM'}
+                  size="small"
+                  color={formData.is_mock_mode ? 'success' : 'warning'}
+                  sx={{ fontWeight: 700, fontSize: '0.72rem', ml: 1 }}
+                />
+              </Box>
+
+              <Box sx={{ mt: 1.5, pt: 1, borderTop: '1px dashed #CBD5E1', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1 }}>
+                <Typography variant="caption" sx={{ color: '#64748B', display: 'flex', alignItems: 'center', gap: 0.5, fontSize: '0.72rem' }}>
+                  <CheckCircleIcon sx={{ fontSize: 13, color: '#16A34A' }} />
+                  Синхронизировано с БД ({selectedProfile?.profile_name || 'Профиль'}) и Глобальным стейтом
+                </Typography>
+                {selectedProfile && (
+                  <Button
+                    size="small"
+                    variant="text"
+                    color={formData.is_mock_mode ? 'primary' : 'warning'}
+                    startIcon={testingProfileId === selectedProfile.id ? <CircularProgress size={12} /> : <UsbIcon sx={{ fontSize: 14 }} />}
+                    onClick={() => handleTestConnectionForProfile(selectedProfile)}
+                    disabled={testingProfileId === selectedProfile.id || switchingProfileId === selectedProfile.id}
+                    sx={{ fontSize: '0.72rem', fontWeight: 700, p: 0, minWidth: 'auto', textTransform: 'none' }}
+                  >
+                    Проверить связь
+                  </Button>
+                )}
+              </Box>
             </Paper>
 
             <Paper sx={{ p: 2, bgcolor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 2 }}>
@@ -1006,6 +1258,194 @@ export default function FiscalSettings() {
           >
             Удалить
           </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Dialog: Connection Test Diagnostics */}
+      <Dialog
+        open={connectionTestDialogOpen}
+        onClose={() => setConnectionTestDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle sx={{ fontWeight: 800, color: '#0F3C64', display: 'flex', alignItems: 'center', gap: 1.5, pb: 1 }}>
+          <SpeedIcon sx={{ color: connectionTestResult?.success ? '#16A34A' : '#DC2626' }} />
+          Результаты проверки связи с ККТ «{connectionTestResult?.deviceModel || 'АТОЛ 91Ф'}»
+        </DialogTitle>
+
+        <DialogContent dividers>
+          {testingProfileId !== null ? (
+            <Box sx={{ py: 4, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+              <CircularProgress size={42} />
+              <Typography variant="body1" sx={{ fontWeight: 600, color: '#0F3C64' }}>
+                Опрос состояния ККТ и порта...
+              </Typography>
+              <Typography variant="caption" sx={{ color: '#64748B' }}>
+                Проверка COM-порта, отклика фискального накопителя и очереди драйвера
+              </Typography>
+            </Box>
+          ) : connectionTestResult ? (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <Alert
+                severity={connectionTestResult.success ? 'success' : 'error'}
+                icon={connectionTestResult.success ? <CheckCircleIcon fontSize="inherit" /> : <ErrorIcon fontSize="inherit" />}
+                sx={{ borderRadius: 2 }}
+              >
+                <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                  {connectionTestResult.success ? 'Связь с ККТ успешно установлена!' : 'Ошибка подключения к оборудованию!'}
+                </Typography>
+                <Typography variant="caption" sx={{ display: 'block', mt: 0.5 }}>
+                  {connectionTestResult.message}
+                </Typography>
+              </Alert>
+
+              <Paper sx={{ p: 2, borderRadius: 2, bgcolor: '#F8FAFC', border: '1px solid #E2E8F0' }}>
+                <Typography variant="subtitle2" sx={{ fontWeight: 800, color: '#0F3C64', mb: 1.5 }}>
+                  Диагностические параметры оборудования
+                </Typography>
+
+                <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5, fontSize: '0.82rem' }}>
+                  <Box>
+                    <Typography variant="caption" sx={{ color: '#64748B' }}>Режим работы:</Typography>
+                    <Typography sx={{ fontWeight: 700, color: connectionTestResult.isMockMode ? '#0F3C64' : '#D97706' }}>
+                      {connectionTestResult.modeLabel}
+                    </Typography>
+                  </Box>
+
+                  <Box>
+                    <Typography variant="caption" sx={{ color: '#64748B' }}>Время отклика (Latency):</Typography>
+                    <Typography sx={{ fontWeight: 700, color: connectionTestResult.success ? '#16A34A' : '#DC2626' }}>
+                      {connectionTestResult.latencyMs} мс
+                    </Typography>
+                  </Box>
+
+                  <Box>
+                    <Typography variant="caption" sx={{ color: '#64748B' }}>Модель и порт:</Typography>
+                    <Typography sx={{ fontWeight: 700 }}>
+                      {connectionTestResult.deviceModel} ({connectionTestResult.port}, {connectionTestResult.baudRate} бод)
+                    </Typography>
+                  </Box>
+
+                  <Box>
+                    <Typography variant="caption" sx={{ color: '#64748B' }}>Состояние ленты:</Typography>
+                    <Typography sx={{ fontWeight: 700, color: connectionTestResult.success ? '#16A34A' : '#DC2626' }}>
+                      {connectionTestResult.paperStatusLabel || (connectionTestResult.success ? 'В норме (OK)' : 'Нет связи')}
+                    </Typography>
+                  </Box>
+
+                  <Box>
+                    <Typography variant="caption" sx={{ color: '#64748B' }}>Фискальный накопитель (ФН):</Typography>
+                    <Typography sx={{ fontWeight: 700 }}>
+                      №{connectionTestResult.fnNumber || '—'}
+                    </Typography>
+                  </Box>
+
+                  <Box>
+                    <Typography variant="caption" sx={{ color: '#64748B' }}>Регистрационный номер ККТ:</Typography>
+                    <Typography sx={{ fontWeight: 700 }}>
+                      РН {connectionTestResult.kktRegNumber || '—'}
+                    </Typography>
+                  </Box>
+
+                  {connectionTestResult.portDeviceName && (
+                    <Box sx={{ gridColumn: '1 / -1', pt: 1, borderTop: '1px dashed #CBD5E1' }}>
+                      <Typography variant="caption" sx={{ color: '#64748B' }}>Устройство в системе Windows на порту {connectionTestResult.port}:</Typography>
+                      <Typography sx={{ fontWeight: 700, color: connectionTestResult.success ? '#16A34A' : '#DC2626' }}>
+                        {connectionTestResult.portDeviceName}
+                      </Typography>
+                    </Box>
+                  )}
+                </Box>
+              </Paper>
+
+              {/* Advanced Technical Diagnostics & Troubleshooting Box */}
+              {!connectionTestResult.success && (
+                <Paper sx={{ p: 2, borderRadius: 2, bgcolor: '#FFFBEB', border: '1px solid #FDE68A' }}>
+                  <Typography variant="subtitle2" sx={{ fontWeight: 800, color: '#92400E', mb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <ErrorIcon sx={{ fontSize: 18, color: '#D97706' }} />
+                    Расширенная техническая диагностика и рекомендации
+                  </Typography>
+
+                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, fontSize: '0.8rem', color: '#451A03' }}>
+                    <Box sx={{ p: 1.2, bgcolor: '#FEF3C7', borderRadius: 1.5, border: '1px solid #FCD34D' }}>
+                      <Typography variant="caption" sx={{ fontWeight: 700, display: 'block', color: '#B45309', mb: 0.3 }}>
+                        1. Причина сбоя аппаратного контура:
+                      </Typography>
+                      <Typography variant="caption" sx={{ display: 'block', color: '#78350F' }}>
+                        В операционной системе Windows к порту <strong>{connectionTestResult.port}</strong> привязано устройство <strong>«{connectionTestResult.portDeviceName || 'Неизвестно'}»</strong> (служба Bluetooth/Модем), а не физический кассовый аппарат <strong>«{connectionTestResult.deviceModel}»</strong>.
+                      </Typography>
+                    </Box>
+
+                    <Box sx={{ p: 1.2, bgcolor: '#FEF3C7', borderRadius: 1.5, border: '1px solid #FCD34D' }}>
+                      <Typography variant="caption" sx={{ fontWeight: 700, display: 'block', color: '#B45309', mb: 0.3 }}>
+                        2. Как подключить физическую ККТ «АТОЛ 91Ф»:
+                      </Typography>
+                      <Typography variant="caption" sx={{ display: 'block', color: '#78350F' }}>
+                        • Подключите кассу кабелем USB к компьютеру и включите питание (клавиша [C]).
+                      </Typography>
+                      <Typography variant="caption" sx={{ display: 'block', color: '#78350F' }}>
+                        • Переведите аппарат в режим фискального регистратора (ФР) в меню кассы.
+                      </Typography>
+                      <Typography variant="caption" sx={{ display: 'block', color: '#78350F' }}>
+                        • Откройте <em>Диспетчер устройств Windows (devmgmt.msc)</em> → <em>Порты (COM и LPT)</em> и проверьте порт драйвера <code>ATOL USB VCP</code>.
+                      </Typography>
+                      <Typography variant="caption" sx={{ display: 'block', color: '#78350F' }}>
+                        • Укажите найденный номер порта в настройках профиля оборудования.
+                      </Typography>
+                    </Box>
+
+                    <Box sx={{ p: 1.2, bgcolor: '#EFF6FF', borderRadius: 1.5, border: '1px solid #BFDBFE' }}>
+                      <Typography variant="caption" sx={{ fontWeight: 700, display: 'block', color: '#1E40AF', mb: 0.3 }}>
+                        3. Работа без физической кассы (программная эмуляция):
+                      </Typography>
+                      <Typography variant="caption" sx={{ display: 'block', color: '#1E3A8A' }}>
+                        Для работы визитов и финансовых отчетов без подключенного аппарата нажмите кнопку <strong>«Включить «Эмулятор ККТ»»</strong> ниже. Все операции 54-ФЗ будут симулироваться виртуальным драйвером.
+                      </Typography>
+                    </Box>
+                  </Box>
+                </Paper>
+              )}
+            </Box>
+          ) : null}
+        </DialogContent>
+
+        <DialogActions sx={{ p: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Box>
+            {connectionTestResult && !connectionTestResult.success && !connectionTestResult.isMockMode && (
+              <Button
+                variant="outlined"
+                color="primary"
+                onClick={handleSwitchToMockFromDialog}
+                disabled={testingProfileId !== null}
+                sx={{ fontWeight: 700 }}
+              >
+                Включить «Эмулятор ККТ»
+              </Button>
+            )}
+          </Box>
+
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            <Button
+              onClick={() => {
+                const targetId = testingProfileId || globalActiveProfile?.id || selectedProfile?.id;
+                const p = profiles.find(item => item.id === targetId);
+                if (p) handleTestConnectionForProfile(p);
+              }}
+              disabled={testingProfileId !== null}
+              startIcon={<RefreshIcon />}
+              sx={{ fontWeight: 700 }}
+            >
+              Повторить тест
+            </Button>
+
+            <Button
+              variant="contained"
+              onClick={() => setConnectionTestDialogOpen(false)}
+              sx={{ bgcolor: '#0F3C64', fontWeight: 700 }}
+            >
+              Закрыть
+            </Button>
+          </Box>
         </DialogActions>
       </Dialog>
     </Box>

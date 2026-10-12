@@ -110,7 +110,7 @@ export default function LoginModal() {
             Центр Ортопедии и Травматологии
           </Typography>
           <Typography variant="caption" sx={{ color: '#93C5FD', fontWeight: 600, display: 'block', mt: 0.3 }}>
-            доктора Добрушкина в Сочи • МИС «ОртоERP» v1.4.0
+            доктора Добрушкина в Сочи • МИС «ОртоERP» v1.4.1
           </Typography>
         </Box>
 

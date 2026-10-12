@@ -506,6 +506,42 @@ router.post('/repeat-print', async (req, res) => {
   }
 });
 
+/**
+ * GET /api/fiscal/test-connection
+ * POST /api/fiscal/test-connection
+ * Tests connection to Atol 91F (supports Mock or Real Hardware via External Daemon / COM port).
+ */
+router.all('/test-connection', async (req, res) => {
+  try {
+    const profileId = (req.body && req.body.profile_id) || req.query.profile_id || null;
+    const result = await fiscalService.testConnection(profileId ? Number(profileId) : null);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      error: err.message,
+      message: `Ошибка проверки связи с ККТ «АТОЛ 91Ф»: ${err.message}`
+    });
+  }
+});
+
+/**
+ * POST /api/fiscal/mode
+ * Instant switch between Mock / Emulator and Real Hardware connection across the active profile.
+ */
+router.post('/mode', async (req, res) => {
+  try {
+    const { is_mock_mode, updated_by, profile_id } = req.body;
+    if (is_mock_mode === undefined) {
+      return res.status(400).json({ error: 'Параметр is_mock_mode обязателен' });
+    }
+    const result = await fiscalService.setMockMode(Boolean(is_mock_mode), updated_by || 'Администратор', profile_id || null);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ============================================================================
 // [TEST_DAEMON] TEST & MOCK DATA WIZARD ENDPOINTS
 // ============================================================================

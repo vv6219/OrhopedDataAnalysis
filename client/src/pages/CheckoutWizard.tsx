@@ -27,6 +27,11 @@ import CloseIcon from '@mui/icons-material/Close';
 import EventIcon from '@mui/icons-material/Event';
 import PointOfSaleIcon from '@mui/icons-material/PointOfSale';
 import ReplayIcon from '@mui/icons-material/Replay';
+import UsbIcon from '@mui/icons-material/Usb';
+import SpeedIcon from '@mui/icons-material/Speed';
+import RefreshIcon from '@mui/icons-material/Refresh';
+import ErrorIcon from '@mui/icons-material/Error';
+import { useFiscal } from '../context/FiscalContext';
 
 const steps = ['Выбор пациента и сервисов', 'Назначение сотрудников', 'Расход материалов', 'Расчет и оплата'];
 
@@ -120,10 +125,83 @@ export default function CheckoutWizard() {
   const [savedTransactionResult, setSavedTransactionResult] = useState<any | null>(null);
 
   // Fiscal Registration State (ККТ АТОЛ 91Ф 54-ФЗ)
+  const {
+    fiscalStatus: globalFiscalStatus,
+    refreshFiscalStatus,
+    setMockMode: setGlobalMockMode,
+    testConnection: testGlobalConnection
+  } = useFiscal();
+
   const [fiscalize, setFiscalize] = useState(true);
   const [patientContact, setPatientContact] = useState('');
-  const [fiscalStatus, setFiscalStatus] = useState<any | null>(null);
+  const [fiscalStatus, setFiscalStatus] = useState<any | null>(globalFiscalStatus || null);
   const [reprintingFiscal, setReprintingFiscal] = useState(false);
+  const [switchingFiscalMode, setSwitchingFiscalMode] = useState(false);
+  const [testingFiscalConnection, setTestingFiscalConnection] = useState(false);
+  const [fiscalTestDialogOpen, setFiscalTestDialogOpen] = useState(false);
+  const [fiscalTestResult, setFiscalTestResult] = useState<any | null>(null);
+
+  useEffect(() => {
+    if (globalFiscalStatus) {
+      setFiscalStatus(globalFiscalStatus);
+    }
+  }, [globalFiscalStatus]);
+
+  const fetchFiscalStatus = async () => {
+    try {
+      await refreshFiscalStatus();
+    } catch {
+      // fallback silent
+    }
+  };
+
+  const handleToggleFiscalMode = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const newIsMockMode = !event.target.checked;
+    setSwitchingFiscalMode(true);
+    try {
+      await setGlobalMockMode(newIsMockMode, undefined, 'Регистратура (Оформление визита)');
+    } catch (err: any) {
+      console.error('Error toggling fiscal mode:', err);
+    } finally {
+      setSwitchingFiscalMode(false);
+    }
+  };
+
+  const handleTestFiscalConnection = async () => {
+    setTestingFiscalConnection(true);
+    setFiscalTestDialogOpen(true);
+    setFiscalTestResult(null);
+    try {
+      const data = await testGlobalConnection();
+      setFiscalTestResult(data);
+    } catch (err: any) {
+      setFiscalTestResult({
+        success: false,
+        isMockMode: fiscalStatus?.isMockMode ?? true,
+        modeLabel: fiscalStatus?.isMockMode ? 'Эмулятор ККТ (Mock)' : 'Реальное оборудование (COM-порт)',
+        deviceModel: fiscalStatus?.deviceModel || 'АТОЛ 91Ф',
+        port: fiscalStatus?.port || 'COM3',
+        baudRate: fiscalStatus?.baudRate || 115200,
+        latencyMs: 0,
+        message: `Ошибка сетевого запроса: ${err.message}`,
+        error: err.message
+      });
+    } finally {
+      setTestingFiscalConnection(false);
+    }
+  };
+
+  const handleSwitchToMockInDialog = async () => {
+    setSwitchingFiscalMode(true);
+    try {
+      await setGlobalMockMode(true, undefined, 'Регистратура (Оформление визита)');
+      await handleTestFiscalConnection();
+    } catch (err: any) {
+      console.error('Error switching to mock in dialog:', err);
+    } finally {
+      setSwitchingFiscalMode(false);
+    }
+  };
 
   useEffect(() => {
     if (selectedPatient) {
@@ -135,17 +213,6 @@ export default function CheckoutWizard() {
   }, [selectedPatient]);
 
   useEffect(() => {
-    const fetchFiscalStatus = async () => {
-      try {
-        const res = await fetch(`${API_BASE_URL}/api/fiscal/status`);
-        if (res.ok) {
-          const data = await res.json();
-          setFiscalStatus(data);
-        }
-      } catch {
-        // fallback silent
-      }
-    };
     fetchFiscalStatus();
   }, []);
 
@@ -1436,9 +1503,9 @@ export default function CheckoutWizard() {
               <Paper sx={{ p: 2.5, mt: 3, borderRadius: 2.5, border: '1px solid #CBD5E1', bgcolor: '#F8FAFC' }}>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 1.5 }}>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                    <PointOfSaleIcon sx={{ color: '#0F3C64', fontSize: 28 }} />
+                    <PointOfSaleIcon sx={{ color: '#0F3C64', fontSize: 32 }} />
                     <Box>
-                      <Typography variant="subtitle1" sx={{ fontWeight: 700, color: '#0F3C64' }}>
+                      <Typography variant="subtitle1" sx={{ fontWeight: 800, color: '#0F3C64', lineHeight: 1.2 }}>
                         Фискализация на ККТ «АТОЛ 91Ф» (54-ФЗ)
                       </Typography>
                       <Typography variant="caption" sx={{ color: '#64748B' }}>
@@ -1447,18 +1514,52 @@ export default function CheckoutWizard() {
                     </Box>
                   </Box>
 
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                    <Chip
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
+                    {/* Switch: Эмулятор ККТ / Реальное соединение */}
+                    <Tooltip title="Переключение режима фискализации: программная эмуляция (Mock) или физический COM-порт ККТ">
+                      <FormControlLabel
+                        control={
+                          <Switch
+                            size="small"
+                            checked={!fiscalStatus?.isMockMode}
+                            onChange={handleToggleFiscalMode}
+                            disabled={switchingFiscalMode}
+                            color="warning"
+                          />
+                        }
+                        label={
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                            <Typography variant="body2" sx={{ fontWeight: 700, fontSize: '0.8rem', color: !fiscalStatus?.isMockMode ? '#D97706' : '#0F3C64' }}>
+                              {!fiscalStatus?.isMockMode ? 'Реальное подключение (COM)' : 'Эмулятор ККТ (Mock)'}
+                            </Typography>
+                            {switchingFiscalMode && <CircularProgress size={12} />}
+                          </Box>
+                        }
+                        sx={{ mr: 0, bgcolor: '#FFFFFF', px: 1, py: 0.3, borderRadius: 1.5, border: '1px solid #E2E8F0' }}
+                      />
+                    </Tooltip>
+
+                    {/* Button: Проверить связь */}
+                    <Button
                       size="small"
-                      label={
-                        fiscalStatus?.isMockMode
-                          ? `🟡 Эмулятор ККТ (Тестовый контур • Смена №${fiscalStatus?.shiftNumber || 14})`
-                          : (fiscalStatus?.online
-                              ? `🟢 АТОЛ 91Ф (${fiscalStatus?.port || 'COM3'}) • Готова • Смена №${fiscalStatus?.shiftNumber || 14}`
-                              : `⚪ ККТ подключается...`)
-                      }
-                      sx={{ fontWeight: 600, bgcolor: fiscalStatus?.online ? '#ECFDF5' : '#F1F5F9', color: fiscalStatus?.online ? '#065F46' : '#475569', border: '1px solid #A7F3D0' }}
-                    />
+                      variant="outlined"
+                      startIcon={testingFiscalConnection ? <CircularProgress size={14} /> : <UsbIcon sx={{ fontSize: 16, color: '#D97706' }} />}
+                      onClick={handleTestFiscalConnection}
+                      disabled={testingFiscalConnection}
+                      sx={{
+                        fontWeight: 700,
+                        fontSize: '0.78rem',
+                        borderColor: '#0F3C64',
+                        color: '#0F3C64',
+                        bgcolor: '#FFFFFF',
+                        borderRadius: 1.5,
+                        py: 0.5,
+                        px: 1.3
+                      }}
+                    >
+                      Проверить связь
+                    </Button>
+
                     <FormControlLabel
                       control={
                         <Switch
@@ -1471,6 +1572,31 @@ export default function CheckoutWizard() {
                       sx={{ mr: 0 }}
                     />
                   </Box>
+                </Box>
+
+                {/* Sub-row with status chip and device parameters */}
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mt: 1.5, flexWrap: 'wrap' }}>
+                  <Chip
+                    size="small"
+                    label={
+                      fiscalStatus?.isMockMode
+                        ? `🟡 Эмулятор ККТ (Тестовый контур • Смена №${fiscalStatus?.shiftNumber || 14})`
+                        : (fiscalStatus?.online
+                            ? `🟢 Реальная ККТ: ${fiscalStatus?.deviceModel || 'АТОЛ 91Ф'} (${fiscalStatus?.port || 'COM3'}) • Готова • Смена №${fiscalStatus?.shiftNumber || 14}`
+                            : `🔴 Реальная ККТ: ${fiscalStatus?.port || 'COM3'} • Нет связи (Оборудование не подключено)`)
+                    }
+                    sx={{
+                      fontWeight: 600,
+                      fontSize: '0.78rem',
+                      bgcolor: fiscalStatus?.isMockMode ? '#FEF3C7' : (fiscalStatus?.online ? '#ECFDF5' : '#FEE2E2'),
+                      color: fiscalStatus?.isMockMode ? '#92400E' : (fiscalStatus?.online ? '#065F46' : '#991B1B'),
+                      border: '1px solid',
+                      borderColor: fiscalStatus?.isMockMode ? '#FCD34D' : (fiscalStatus?.online ? '#A7F3D0' : '#FCA5A5')
+                    }}
+                  />
+                  <Typography variant="caption" sx={{ color: '#64748B' }}>
+                    Порт: <strong>{fiscalStatus?.port || 'COM3'}</strong> ({fiscalStatus?.baudRate || 115200} бод) • ФН: {fiscalStatus?.isMockMode ? fiscalStatus?.fnNumber : (fiscalStatus?.online ? fiscalStatus?.fnNumber : '—')} • РН ККТ: {fiscalStatus?.isMockMode ? fiscalStatus?.kktRegNumber : (fiscalStatus?.online ? fiscalStatus?.kktRegNumber : '—')}
+                  </Typography>
                 </Box>
 
                 {fiscalize && (
@@ -1885,6 +2011,191 @@ export default function CheckoutWizard() {
               sx={{ bgcolor: '#0F3C64', fontWeight: 700, px: 2.5, '&:hover': { bgcolor: '#082540' } }}
             >
               Печать / Сохранить в PDF
+            </Button>
+          </Box>
+        </DialogActions>
+      </Dialog>
+
+      {/* Fiscal Test Connection Dialog */}
+      <Dialog
+        open={fiscalTestDialogOpen}
+        onClose={() => setFiscalTestDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+        slotProps={{ paper: { sx: { borderRadius: 3 } } }}
+      >
+        <DialogTitle sx={{ fontWeight: 800, color: '#0F3C64', display: 'flex', alignItems: 'center', gap: 1.5, pb: 1 }}>
+          <SpeedIcon sx={{ color: fiscalTestResult?.success ? '#16A34A' : '#DC2626' }} />
+          Результаты проверки связи с ККТ «АТОЛ 91Ф»
+        </DialogTitle>
+
+        <DialogContent dividers>
+          {testingFiscalConnection ? (
+            <Box sx={{ py: 4, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+              <CircularProgress size={42} />
+              <Typography variant="body1" sx={{ fontWeight: 600, color: '#0F3C64' }}>
+                Опрос состояния ККТ и порта...
+              </Typography>
+              <Typography variant="caption" sx={{ color: '#64748B' }}>
+                Проверка COM-порта {fiscalStatus?.port || 'COM3'}, отклика фискального накопителя и очереди
+              </Typography>
+            </Box>
+          ) : fiscalTestResult ? (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <Alert
+                severity={fiscalTestResult.success ? 'success' : 'error'}
+                icon={fiscalTestResult.success ? <CheckCircleIcon fontSize="inherit" /> : <ErrorIcon fontSize="inherit" />}
+                sx={{ borderRadius: 2 }}
+              >
+                <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                  {fiscalTestResult.success ? 'Связь с ККТ успешно установлена!' : 'Ошибка подключения к оборудованию!'}
+                </Typography>
+                <Typography variant="caption" sx={{ display: 'block', mt: 0.5 }}>
+                  {fiscalTestResult.message}
+                </Typography>
+              </Alert>
+
+              <Paper sx={{ p: 2, borderRadius: 2, bgcolor: '#F8FAFC', border: '1px solid #E2E8F0' }}>
+                <Typography variant="subtitle2" sx={{ fontWeight: 800, color: '#0F3C64', mb: 1.5 }}>
+                  Диагностические параметры оборудования
+                </Typography>
+
+                <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5, fontSize: '0.82rem' }}>
+                  <Box>
+                    <Typography variant="caption" sx={{ color: '#64748B' }}>Режим работы:</Typography>
+                    <Typography sx={{ fontWeight: 700, color: fiscalTestResult.isMockMode ? '#0F3C64' : '#D97706' }}>
+                      {fiscalTestResult.modeLabel}
+                    </Typography>
+                  </Box>
+
+                  <Box>
+                    <Typography variant="caption" sx={{ color: '#64748B' }}>Время отклика (Latency):</Typography>
+                    <Typography sx={{ fontWeight: 700, color: fiscalTestResult.success ? '#16A34A' : '#DC2626' }}>
+                      {fiscalTestResult.latencyMs} мс
+                    </Typography>
+                  </Box>
+
+                  <Box>
+                    <Typography variant="caption" sx={{ color: '#64748B' }}>Модель и порт:</Typography>
+                    <Typography sx={{ fontWeight: 700 }}>
+                      {fiscalTestResult.deviceModel} ({fiscalTestResult.port}, {fiscalTestResult.baudRate} бод)
+                    </Typography>
+                  </Box>
+
+                  <Box>
+                    <Typography variant="caption" sx={{ color: '#64748B' }}>Состояние ленты:</Typography>
+                    <Typography sx={{ fontWeight: 700, color: fiscalTestResult.success ? '#16A34A' : '#DC2626' }}>
+                      {fiscalTestResult.paperStatusLabel || (fiscalTestResult.success ? 'В норме (OK)' : 'Нет связи')}
+                    </Typography>
+                  </Box>
+
+                  <Box>
+                    <Typography variant="caption" sx={{ color: '#64748B' }}>Фискальный накопитель (ФН):</Typography>
+                    <Typography sx={{ fontWeight: 700 }}>
+                      №{fiscalTestResult.fnNumber || '—'}
+                    </Typography>
+                  </Box>
+
+                  <Box>
+                    <Typography variant="caption" sx={{ color: '#64748B' }}>Регистрационный номер ККТ:</Typography>
+                    <Typography sx={{ fontWeight: 700 }}>
+                      РН {fiscalTestResult.kktRegNumber || '—'}
+                    </Typography>
+                  </Box>
+
+                  {fiscalTestResult.portDeviceName && (
+                    <Box sx={{ gridColumn: '1 / -1', pt: 1, borderTop: '1px dashed #CBD5E1' }}>
+                      <Typography variant="caption" sx={{ color: '#64748B' }}>Устройство в системе Windows на порту {fiscalTestResult.port}:</Typography>
+                      <Typography sx={{ fontWeight: 700, color: fiscalTestResult.success ? '#16A34A' : '#DC2626' }}>
+                        {fiscalTestResult.portDeviceName}
+                      </Typography>
+                    </Box>
+                  )}
+                </Box>
+              </Paper>
+
+              {/* Advanced Technical Diagnostics & Troubleshooting Box */}
+              {!fiscalTestResult.success && (
+                <Paper sx={{ p: 2, borderRadius: 2, bgcolor: '#FFFBEB', border: '1px solid #FDE68A' }}>
+                  <Typography variant="subtitle2" sx={{ fontWeight: 800, color: '#92400E', mb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <ErrorIcon sx={{ fontSize: 18, color: '#D97706' }} />
+                    Расширенная техническая диагностика и рекомендации
+                  </Typography>
+
+                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, fontSize: '0.8rem', color: '#451A03' }}>
+                    <Box sx={{ p: 1.2, bgcolor: '#FEF3C7', borderRadius: 1.5, border: '1px solid #FCD34D' }}>
+                      <Typography variant="caption" sx={{ fontWeight: 700, display: 'block', color: '#B45309', mb: 0.3 }}>
+                        1. Причина сбоя аппаратного контура:
+                      </Typography>
+                      <Typography variant="caption" sx={{ display: 'block', color: '#78350F' }}>
+                        В операционной системе Windows к порту <strong>{fiscalTestResult.port}</strong> привязано устройство <strong>«{fiscalTestResult.portDeviceName || 'Неизвестно'}»</strong> (служба Bluetooth/Модем), а не физический кассовый аппарат <strong>«{fiscalTestResult.deviceModel}»</strong>.
+                      </Typography>
+                    </Box>
+
+                    <Box sx={{ p: 1.2, bgcolor: '#FEF3C7', borderRadius: 1.5, border: '1px solid #FCD34D' }}>
+                      <Typography variant="caption" sx={{ fontWeight: 700, display: 'block', color: '#B45309', mb: 0.3 }}>
+                        2. Как подключить физическую ККТ «АТОЛ 91Ф»:
+                      </Typography>
+                      <Typography variant="caption" sx={{ display: 'block', color: '#78350F' }}>
+                        • Подключите кассу кабелем USB к компьютеру и включите питание (клавиша [C]).
+                      </Typography>
+                      <Typography variant="caption" sx={{ display: 'block', color: '#78350F' }}>
+                        • Переведите аппарат в режим фискального регистратора (ФР) в меню кассы.
+                      </Typography>
+                      <Typography variant="caption" sx={{ display: 'block', color: '#78350F' }}>
+                        • Откройте <em>Диспетчер устройств Windows (devmgmt.msc)</em> → <em>Порты (COM и LPT)</em> и проверьте порт драйвера <code>ATOL USB VCP</code>.
+                      </Typography>
+                      <Typography variant="caption" sx={{ display: 'block', color: '#78350F' }}>
+                        • Укажите найденный номер порта в настройках профиля оборудования.
+                      </Typography>
+                    </Box>
+
+                    <Box sx={{ p: 1.2, bgcolor: '#EFF6FF', borderRadius: 1.5, border: '1px solid #BFDBFE' }}>
+                      <Typography variant="caption" sx={{ fontWeight: 700, display: 'block', color: '#1E40AF', mb: 0.3 }}>
+                        3. Работа без физической кассы (программная эмуляция):
+                      </Typography>
+                      <Typography variant="caption" sx={{ display: 'block', color: '#1E3A8A' }}>
+                        Для работы визитов и финансовых отчетов без подключенного аппарата нажмите кнопку <strong>«Включить «Эмулятор ККТ»»</strong> ниже. Все операции 54-ФЗ будут симулироваться виртуальным драйвером.
+                      </Typography>
+                    </Box>
+                  </Box>
+                </Paper>
+              )}
+            </Box>
+          ) : null}
+        </DialogContent>
+
+        <DialogActions sx={{ p: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Box>
+            {fiscalTestResult && !fiscalTestResult.success && !fiscalTestResult.isMockMode && (
+              <Button
+                variant="outlined"
+                color="primary"
+                onClick={handleSwitchToMockInDialog}
+                disabled={switchingFiscalMode || testingFiscalConnection}
+                sx={{ fontWeight: 700 }}
+              >
+                Включить «Эмулятор ККТ»
+              </Button>
+            )}
+          </Box>
+
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            <Button
+              onClick={handleTestFiscalConnection}
+              disabled={testingFiscalConnection}
+              startIcon={<RefreshIcon />}
+              sx={{ fontWeight: 700 }}
+            >
+              Повторить тест
+            </Button>
+
+            <Button
+              variant="contained"
+              onClick={() => setFiscalTestDialogOpen(false)}
+              sx={{ fontWeight: 700, borderRadius: 2 }}
+            >
+              Закрыть
             </Button>
           </Box>
         </DialogActions>
