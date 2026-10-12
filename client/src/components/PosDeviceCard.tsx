@@ -15,7 +15,9 @@ import {
   DialogActions,
   Alert,
   Divider,
-  Tooltip
+  Tooltip,
+  Paper,
+  Stack
 } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import CreditCardIcon from '@mui/icons-material/CreditCard';
@@ -27,14 +29,21 @@ import TuneIcon from '@mui/icons-material/Tune';
 import PlayCircleFilledWhiteIcon from '@mui/icons-material/PlayCircleFilledWhite';
 import SpeedIcon from '@mui/icons-material/Speed';
 import QrCode2Icon from '@mui/icons-material/QrCode2';
-import { usePos } from '../context/PosContext';
+import WarningAmberIcon from '@mui/icons-material/WarningAmber';
+import ScheduleIcon from '@mui/icons-material/Schedule';
+import SensorsIcon from '@mui/icons-material/Sensors';
+import RestartAltIcon from '@mui/icons-material/RestartAlt';
+import TerminalIcon from '@mui/icons-material/Terminal';
+import LanIcon from '@mui/icons-material/Lan';
+import KeyIcon from '@mui/icons-material/Key';
+import { usePos, type PosHostTestResult } from '../context/PosContext';
 import { API_BASE_URL } from '../config/apiConfig';
 
 export default function PosDeviceCard({ onRefresh }: { onRefresh?: () => void }) {
   const navigate = useNavigate();
   const { posStatus, activeProfile, loading, refreshPosStatus, testHost } = usePos();
   const [testingHost, setTestingHost] = useState(false);
-  const [hostResult, setHostResult] = useState<any>(null);
+  const [hostResult, setHostResult] = useState<PosHostTestResult | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [togglingMode, setTogglingMode] = useState(false);
 
@@ -292,47 +301,268 @@ export default function PosDeviceCard({ onRefresh }: { onRefresh?: () => void })
         </CardContent>
       </Card>
 
-      {/* Host Diagnostic Dialog */}
-      <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle sx={{ fontWeight: 800, color: '#0F3C64', display: 'flex', alignItems: 'center', gap: 1 }}>
-          <CreditCardIcon /> Результат проверки связи с АО «Альфа-Банк»
-        </DialogTitle>
-        <DialogContent dividers>
-          {hostResult?.success ? (
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-              <Alert severity="success" icon={<CheckCircleIcon sx={{ fontSize: 24 }} />}>
-                <Typography sx={{ fontWeight: 700 }}>
-                  Связь с процессингом Альфа-Банка установлена успешно!
-                </Typography>
-                <Typography variant="body2">
-                  {hostResult.message}
-                </Typography>
-              </Alert>
-
-              <Box sx={{ bgcolor: '#F8FAFC', p: 2, borderRadius: 2, border: '1px solid #E2E8F0' }}>
-                <Typography variant="body2" sx={{ mb: 0.8 }}>
-                  • Код ответа процессинга: <b>{hostResult.responseCode || '00'} (Успех)</b>
-                </Typography>
-                <Typography variant="body2" sx={{ mb: 0.8 }}>
-                  • Задержка отклика (RTT): <b>{hostResult.rttMs || 142} мс</b>
-                </Typography>
-                <Typography variant="body2" sx={{ mb: 0.8 }}>
-                  • Терминал: <b>{posStatus?.terminalId}</b> (Мерчант: {posStatus?.merchantId})
-                </Typography>
-                <Typography variant="body2">
-                  • Время запроса: <b>{new Date(hostResult.timestamp || Date.now()).toLocaleString('ru-RU')}</b>
-                </Typography>
-              </Box>
+      {/* Host Diagnostic Dialog with Full Diagnostic Breakdown */}
+      <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="md" fullWidth>
+        <DialogTitle
+          sx={{
+            fontWeight: 800,
+            color: '#0F3C64',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            borderBottom: '1px solid #E2E8F0',
+            pb: 2
+          }}
+        >
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+            <SensorsIcon sx={{ color: '#0F3C64', fontSize: 28 }} />
+            <Box>
+              <Typography variant="h6" sx={{ fontWeight: 800, color: '#0F3C64', lineHeight: 1.2 }}>
+                Диагностика связи с процессингом (Команда 05 / Host Ping)
+              </Typography>
+              <Typography variant="caption" sx={{ color: '#64748B' }}>
+                Банк-эквайер: АО «АЛЬФА-БАНК» • Протокол: {posStatus?.driverType || 'Arcus-2'}
+              </Typography>
             </Box>
+          </Box>
+          <Chip
+            size="small"
+            label={hostResult?.success ? 'Связь OK' : 'Сбой связи'}
+            sx={{
+              bgcolor: hostResult?.success ? '#DCFCE7' : '#FEE2E2',
+              color: hostResult?.success ? '#15803D' : '#B91C1C',
+              fontWeight: 800
+            }}
+          />
+        </DialogTitle>
+
+        <DialogContent dividers sx={{ p: 3, display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+          {/* Main Status Banner */}
+          {hostResult?.success ? (
+            <Alert
+              severity="success"
+              icon={<CheckCircleIcon sx={{ fontSize: 28 }} />}
+              sx={{ borderRadius: 2, '& .MuiAlert-message': { width: '100%' } }}
+            >
+              <Typography sx={{ fontWeight: 700, fontSize: '1rem', color: '#166534' }}>
+                Связь с процессингом Альфа-Банка установлена успешно!
+              </Typography>
+              <Typography variant="body2" sx={{ color: '#15803D', mt: 0.5 }}>
+                {hostResult.message}
+              </Typography>
+            </Alert>
           ) : (
-            <Alert severity="error" icon={<ErrorIcon sx={{ fontSize: 24 }} />}>
-              <Typography sx={{ fontWeight: 700 }}>Ошибка сеанса связи с банком</Typography>
-              <Typography variant="body2">{hostResult?.error || 'Таймаут хоста'}</Typography>
+            <Alert
+              severity="error"
+              icon={<ErrorIcon sx={{ fontSize: 28 }} />}
+              sx={{ borderRadius: 2, '& .MuiAlert-message': { width: '100%' } }}
+            >
+              <Typography sx={{ fontWeight: 700, fontSize: '1rem', color: '#991B1B' }}>
+                Ошибка сеанса связи с банком (Команда 05)
+              </Typography>
+              <Typography variant="body2" sx={{ color: '#B91C1C', mt: 0.5, wordBreak: 'break-word', fontFamily: 'monospace' }}>
+                {hostResult?.error || hostResult?.message || 'Сбой соединения с хостом процессинга'}
+              </Typography>
             </Alert>
           )}
+
+          {/* Key Metrics Chips */}
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+            <Chip
+              icon={<TerminalIcon sx={{ fontSize: 16 }} />}
+              label={`Код ответа: ${hostResult?.responseCode || (hostResult?.success ? '00' : '99')}`}
+              size="small"
+              sx={{ bgcolor: '#F1F5F9', fontWeight: 700 }}
+            />
+            <Chip
+              icon={<SpeedIcon sx={{ fontSize: 16 }} />}
+              label={`Задержка (RTT): ${hostResult?.rttMs || 0} мс`}
+              size="small"
+              sx={{ bgcolor: '#F1F5F9', fontWeight: 700 }}
+            />
+            <Chip
+              icon={<CreditCardIcon sx={{ fontSize: 16 }} />}
+              label={`Режим: ${hostResult?.isMockMode ?? isMock ? '🟡 Эмуляция (Mock)' : '🟢 Реальный POS'}`}
+              size="small"
+              sx={{ bgcolor: '#F1F5F9', fontWeight: 700 }}
+            />
+            <Chip
+              icon={<LanIcon sx={{ fontSize: 16 }} />}
+              label={`TID: ${hostResult?.terminalId || posStatus?.terminalId || 'ALFA_770192'}`}
+              size="small"
+              sx={{ bgcolor: '#F1F5F9', fontWeight: 700 }}
+            />
+            <Chip
+              icon={<KeyIcon sx={{ fontSize: 16 }} />}
+              label={`MID: ${hostResult?.merchantId || posStatus?.merchantId || 'MERCH_884102'}`}
+              size="small"
+              sx={{ bgcolor: '#F1F5F9', fontWeight: 700 }}
+            />
+          </Box>
+
+          {/* Detailed Step-by-Step Diagnostic Chain */}
+          <Box>
+            <Typography variant="subtitle2" sx={{ fontWeight: 800, color: '#0F3C64', mb: 1.5, display: 'flex', alignItems: 'center', gap: 1 }}>
+              <TuneIcon sx={{ fontSize: 18 }} /> Пошаговый протокол диагностики связи:
+            </Typography>
+            <Paper variant="outlined" sx={{ borderRadius: 2, overflow: 'hidden', bgcolor: '#FAFAFA' }}>
+              <Stack divider={<Divider />}>
+                {(hostResult?.diagnosticSteps && hostResult.diagnosticSteps.length > 0
+                  ? hostResult.diagnosticSteps
+                  : [
+                      {
+                        id: 'gateway',
+                        name: 'Сетевой шлюз МИС (Node.js API)',
+                        status: hostResult?.success ? 'success' : 'error',
+                        details: hostResult?.success ? 'Маршрут /api/pos/test-host ответил штатно' : (hostResult?.error || 'Сбой запроса')
+                      },
+                      {
+                        id: 'driver',
+                        name: 'Исполняемый модуль драйвера эквайринга',
+                        status: hostResult?.success ? 'success' : 'warning',
+                        details: isMock ? 'Эмуляция драйвера активна' : 'Проверка драйвера в ОС Windows'
+                      },
+                      {
+                        id: 'host',
+                        name: 'Сеанс связи с хостом АО «Альфа-Банк» (Команда 05)',
+                        status: hostResult?.success ? 'success' : 'error',
+                        details: hostResult?.message || 'Ожидание ответа хоста'
+                      }
+                    ]
+                ).map((step: any, idx: number) => {
+                  const isOk = step.status === 'success';
+                  const isErr = step.status === 'error';
+                  const isWarn = step.status === 'warning';
+                  return (
+                    <Box key={step.id || idx} sx={{ p: 1.8, display: 'flex', alignItems: 'flex-start', gap: 1.5, bgcolor: '#FFFFFF' }}>
+                      <Box sx={{ mt: 0.2 }}>
+                        {isOk && <CheckCircleIcon sx={{ color: '#16A34A', fontSize: 20 }} />}
+                        {isErr && <ErrorIcon sx={{ color: '#DC2626', fontSize: 20 }} />}
+                        {isWarn && <WarningAmberIcon sx={{ color: '#D97706', fontSize: 20 }} />}
+                        {!isOk && !isErr && !isWarn && <ScheduleIcon sx={{ color: '#94A3B8', fontSize: 20 }} />}
+                      </Box>
+                      <Box sx={{ flex: 1, minWidth: 0 }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, mb: 0.3 }}>
+                          <Typography variant="body2" sx={{ fontWeight: 700, color: '#1E293B' }}>
+                            {idx + 1}. {step.name}
+                          </Typography>
+                          <Chip
+                            size="small"
+                            label={isOk ? 'OK' : isErr ? 'Ошибка' : isWarn ? 'Предупреждение' : 'Пропущено'}
+                            sx={{
+                              height: 20,
+                              fontSize: '0.7rem',
+                              fontWeight: 700,
+                              bgcolor: isOk ? '#DCFCE7' : isErr ? '#FEE2E2' : isWarn ? '#FEF3C7' : '#F1F5F9',
+                              color: isOk ? '#15803D' : isErr ? '#B91C1C' : isWarn ? '#B45309' : '#64748B'
+                            }}
+                          />
+                        </Box>
+                        <Typography variant="caption" sx={{ color: '#64748B', display: 'block', wordBreak: 'break-word', fontFamily: 'monospace', bgcolor: '#F8FAFC', p: 0.8, borderRadius: 1 }}>
+                          {step.details}
+                        </Typography>
+                      </Box>
+                    </Box>
+                  );
+                })}
+              </Stack>
+            </Paper>
+          </Box>
+
+          {/* Technical Diagnostics Info Box */}
+          <Box sx={{ bgcolor: '#F8FAFC', p: 2, borderRadius: 2, border: '1px solid #E2E8F0' }}>
+            <Typography variant="caption" sx={{ fontWeight: 800, color: '#475569', display: 'block', mb: 1, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+              Технические параметры интеграции
+            </Typography>
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1 }}>
+              <Typography variant="caption" sx={{ color: '#334155' }}>
+                • Протокол: <b>{posStatus?.driverType || 'Arcus-2'} (Команда 05)</b>
+              </Typography>
+              <Typography variant="caption" sx={{ color: '#334155' }}>
+                • Порт подключения: <b>{hostResult?.port || posStatus?.port || 'COM4'} ({hostResult?.baudRate || posStatus?.baudRate || 115200} бод)</b>
+              </Typography>
+              <Typography variant="caption" sx={{ color: '#334155' }}>
+                • Путь к драйверу: <b>{hostResult?.driverExecutablePath || 'C:\\Arcus2\\pos.exe'}</b>
+              </Typography>
+              <Typography variant="caption" sx={{ color: '#334155' }}>
+                • Время проверки: <b>{new Date(hostResult?.timestamp || Date.now()).toLocaleString('ru-RU')}</b>
+              </Typography>
+            </Box>
+          </Box>
+
+          {/* Actionable Remediation Box on Error */}
+          {!hostResult?.success && (
+            <Box sx={{ bgcolor: '#FFFBEB', p: 2, borderRadius: 2, border: '1px solid #FDE68A' }}>
+              <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.2 }}>
+                <WarningAmberIcon sx={{ color: '#D97706', fontSize: 24, mt: 0.2 }} />
+                <Box sx={{ flex: 1 }}>
+                  <Typography variant="subtitle2" sx={{ fontWeight: 800, color: '#92400E', mb: 0.5 }}>
+                    Рекомендация по устранению:
+                  </Typography>
+                  <Typography variant="body2" sx={{ color: '#B45309', mb: 1.5 }}>
+                    {hostResult?.remediation ||
+                      'Если физический POS-терминал не подключен по USB/COM-порту или на рабочей станции отсутствует драйвер Arcus-2, переключите эквайринг в режим эмуляции (Mock) для проверки сквозных сценариев МИС.'}
+                  </Typography>
+
+                  {/* Quick Toggle to Mock Button if physically failing */}
+                  {!(hostResult?.isMockMode ?? isMock) && (
+                    <Button
+                      variant="contained"
+                      size="small"
+                      onClick={async () => {
+                        await handleToggleMock(true);
+                        await handleRunHostTest();
+                      }}
+                      disabled={testingHost || togglingMode}
+                      startIcon={<RestartAltIcon />}
+                      sx={{
+                        bgcolor: '#D97706',
+                        color: '#FFFFFF',
+                        fontWeight: 700,
+                        textTransform: 'none',
+                        borderRadius: 1.5,
+                        '&:hover': { bgcolor: '#B45309' }
+                      }}
+                    >
+                      Переключить в режим эмуляции (Mock) и повторить тест
+                    </Button>
+                  )}
+                </Box>
+              </Box>
+            </Box>
+          )}
         </DialogContent>
-        <DialogActions sx={{ p: 2 }}>
-          <Button onClick={() => setDialogOpen(false)} variant="contained" sx={{ bgcolor: '#0F3C64' }}>
+
+        <DialogActions sx={{ p: 2, px: 3, justifyContent: 'space-between', bgcolor: '#F8FAFC' }}>
+          <Button
+            onClick={handleRunHostTest}
+            disabled={testingHost || posStatus?.isLocked}
+            variant="outlined"
+            startIcon={testingHost ? <CircularProgress size={16} color="inherit" /> : <RestartAltIcon />}
+            sx={{
+              color: '#0F3C64',
+              borderColor: '#CBD5E1',
+              fontWeight: 700,
+              textTransform: 'none',
+              borderRadius: 2
+            }}
+          >
+            {testingHost ? 'Проверка...' : 'Повторить проверку связи'}
+          </Button>
+
+          <Button
+            onClick={() => setDialogOpen(false)}
+            variant="contained"
+            sx={{
+              bgcolor: '#0F3C64',
+              color: '#FFFFFF',
+              fontWeight: 700,
+              textTransform: 'none',
+              borderRadius: 2,
+              px: 3,
+              '&:hover': { bgcolor: '#082540' }
+            }}
+          >
             Закрыть
           </Button>
         </DialogActions>

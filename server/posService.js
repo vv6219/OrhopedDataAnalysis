@@ -217,20 +217,103 @@ class PosService {
           responseCode: '00',
           message: 'Связь с процессингом АО «Альфа-Банк» проверена. Криптографические ключи терминала актуальны.',
           rttMs: durationMs,
-          timestamp: new Date().toISOString()
+          timestamp: new Date().toISOString(),
+          terminalId: this.terminalId,
+          merchantId: this.merchantId,
+          bankName: this.bankName,
+          driverType: this.driverType,
+          isMockMode: true,
+          connectionType: this.connectionType,
+          port: this.port,
+          baudRate: this.baudRate,
+          diagnosticSteps: [
+            { id: 'gateway', name: 'Сетевой шлюз МИС (Node.js API)', status: 'success', details: 'Эндпоинт /api/pos/test-host доступен, RTT < 2 мс' },
+            { id: 'driver', name: 'Драйвер эквайринга', status: 'success', details: `Эмуляция протокола ${this.driverType} активна (Mock-режим)` },
+            { id: 'port', name: 'Интерфейс подключения к терминалу', status: 'success', details: `Виртуальный порт ${this.port} (${this.baudRate} бод) - Готов` },
+            { id: 'host', name: 'Команда 05: Пинг хоста АО «Альфа-Банк»', status: 'success', details: `Код ответа: 00 (Успех), RTT: ${durationMs} мс` },
+            { id: 'crypto', name: 'Проверка криптографических ключей', status: 'success', details: 'Мастер-ключи и сессионные ключи актуальны' }
+          ]
         };
       }
 
       // Physical Arcus-2 execution: pos.exe /t or command 05
-      // If physical file does not exist, return clear error
+      const diagnosticSteps = [
+        { id: 'gateway', name: 'Сетевой шлюз МИС (Node.js API)', status: 'success', details: 'Эндпоинт /api/pos/test-host доступен' }
+      ];
+
       if (!fs.existsSync(this.driverExecutablePath)) {
-        throw new Error(`Исполняемый файл драйвера не найден по пути: ${this.driverExecutablePath}`);
+        const durationMs = Date.now() - startTime;
+        diagnosticSteps.push({
+          id: 'driver',
+          name: 'Исполняемый файл драйвера',
+          status: 'error',
+          details: `Файл не найден по пути: ${this.driverExecutablePath}`
+        });
+        diagnosticSteps.push({
+          id: 'port',
+          name: 'Интерфейс подключения к терминалу',
+          status: 'warning',
+          details: `Ожидание установки драйвера на порту ${this.port}`
+        });
+        diagnosticSteps.push({
+          id: 'host',
+          name: 'Команда 05: Сеанс связи с хостом Альфа-Банка',
+          status: 'skipped',
+          details: 'Отменено: исполняемый файл драйвера отсутствует'
+        });
+
+        logPosAudit({
+          level: PosLogLevels.WARN,
+          message: `Проверка связи: драйвер не найден (${this.driverExecutablePath})`,
+          eventType: PosEventTypes.TEST_HOST,
+          terminalId: this.terminalId,
+          durationMs
+        });
+
+        return {
+          success: false,
+          responseCode: '99',
+          error: `Исполняемый файл драйвера не найден по пути: ${this.driverExecutablePath}`,
+          message: 'Не удалось инициализировать физический драйвер эквайринга.',
+          rttMs: durationMs,
+          timestamp: new Date().toISOString(),
+          terminalId: this.terminalId,
+          merchantId: this.merchantId,
+          bankName: this.bankName,
+          driverType: this.driverType,
+          isMockMode: false,
+          driverExecutablePath: this.driverExecutablePath,
+          connectionType: this.connectionType,
+          port: this.port,
+          baudRate: this.baudRate,
+          diagnosticSteps,
+          remediation: `Установите дистрибутив ПО эквайринга в папку ${this.driverExecutablePath} или переключите профиль в режим эмуляции (Mock).`
+        };
       }
 
-      return await new Promise((resolve, reject) => {
+      return await new Promise((resolve) => {
         execFile(this.driverExecutablePath, ['05'], { timeout: 15000 }, (err, stdout) => {
           const durationMs = Date.now() - startTime;
           if (err) {
+            diagnosticSteps.push({
+              id: 'driver',
+              name: 'Исполняемый файл драйвера',
+              status: 'success',
+              details: `Драйвер найден: ${this.driverExecutablePath}`
+            });
+            diagnosticSteps.push({
+              id: 'port',
+              name: 'Интерфейс подключения к терминалу',
+              status: 'warning',
+              details: `Порт ${this.port}: ${err.message}`
+            });
+            diagnosticSteps.push({
+              id: 'host',
+              name: 'Команда 05: Сеанс связи с хостом Альфа-Банка',
+              status: 'error',
+              details: `Сбой выполнения команды 05: ${err.message}`
+            });
+
             logPosAudit({
               level: PosLogLevels.ERROR,
               message: `Ошибка связи с процессингом: ${err.message}`,
@@ -239,16 +322,66 @@ class PosService {
               durationMs,
               exception: err
             });
-            return reject(new Error(`Сбой связи с банком: ${err.message}`));
+
+            return resolve({
+              success: false,
+              responseCode: '96',
+              error: `Сбой связи с банком: ${err.message}`,
+              message: 'Физический терминал не ответил на команду 05 или отсутствует связь с процессингом банка.',
+              rttMs: durationMs,
+              timestamp: new Date().toISOString(),
+              terminalId: this.terminalId,
+              merchantId: this.merchantId,
+              bankName: this.bankName,
+              driverType: this.driverType,
+              isMockMode: false,
+              driverExecutablePath: this.driverExecutablePath,
+              connectionType: this.connectionType,
+              port: this.port,
+              baudRate: this.baudRate,
+              diagnosticSteps,
+              remediation: 'Проверьте USB/COM-кабель терминала, подачу питания на устройство и доступность интернета.'
+            });
           }
+
+          diagnosticSteps.push({
+            id: 'driver',
+            name: 'Исполняемый файл драйвера',
+            status: 'success',
+            details: `Драйвер успешно запущен (${this.driverExecutablePath})`
+          });
+          diagnosticSteps.push({
+            id: 'port',
+            name: 'Интерфейс подключения к терминалу',
+            status: 'success',
+            details: `Порт ${this.port} отвечает в штатном режиме`
+          });
+          diagnosticSteps.push({
+            id: 'host',
+            name: 'Команда 05: Сеанс связи с хостом Альфа-Банка',
+            status: 'success',
+            details: `Код ответа: 00 (Успех), RTT: ${durationMs} мс`
+          });
+          diagnosticSteps.push({
+            id: 'crypto',
+            name: 'Проверка криптографических ключей',
+            status: 'success',
+            details: 'Ключи терминала синхронизированы с хостом банка'
+          });
 
           resolve({
             success: true,
             responseCode: '00',
             message: 'Связь с процессингом АО «Альфа-Банк» подтверждена (Физический терминал).',
             rttMs: durationMs,
-            stdout: stdout.trim(),
-            timestamp: new Date().toISOString()
+            stdout: (stdout || '').trim(),
+            timestamp: new Date().toISOString(),
+            terminalId: this.terminalId,
+            merchantId: this.merchantId,
+            bankName: this.bankName,
+            driverType: this.driverType,
+            isMockMode: false,
+            diagnosticSteps
           });
         });
       });

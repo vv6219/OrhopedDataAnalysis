@@ -31,7 +31,25 @@ router.post('/test-host', async (req, res) => {
     const result = await posService.testHost();
     res.json(result);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.json({
+      success: false,
+      responseCode: '99',
+      error: err.message,
+      message: 'Исключение при вызове теста связи с хостом',
+      rttMs: 0,
+      timestamp: new Date().toISOString(),
+      terminalId: posService.terminalId,
+      merchantId: posService.merchantId,
+      bankName: posService.bankName,
+      driverType: posService.driverType,
+      isMockMode: posService.isMockMode,
+      diagnosticSteps: [
+        { id: 'gateway', name: 'Сетевой шлюз МИС (Node.js API)', status: 'success', details: 'Маршрутизатор /api/pos активен' },
+        { id: 'driver', name: 'Инициализация оборудования', status: 'error', details: err.message },
+        { id: 'host', name: 'Сеанс связи с банком (Команда 05)', status: 'skipped', details: 'Прервано' }
+      ],
+      remediation: 'Проверьте настройки эквайринга или переключите профиль в режим эмуляции (Mock).'
+    });
   }
 });
 

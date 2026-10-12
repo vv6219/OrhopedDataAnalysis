@@ -52,6 +52,34 @@ export interface PosSettingsProfile {
   updated_by: string;
 }
 
+export interface PosDiagnosticStep {
+  id: string;
+  name: string;
+  status: 'success' | 'warning' | 'error' | 'skipped';
+  details: string;
+}
+
+export interface PosHostTestResult {
+  success: boolean;
+  responseCode?: string;
+  message?: string;
+  error?: string;
+  rttMs?: number;
+  timestamp?: string;
+  terminalId?: string;
+  merchantId?: string;
+  bankName?: string;
+  driverType?: string;
+  isMockMode?: boolean;
+  connectionType?: string;
+  port?: string;
+  baudRate?: number;
+  driverExecutablePath?: string;
+  diagnosticSteps?: PosDiagnosticStep[];
+  remediation?: string;
+  rawResponse?: string;
+}
+
 interface PosContextType {
   posStatus: PosTerminalStatus | null;
   activeProfile: PosSettingsProfile | null;
@@ -59,7 +87,7 @@ interface PosContextType {
   refreshPosStatus: () => Promise<void>;
   setMockMode: (isMockMode: boolean, profileId?: number, updatedBy?: string) => Promise<any>;
   activateProfile: (profileId: number, updatedBy?: string) => Promise<any>;
-  testHost: () => Promise<any>;
+  testHost: () => Promise<PosHostTestResult>;
 }
 
 const PosContext = createContext<PosContextType | undefined>(undefined);
@@ -78,14 +106,20 @@ export function PosProvider({ children }: { children: ReactNode }) {
       ]);
 
       if (resStatus.ok) {
-        const data = await resStatus.json();
-        setPosStatus(data);
+        const contentType = resStatus.headers.get('content-type') || '';
+        if (contentType.includes('application/json')) {
+          const data = await resStatus.json();
+          setPosStatus(data);
+        }
       }
 
       if (resSettings.ok) {
-        const profiles: PosSettingsProfile[] = await resSettings.json();
-        const active = profiles.find(p => p.is_active === 1) || null;
-        setActiveProfileState(active);
+        const contentType = resSettings.headers.get('content-type') || '';
+        if (contentType.includes('application/json')) {
+          const profiles: PosSettingsProfile[] = await resSettings.json();
+          const active = profiles.find(p => p.is_active === 1) || null;
+          setActiveProfileState(active);
+        }
       }
     } catch (err) {
       console.error('Error refreshing POS context:', err);
@@ -111,8 +145,13 @@ export function PosProvider({ children }: { children: ReactNode }) {
       })
     });
     if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.error || 'Ошибка переключения режима эквайринга');
+      const contentType = res.headers.get('content-type') || '';
+      let errMsg = 'Ошибка переключения режима эквайринга';
+      if (contentType.includes('application/json')) {
+        const err = await res.json();
+        errMsg = err.error || errMsg;
+      }
+      throw new Error(errMsg);
     }
     const data = await res.json();
     await refreshPosStatus();
@@ -130,14 +169,47 @@ export function PosProvider({ children }: { children: ReactNode }) {
     return data;
   };
 
-  const testHost = async () => {
-    const res = await fetch(`${API_BASE_URL}/api/pos/test-host`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' }
-    });
-    const data = await res.json();
-    await refreshPosStatus();
-    return data;
+  const testHost = async (): Promise<PosHostTestResult> => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/pos/test-host`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      const contentType = res.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) {
+        const text = await res.text();
+        return {
+          success: false,
+          responseCode: '99',
+          error: `Сервер вернул ответ без JSON (HTTP ${res.status}): ${text.slice(0, 120)}...`,
+          message: 'Шлюз Express вернул неожиданный формат (HTML вместо JSON). Проверьте запуск сервера.',
+          rttMs: 0,
+          timestamp: new Date().toISOString(),
+          diagnosticSteps: [
+            { id: 'gateway', name: 'Сетевой шлюз МИС (Node.js API)', status: 'error', details: `HTTP ${res.status} (Получен HTML/Text вместо JSON)` },
+            { id: 'routing', name: 'Маршрутизация Express', status: 'error', details: 'Маршрут /api/pos/test-host не распознан сервером' }
+          ],
+          remediation: 'Перезапустите фоновый процесс сервера Node.js на порту 5000'
+        };
+      }
+      const data: PosHostTestResult = await res.json();
+      await refreshPosStatus();
+      return data;
+    } catch (err: any) {
+      return {
+        success: false,
+        responseCode: '99',
+        error: err.message || 'Ошибка связи с сервером',
+        message: 'Не удалось отправить сетевой запрос к локальному сервису эквайринга',
+        rttMs: 0,
+        timestamp: new Date().toISOString(),
+        diagnosticSteps: [
+          { id: 'network', name: 'Сетевой вызов клиента (Fetch)', status: 'error', details: err.message || 'Network error' },
+          { id: 'gateway', name: 'Сервер МИС (порт 5000)', status: 'error', details: 'Соединение недоступно' }
+        ],
+        remediation: 'Убедитесь, что сервер Node.js запущен на порту 5000'
+      };
+    }
   };
 
   return (
