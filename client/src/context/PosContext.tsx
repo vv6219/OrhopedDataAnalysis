@@ -15,6 +15,7 @@ export interface PosTerminalStatus {
   ipPort?: number;
   executionTimeoutSeconds: number;
   enableSbpQr: boolean;
+  driverExecutablePath?: string;
   hardware?: {
     found: boolean;
     isHardwareReady: boolean;

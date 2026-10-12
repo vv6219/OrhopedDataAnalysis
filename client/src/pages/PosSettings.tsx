@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   Box, Typography, Paper, Button, TextField, Switch, FormControlLabel,
   MenuItem, Select, FormControl, InputLabel, Chip,
@@ -13,10 +14,13 @@ import SaveIcon from '@mui/icons-material/Save';
 import AddCircleIcon from '@mui/icons-material/AddCircle';
 import DeleteIcon from '@mui/icons-material/Delete';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import ErrorIcon from '@mui/icons-material/Error';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import HistoryIcon from '@mui/icons-material/History';
 import UsbIcon from '@mui/icons-material/Usb';
 import SecurityIcon from '@mui/icons-material/Security';
+import FolderOpenIcon from '@mui/icons-material/FolderOpen';
+import TuneIcon from '@mui/icons-material/Tune';
 import { usePos, type PosSettingsProfile } from '../context/PosContext';
 
 export interface PosAuditRecord {
@@ -43,6 +47,7 @@ const CONNECTION_TYPES = [
 ];
 
 export default function PosSettings() {
+  const [searchParams] = useSearchParams();
   const { refreshPosStatus, activateProfile } = usePos();
   const [profiles, setProfiles] = useState<PosSettingsProfile[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -50,6 +55,28 @@ export default function PosSettings() {
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState(0);
   const [alert, setAlert] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+  // Driver check state
+  const [driverCheckStatus, setDriverCheckStatus] = useState<{ checked: boolean; exists: boolean; message: string; checking: boolean }>({
+    checked: false,
+    exists: false,
+    message: '',
+    checking: false
+  });
+
+  // Handle URL params (?tab=hardware, ?tab=1)
+  useEffect(() => {
+    const tabParam = searchParams.get('tab');
+    if (tabParam === 'hardware' || tabParam === '1') {
+      setActiveTab(1);
+    } else if (tabParam === 'profile' || tabParam === '0') {
+      setActiveTab(0);
+    } else if (tabParam === 'requisites' || tabParam === '2') {
+      setActiveTab(2);
+    } else if (tabParam === 'audit' || tabParam === '3') {
+      setActiveTab(3);
+    }
+  }, [searchParams]);
 
   // Form state
   const [form, setForm] = useState<Partial<PosSettingsProfile>>({
@@ -73,6 +100,28 @@ export default function PosSettings() {
     is_active: 0,
     notes: ''
   });
+
+  const checkDriverPath = async (customPath?: string) => {
+    const pathToCheck = customPath || form.driver_executable_path || 'C:\\Arcus2\\pos.exe';
+    setDriverCheckStatus(prev => ({ ...prev, checking: true }));
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/pos/check-driver?path=${encodeURIComponent(pathToCheck)}`);
+      const data = await res.json();
+      setDriverCheckStatus({
+        checked: true,
+        exists: Boolean(data.exists),
+        message: data.message || (data.exists ? 'Файл драйвера обнаружен' : 'Файл не найден'),
+        checking: false
+      });
+    } catch (e: any) {
+      setDriverCheckStatus({
+        checked: true,
+        exists: false,
+        message: e.message || 'Ошибка проверки пути',
+        checking: false
+      });
+    }
+  };
 
   // Audit logs state
   const [auditLogs, setAuditLogs] = useState<PosAuditRecord[]>([]);
@@ -375,7 +424,7 @@ export default function PosSettings() {
                 />
               </Box>
 
-              {form.is_mock_mode === 1 && (
+              {form.is_mock_mode === 1 ? (
                 <Box sx={{ mt: 2, pt: 2, borderTop: '1px dashed #FDE68A', display: 'flex', gap: 2, flexWrap: 'wrap' }}>
                   <FormControl size="small" sx={{ minWidth: 240 }}>
                     <InputLabel>Сценарий симуляции</InputLabel>
@@ -399,6 +448,26 @@ export default function PosSettings() {
                     onChange={(e) => setForm({ ...form, mock_delay_seconds: Number(e.target.value) })}
                     sx={{ width: 160 }}
                   />
+                </Box>
+              ) : (
+                <Box sx={{ mt: 2, pt: 2, borderTop: '1px dashed #86EFAC', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1.5 }}>
+                  <Box>
+                    <Typography variant="body2" sx={{ color: '#166534', fontWeight: 600 }}>
+                      Исполняемый файл драйвера: <b>{form.driver_executable_path || 'C:\\Arcus2\\pos.exe'}</b>
+                    </Typography>
+                    <Typography variant="caption" sx={{ color: '#15803D' }}>
+                      Используется для прямого взаимодействия с терминалом по протоколу {form.driver_type || 'Arcus-2'}
+                    </Typography>
+                  </Box>
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    onClick={() => setActiveTab(1)}
+                    startIcon={<TuneIcon />}
+                    sx={{ color: '#166534', borderColor: '#166534', fontWeight: 700, textTransform: 'none', borderRadius: 1.5 }}
+                  >
+                    Настроить путь к драйверу (Вкладка 2)
+                  </Button>
                 </Box>
               )}
             </Paper>
@@ -474,15 +543,105 @@ export default function PosSettings() {
                   ))}
                 </Select>
               </FormControl>
-
-              <TextField
-                label="Путь к исполняемому файлу Arcus-2"
-                value={form.driver_executable_path || 'C:\\Arcus2\\pos.exe'}
-                onChange={(e) => setForm({ ...form, driver_executable_path: e.target.value })}
-                fullWidth
-                helperText="Обычно C:\Arcus2\pos.exe или C:\sc552\pos.exe"
-              />
             </Box>
+
+            {/* Dedicated Driver Executable Path Section */}
+            <Paper
+              id="driver-path-section"
+              sx={{
+                p: 2.5,
+                mb: 3,
+                borderRadius: 2.5,
+                bgcolor: '#FFFFFF',
+                border: '1px solid #CBD5E1',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.04)'
+              }}
+            >
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5, flexWrap: 'wrap', gap: 1 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <FolderOpenIcon sx={{ color: '#0F3C64' }} />
+                  <Typography variant="subtitle1" sx={{ fontWeight: 800, color: '#0F3C64' }}>
+                    Исполняемый файл драйвера эквайринга (Arcus-2 / INPAS)
+                  </Typography>
+                </Box>
+                {driverCheckStatus.checked && (
+                  <Chip
+                    size="small"
+                    icon={driverCheckStatus.exists ? <CheckCircleIcon sx={{ fontSize: 16 }} /> : <ErrorIcon sx={{ fontSize: 16 }} />}
+                    label={driverCheckStatus.message}
+                    sx={{
+                      fontWeight: 700,
+                      bgcolor: driverCheckStatus.exists ? '#DCFCE7' : '#FEE2E2',
+                      color: driverCheckStatus.exists ? '#15803D' : '#B91C1C'
+                    }}
+                  />
+                )}
+              </Box>
+
+              <Box sx={{ display: 'flex', gap: 1.5, mb: 1.5, flexWrap: 'wrap' }}>
+                <TextField
+                  label="Полный путь к файлу pos.exe на рабочей станции"
+                  value={form.driver_executable_path || 'C:\\Arcus2\\pos.exe'}
+                  onChange={(e) => {
+                    setForm({ ...form, driver_executable_path: e.target.value });
+                    setDriverCheckStatus(prev => ({ ...prev, checked: false }));
+                  }}
+                  fullWidth
+                  sx={{ flex: 1, minWidth: 280 }}
+                  helperText="Используется для команд 00 (Оплата картой), 05 (Тест связи с процессингом), 26 (Сверка итогов Z-отчет)"
+                />
+                <Button
+                  variant="outlined"
+                  onClick={() => checkDriverPath(form.driver_executable_path)}
+                  disabled={driverCheckStatus.checking}
+                  startIcon={driverCheckStatus.checking ? <CircularProgress size={16} /> : <CheckCircleIcon />}
+                  sx={{
+                    height: 56,
+                    px: 2.5,
+                    color: '#0F3C64',
+                    borderColor: '#0F3C64',
+                    fontWeight: 700,
+                    textTransform: 'none',
+                    borderRadius: 1.5,
+                    whiteSpace: 'nowrap'
+                  }}
+                >
+                  {driverCheckStatus.checking ? 'Проверка...' : 'Проверить файл'}
+                </Button>
+              </Box>
+
+              {/* Fast Presets */}
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                <Typography variant="caption" sx={{ fontWeight: 700, color: '#64748B' }}>
+                  Популярные пути установки ПО:
+                </Typography>
+                {[
+                  { label: 'C:\\Arcus2\\pos.exe (Arcus-2 по умолчанию)', path: 'C:\\Arcus2\\pos.exe' },
+                  { label: 'C:\\sc552\\pos.exe (SC552)', path: 'C:\\sc552\\pos.exe' },
+                  { label: 'C:\\DualConnector\\pos.exe (INPAS DualConnector)', path: 'C:\\DualConnector\\pos.exe' },
+                  { label: 'C:\\inpas\\pos.exe (INPAS)', path: 'C:\\inpas\\pos.exe' }
+                ].map((preset) => (
+                  <Chip
+                    key={preset.path}
+                    label={preset.label}
+                    size="small"
+                    clickable
+                    onClick={() => {
+                      setForm(prev => ({ ...prev, driver_executable_path: preset.path }));
+                      checkDriverPath(preset.path);
+                    }}
+                    sx={{
+                      cursor: 'pointer',
+                      bgcolor: form.driver_executable_path === preset.path ? '#EFF6FF' : '#F1F5F9',
+                      borderColor: form.driver_executable_path === preset.path ? '#3B82F6' : 'transparent',
+                      borderWidth: 1,
+                      borderStyle: 'solid',
+                      fontWeight: form.driver_executable_path === preset.path ? 700 : 500
+                    }}
+                  />
+                ))}
+              </Box>
+            </Paper>
 
             {/* Timeout Slider */}
             <Box sx={{ p: 2.5, borderRadius: 2, bgcolor: '#F8FAFC', border: '1px solid #E2E8F0', mb: 2 }}>

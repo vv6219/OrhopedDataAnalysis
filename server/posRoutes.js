@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const fs = require('fs');
 const db = require('./database');
 const { posService, inspectPortDevice } = require('./posService');
 const { logPosAudit, PosLogLevels, PosEventTypes } = require('./posAuditLogger');
@@ -64,6 +65,29 @@ router.get('/hardware-inspect', async (req, res) => {
     res.json(info);
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * GET /api/pos/check-driver
+ * Verifies if the specified driver executable exists on the local file system
+ */
+router.get('/check-driver', (req, res) => {
+  const targetPath = req.query.path || posService.driverExecutablePath || 'C:\\Arcus2\\pos.exe';
+  try {
+    const exists = fs.existsSync(targetPath);
+    res.json({
+      path: targetPath,
+      exists,
+      message: exists ? 'Файл драйвера обнаружен на диске' : 'Файл не найден по указанному пути'
+    });
+  } catch (err) {
+    res.json({
+      path: targetPath,
+      exists: false,
+      error: err.message,
+      message: `Ошибка проверки пути: ${err.message}`
+    });
   }
 });
 

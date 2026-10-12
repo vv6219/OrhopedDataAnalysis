@@ -178,6 +178,7 @@ class PosService {
       ipPort: this.ipPort,
       executionTimeoutSeconds: this.executionTimeoutSeconds,
       enableSbpQr: this.enableSbpQr,
+      driverExecutablePath: this.driverExecutablePath,
       hardware: hardwareCheck,
       isLocked: this.isLocked,
       activeProfileId: this.activeProfileId,

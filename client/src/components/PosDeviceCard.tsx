@@ -130,7 +130,7 @@ export default function PosDeviceCard({ onRefresh }: { onRefresh?: () => void })
                   />
                 </Box>
                 <Typography variant="caption" sx={{ color: '#64748B' }}>
-                  Протокол {posStatus?.driverType || 'Arcus-2'} • TID: <b>{posStatus?.terminalId || 'ALFA_770192'}</b> • Профиль: {posStatus?.profileName || 'Основной'}
+                  Протокол {posStatus?.driverType || 'Arcus-2'} • TID: <b>{posStatus?.terminalId || 'ALFA_770192'}</b> • Драйвер: <b>{posStatus?.driverExecutablePath || 'C:\\Arcus2\\pos.exe'}</b>
                 </Typography>
               </Box>
             </Box>
@@ -461,6 +461,32 @@ export default function PosDeviceCard({ onRefresh }: { onRefresh?: () => void })
                         <Typography variant="caption" sx={{ color: '#64748B', display: 'block', wordBreak: 'break-word', fontFamily: 'monospace', bgcolor: '#F8FAFC', p: 0.8, borderRadius: 1 }}>
                           {step.details}
                         </Typography>
+
+                        {/* Direct action button to configure driver path in PosSettings */}
+                        {step.id === 'driver' && isErr && (
+                          <Box sx={{ mt: 1 }}>
+                            <Button
+                              size="small"
+                              variant="contained"
+                              onClick={() => {
+                                setDialogOpen(false);
+                                navigate('/admin/pos-settings?tab=hardware');
+                              }}
+                              startIcon={<TuneIcon />}
+                              sx={{
+                                bgcolor: '#0F3C64',
+                                color: '#FFFFFF',
+                                fontWeight: 700,
+                                fontSize: '0.78rem',
+                                textTransform: 'none',
+                                borderRadius: 1.5,
+                                '&:hover': { bgcolor: '#082540' }
+                              }}
+                            >
+                              Изменить путь к файлу драйвера в «Параметры эквайринга «АО «АЛЬФА-БАНК»»
+                            </Button>
+                          </Box>
+                        )}
                       </Box>
                     </Box>
                   );
@@ -482,7 +508,7 @@ export default function PosDeviceCard({ onRefresh }: { onRefresh?: () => void })
                 • Порт подключения: <b>{hostResult?.port || posStatus?.port || 'COM4'} ({hostResult?.baudRate || posStatus?.baudRate || 115200} бод)</b>
               </Typography>
               <Typography variant="caption" sx={{ color: '#334155' }}>
-                • Путь к драйверу: <b>{hostResult?.driverExecutablePath || 'C:\\Arcus2\\pos.exe'}</b>
+                • Путь к драйверу: <b>{hostResult?.driverExecutablePath || posStatus?.driverExecutablePath || 'C:\\Arcus2\\pos.exe'}</b>
               </Typography>
               <Typography variant="caption" sx={{ color: '#334155' }}>
                 • Время проверки: <b>{new Date(hostResult?.timestamp || Date.now()).toLocaleString('ru-RU')}</b>
@@ -501,32 +527,55 @@ export default function PosDeviceCard({ onRefresh }: { onRefresh?: () => void })
                   </Typography>
                   <Typography variant="body2" sx={{ color: '#B45309', mb: 1.5 }}>
                     {hostResult?.remediation ||
-                      'Если физический POS-терминал не подключен по USB/COM-порту или на рабочей станции отсутствует драйвер Arcus-2, переключите эквайринг в режим эмуляции (Mock) для проверки сквозных сценариев МИС.'}
+                      'Если физический POS-терминал не подключен по USB/COM-порту или на рабочей станции отсутствует драйвер Arcus-2, переключите эквайринг в режим эмуляции (Mock) для проверки сквозных сценариев МИС или укажите верный путь к файлу в Параметрах эквайринга.'}
                   </Typography>
 
-                  {/* Quick Toggle to Mock Button if physically failing */}
-                  {!(hostResult?.isMockMode ?? isMock) && (
+                  <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
+                    {/* Quick Toggle to Mock Button if physically failing */}
+                    {!(hostResult?.isMockMode ?? isMock) && (
+                      <Button
+                        variant="contained"
+                        size="small"
+                        onClick={async () => {
+                          await handleToggleMock(true);
+                          await handleRunHostTest();
+                        }}
+                        disabled={testingHost || togglingMode}
+                        startIcon={<RestartAltIcon />}
+                        sx={{
+                          bgcolor: '#D97706',
+                          color: '#FFFFFF',
+                          fontWeight: 700,
+                          textTransform: 'none',
+                          borderRadius: 1.5,
+                          '&:hover': { bgcolor: '#B45309' }
+                        }}
+                      >
+                        Переключить в режим эмуляции (Mock) и повторить тест
+                      </Button>
+                    )}
+
                     <Button
-                      variant="contained"
+                      variant="outlined"
                       size="small"
-                      onClick={async () => {
-                        await handleToggleMock(true);
-                        await handleRunHostTest();
+                      onClick={() => {
+                        setDialogOpen(false);
+                        navigate('/admin/pos-settings?tab=hardware');
                       }}
-                      disabled={testingHost || togglingMode}
-                      startIcon={<RestartAltIcon />}
+                      startIcon={<TuneIcon />}
                       sx={{
-                        bgcolor: '#D97706',
-                        color: '#FFFFFF',
+                        color: '#0F3C64',
+                        borderColor: '#0F3C64',
                         fontWeight: 700,
                         textTransform: 'none',
                         borderRadius: 1.5,
-                        '&:hover': { bgcolor: '#B45309' }
+                        bgcolor: '#FFFFFF',
+                        '&:hover': { bgcolor: '#F8FAFC' }
                       }}
                     >
-                      Переключить в режим эмуляции (Mock) и повторить тест
+                      Параметры эквайринга «АО «АЛЬФА-БАНК»»
                     </Button>
-                  )}
+                  </Box>
                 </Box>
               </Box>
             </Box>
