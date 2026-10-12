@@ -39,6 +39,7 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 Name: "autostart"; Description: "Запускать сервер автоматически при загрузке Windows"; GroupDescription: "Параметры запуска:"; Flags: unchecked
 Name: "configure_iis"; Description: "Настроить публикацию через Microsoft IIS (Reverse Proxy на порту 80)"; GroupDescription: "Интеграция веб-сервера:"; Flags: unchecked
+Name: "inpas_service"; Description: "Установить службу эквайринга INPAS DualConnector 2.x (Альфа-Банк)"; GroupDescription: "Банковский эквайринг:"; Flags: unchecked
 Name: "db_tools"; Description: "Установить клиентские утилиты СУБД (SQLite & Firebird)"; GroupDescription: "Инструменты администратора:"; Flags: checkedonce
 
 [Files]
@@ -59,6 +60,8 @@ Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "
 Name: "{group}\Остановить сервер клиники"; Filename: "{app}\stop.bat"; WorkingDir: "{app}"
 ; Ссылка на документацию Swagger API
 Name: "{group}\REST API Документация (Swagger)"; Filename: "http://localhost:5000/api-docs"
+; Ссылка на утилиту DC Control
+Name: "{group}\Настройка эквайринга (INPAS DC Control)"; Filename: "C:\Program Files (x86)\INPAS\DualConnector\DCControl.exe"
 ; Ярлык на Рабочем столе
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\client\favicon.ico"; WorkingDir: "{app}"; Tasks: desktopicon
 
@@ -71,6 +74,9 @@ Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\s
 
 ; Регистрация службы автозапуска, если выбрана задача
 Filename: "{app}\install_service.bat"; Tasks: autostart; Flags: runhidden; StatusMsg: "Регистрация службы автоматического запуска..."
+
+; Установка службы эквайринга INPAS DualConnector 2.x, если выбрана задача
+Filename: "{app}\install_inpas_dualconnector.bat"; Tasks: inpas_service; Flags: runhidden; StatusMsg: "Установка и регистрация службы INPAS DualConnector 2.x..."
 
 ; Предложение запустить программу сразу после установки
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: postinstall skipifsilent nowait unchecked

@@ -45,6 +45,16 @@ if exist "%~dp0installers\rewrite_amd64_ru-RU.msi" (
     echo  [OK] Модули IIS установлены.
 )
 
+:: 4. INPAS DualConnector 2.x для эквайринга АО «Альфа-Банк»
+if exist "%~dp0install_inpas_dualconnector.bat" (
+    echo [4/4] Запуск установщика INPAS DualConnector 2.x...
+    call "%~dp0install_inpas_dualconnector.bat"
+) else if exist "%~dp0installers\inpas\Common Connectors Installer.exe" (
+    echo [4/4] Запуск установщика INPAS DualConnector 2.x...
+    start /wait "" "%~dp0installers\inpas\Common Connectors Installer.exe"
+    echo  [OK] INPAS DualConnector установлен.
+)
+
 echo ======================================================================
 echo  Все необходимые компоненты успешно настроены!
 echo ======================================================================

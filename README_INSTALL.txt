@@ -37,6 +37,7 @@ REST API сервер (Express), базу данных SQLite (61 000+ паци�
 │   ├── sqlite\              Инструменты работы с базой SQLite (open_db.bat)
 │   └── firebird\            Скрипт проверки связи с медицинской БД (test_connection.bat)
 ├── installers\              Офлайн-установщики для чистого ПК (VC++, Node.js MSI, IIS Rewrite, ARR)
+│   └── inpas\               Официальный установщик INPAS DualConnector 2.x (Альфа-Банк), утилита DC Control
 ├── scripts\iis\             PowerShell-скрипты автоматической настройки Microsoft IIS
 ├── appsettings.json         Центральный файл конфигурации сервера
 ├── start.bat                Быстрый запуск бэкенда и открытие браузера (Zero-Dependency)
@@ -44,6 +45,7 @@ REST API сервер (Express), базу данных SQLite (61 000+ паци�
 ├── create_desktop_shortcut.bat  Создание удобного ярлыка на Рабочем столе
 ├── install_prerequisites.bat    Тихая установка системных компонентов на чистый ПК в 1 клик
 ├── install_service.bat      Установка сервера в качестве службы Windows (автозапуск)
+├── install_inpas_dualconnector.bat  Установка и запуск службы INPAS DualConnector 2.x (Альфа-Банк)
 ├── setup_iis.bat            Публикация сайта в Microsoft IIS на порту 80 (Reverse Proxy)
 └── README_INSTALL.txt       Данная инструкция
 

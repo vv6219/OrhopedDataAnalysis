@@ -168,11 +168,12 @@ Write-Host "  -> Copied IIS automation scripts to scripts\iis" -ForegroundColor 
 Copy-Item -Path (Join-Path $rootDir "start.bat") -Destination (Join-Path $OutputDir "start.bat") -Force
 Copy-Item -Path (Join-Path $rootDir "stop.bat") -Destination (Join-Path $OutputDir "stop.bat") -Force
 Copy-Item -Path (Join-Path $rootDir "install_service.bat") -Destination (Join-Path $OutputDir "install_service.bat") -Force
+Copy-Item -Path (Join-Path $rootDir "install_inpas_dualconnector.bat") -Destination (Join-Path $OutputDir "install_inpas_dualconnector.bat") -Force
 Copy-Item -Path (Join-Path $rootDir "setup_iis.bat") -Destination (Join-Path $OutputDir "setup_iis.bat") -Force
 Copy-Item -Path (Join-Path $rootDir "install_prerequisites.bat") -Destination (Join-Path $OutputDir "install_prerequisites.bat") -Force
 Copy-Item -Path (Join-Path $rootDir "create_desktop_shortcut.bat") -Destination (Join-Path $OutputDir "create_desktop_shortcut.bat") -Force
 Copy-Item -Path (Join-Path $rootDir "README_INSTALL.txt") -Destination (Join-Path $OutputDir "README_INSTALL.txt") -Force
-Write-Host "  -> Copied launchers (start, stop, service, iis, prerequisites, shortcut, README) to root" -ForegroundColor Gray
+Write-Host "  -> Copied launchers (start, stop, service, inpas, iis, prerequisites, shortcut, README) to root" -ForegroundColor Gray
 
 # 5. Server node_modules dependencies
 Write-Host "`n[5/7] Preparing Node.js backend dependencies..." -ForegroundColor Yellow
