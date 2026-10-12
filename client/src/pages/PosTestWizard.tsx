@@ -602,7 +602,9 @@ export default function PosTestWizard() {
                 1. Проверка связи с банком
               </Typography>
               <Typography variant="caption" sx={{ color: '#64748B', display: 'block', mb: 1.5 }}>
-                Команда 05: Пинг процессинга и валидация ключей без списания средств.
+                {posStatus?.driverType === 'INPAS'
+                  ? 'Команда 09: Пинг процессинга через службу Dual Connector и проверка сессионных ключей.'
+                  : 'Команда 05: Пинг процессинга и валидация ключей без списания средств.'}
               </Typography>
             </Box>
             <Button
@@ -624,7 +626,9 @@ export default function PosTestWizard() {
                 2. Тестовое списание + Reversal
               </Typography>
               <Typography variant="caption" sx={{ color: '#64748B', display: 'block', mb: 1.5 }}>
-                Авторизует 1.00 ₽ и через 1 сек автоматически возвращает сумму (Reversal).
+                {posStatus?.driverType === 'INPAS'
+                  ? 'Action 1 + Action 2: Авторизация 1.00 ₽ и немедленный возврат через XML-шлюз DualConnector.'
+                  : 'Авторизует 1.00 ₽ и через 1 сек автоматически возвращает сумму (Reversal).'}
               </Typography>
             </Box>
             <Button
@@ -646,7 +650,9 @@ export default function PosTestWizard() {
                 3. Сверка итогов (Settlement)
               </Typography>
               <Typography variant="caption" sx={{ color: '#64748B', display: 'block', mb: 1.5 }}>
-                Выгрузка журнала транзакций в банк и печать отчёта сверки дня.
+                {posStatus?.driverType === 'INPAS'
+                  ? 'Action 7: Суточная сверка итогов дня в службе DualConnector и закрытие смены в банке.'
+                  : 'Выгрузка журнала транзакций в банк и печать отчёта сверки дня.'}
               </Typography>
             </Box>
             <Button

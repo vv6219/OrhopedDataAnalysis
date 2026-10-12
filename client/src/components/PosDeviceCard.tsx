@@ -7,6 +7,9 @@ import {
   Chip,
   Switch,
   FormControlLabel,
+  FormControl,
+  Select,
+  MenuItem,
   Button,
   CircularProgress,
   Dialog,
@@ -37,29 +40,41 @@ import TerminalIcon from '@mui/icons-material/Terminal';
 import LanIcon from '@mui/icons-material/Lan';
 import KeyIcon from '@mui/icons-material/Key';
 import { usePos, type PosHostTestResult } from '../context/PosContext';
-import { API_BASE_URL } from '../config/apiConfig';
 
 export default function PosDeviceCard({ onRefresh }: { onRefresh?: () => void }) {
   const navigate = useNavigate();
-  const { posStatus, activeProfile, loading, refreshPosStatus, testHost } = usePos();
+  const { posStatus, profiles, activeProfile, loading, refreshPosStatus, setMockMode, activateProfile, testHost } = usePos();
   const [testingHost, setTestingHost] = useState(false);
   const [hostResult, setHostResult] = useState<PosHostTestResult | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [togglingMode, setTogglingMode] = useState(false);
+  const [toggleError, setToggleError] = useState<string | null>(null);
 
   const handleToggleMock = async (newMock: boolean) => {
-    if (!activeProfile) return;
     setTogglingMode(true);
+    setToggleError(null);
     try {
-      await fetch(`${API_BASE_URL}/api/pos/settings/${activeProfile.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ is_mock_mode: newMock ? 1 : 0 })
-      });
-      await refreshPosStatus();
+      const targetId = activeProfile?.id || posStatus?.activeProfileId;
+      await setMockMode(newMock, targetId);
       if (onRefresh) onRefresh();
-    } catch (e) {
+    } catch (e: any) {
       console.error('Error toggling mock mode:', e);
+      setToggleError(e.message || 'Ошибка переключения режима эквайринга');
+    } finally {
+      setTogglingMode(false);
+    }
+  };
+
+  const handleSwitchActiveProfile = async (newProfileId: number) => {
+    if (!newProfileId || newProfileId === activeProfile?.id) return;
+    setTogglingMode(true);
+    setToggleError(null);
+    try {
+      await activateProfile(newProfileId);
+      if (onRefresh) onRefresh();
+    } catch (e: any) {
+      console.error('Error activating profile:', e);
+      setToggleError(e.message || 'Ошибка смены активного профиля');
     } finally {
       setTogglingMode(false);
     }
@@ -94,6 +109,12 @@ export default function PosDeviceCard({ onRefresh }: { onRefresh?: () => void })
         }}
       >
         <CardContent sx={{ p: 3 }}>
+          {toggleError && (
+            <Alert severity="error" onClose={() => setToggleError(null)} sx={{ mb: 2, borderRadius: 2 }}>
+              {toggleError}
+            </Alert>
+          )}
+
           {/* Header Row */}
           <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', mb: 2, flexWrap: 'wrap', gap: 1.5 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
@@ -130,13 +151,48 @@ export default function PosDeviceCard({ onRefresh }: { onRefresh?: () => void })
                   />
                 </Box>
                 <Typography variant="caption" sx={{ color: '#64748B' }}>
-                  Протокол {posStatus?.driverType || 'Arcus-2'} • TID: <b>{posStatus?.terminalId || 'ALFA_770192'}</b> • Драйвер: <b>{posStatus?.driverExecutablePath || 'C:\\Arcus2\\pos.exe'}</b>
+                  Протокол {posStatus?.driverType || 'Arcus-2'} • TID: <b>{posStatus?.terminalId || 'ALFA_770192'}</b> •{' '}
+                  {posStatus?.driverType === 'INPAS' ? (
+                    <>
+                      Служба: <b>{posStatus?.serviceName || 'DualConnectorService'}</b>{' '}
+                      <span style={{ color: posStatus?.serviceStatus?.status === 'Running' ? '#16A34A' : isMock ? '#D97706' : '#DC2626', fontWeight: 700 }}>
+                        ({posStatus?.serviceStatus ? (posStatus.serviceStatus.status === 'Running' ? '🟢 Работает' : '🔴 Остановлена') : isMock ? '🟡 Эмуляция' : '⚪ Не найдена'})
+                      </span>
+                    </>
+                  ) : (
+                    <>Драйвер: <b>{posStatus?.driverExecutablePath || 'C:\\Arcus2\\pos.exe'}</b></>
+                  )}
                 </Typography>
               </Box>
             </Box>
 
-            {/* Mode Switcher */}
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            {/* Mode & Profile Switcher Toolbar */}
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
+              {profiles && profiles.length > 1 && (
+                <FormControl size="small" sx={{ minWidth: 220 }}>
+                  <Select
+                    size="small"
+                    value={activeProfile?.id || posStatus?.activeProfileId || profiles[0]?.id || ''}
+                    onChange={(e) => handleSwitchActiveProfile(Number(e.target.value))}
+                    disabled={togglingMode || loading}
+                    sx={{
+                      height: 36,
+                      fontSize: '0.78rem',
+                      fontWeight: 700,
+                      bgcolor: '#F8FAFC',
+                      borderRadius: 2,
+                      '.MuiOutlinedInput-notchedOutline': { borderColor: '#CBD5E1' }
+                    }}
+                  >
+                    {profiles.map(p => (
+                      <MenuItem key={p.id} value={p.id} sx={{ fontSize: '0.8rem', fontWeight: p.id === activeProfile?.id ? 800 : 500 }}>
+                        {p.driver_type === 'INPAS' ? '🟣 INPAS' : '🔵 Arcus-2'}: {p.profile_name}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              )}
+
               <Tooltip title={isMock ? 'Переключить на физический POS-терминал (USB/Ethernet)' : 'Переключить в режим эмуляции (Mock)'}>
                 <FormControlLabel
                   control={
@@ -149,7 +205,7 @@ export default function PosDeviceCard({ onRefresh }: { onRefresh?: () => void })
                   }
                   label={
                     <Typography variant="body2" sx={{ fontWeight: 700, fontSize: '0.82rem', color: isMock ? '#D97706' : '#059669' }}>
-                      {isMock ? '🟡 Эмуляция (Mock)' : '🟢 Реальный POS'}
+                      {togglingMode ? 'Переключение...' : isMock ? '🟡 Эмуляция (Mock)' : '🟢 Реальный POS'}
                     </Typography>
                   }
                 />
@@ -160,8 +216,8 @@ export default function PosDeviceCard({ onRefresh }: { onRefresh?: () => void })
                   size="small"
                   variant="outlined"
                   onClick={refreshPosStatus}
-                  disabled={loading}
-                  sx={{ minWidth: 36, px: 1, borderColor: '#CBD5E1', color: '#475569' }}
+                  disabled={loading || togglingMode}
+                  sx={{ minWidth: 36, px: 1, height: 36, borderColor: '#CBD5E1', color: '#475569' }}
                 >
                   <RefreshIcon sx={{ fontSize: 18 }} />
                 </Button>
@@ -203,9 +259,15 @@ export default function PosDeviceCard({ onRefresh }: { onRefresh?: () => void })
                 Интерфейс подключения
               </Typography>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
-                <UsbIcon sx={{ fontSize: 18, color: '#0F3C64' }} />
+                {posStatus?.driverType === 'INPAS' ? (
+                  <LanIcon sx={{ fontSize: 18, color: '#0F3C64' }} />
+                ) : (
+                  <UsbIcon sx={{ fontSize: 18, color: '#0F3C64' }} />
+                )}
                 <Typography variant="body2" sx={{ fontWeight: 700, color: '#1E293B' }}>
-                  {posStatus?.connectionType === 'COM'
+                  {posStatus?.driverType === 'INPAS'
+                    ? `XML ${posStatus?.ipAddress || '127.0.0.1'}:${posStatus?.ipPort || 8888}`
+                    : posStatus?.connectionType === 'COM'
                     ? `${posStatus.port} (${posStatus.baudRate} бод)`
                     : `${posStatus?.ipAddress}:${posStatus?.ipPort}`}
                 </Typography>

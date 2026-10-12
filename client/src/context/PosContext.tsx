@@ -16,6 +16,15 @@ export interface PosTerminalStatus {
   executionTimeoutSeconds: number;
   enableSbpQr: boolean;
   driverExecutablePath?: string;
+  serviceName?: string;
+  exchangePath?: string;
+  serviceStatus?: {
+    found: boolean;
+    status: string;
+    displayName: string;
+    startType: string;
+    error?: string;
+  } | null;
   hardware?: {
     found: boolean;
     isHardwareReady: boolean;
@@ -44,6 +53,8 @@ export interface PosSettingsProfile {
   currency_code: string;
   execution_timeout_seconds: number;
   driver_executable_path: string;
+  service_name?: string;
+  exchange_path?: string;
   enable_sbp_qr: number;
   mock_scenario: string;
   mock_delay_seconds: number;
@@ -83,6 +94,7 @@ export interface PosHostTestResult {
 
 interface PosContextType {
   posStatus: PosTerminalStatus | null;
+  profiles: PosSettingsProfile[];
   activeProfile: PosSettingsProfile | null;
   loading: boolean;
   refreshPosStatus: () => Promise<void>;
@@ -95,6 +107,7 @@ const PosContext = createContext<PosContextType | undefined>(undefined);
 
 export function PosProvider({ children }: { children: ReactNode }) {
   const [posStatus, setPosStatus] = useState<PosTerminalStatus | null>(null);
+  const [profiles, setProfiles] = useState<PosSettingsProfile[]>([]);
   const [activeProfile, setActiveProfileState] = useState<PosSettingsProfile | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -117,8 +130,9 @@ export function PosProvider({ children }: { children: ReactNode }) {
       if (resSettings.ok) {
         const contentType = resSettings.headers.get('content-type') || '';
         if (contentType.includes('application/json')) {
-          const profiles: PosSettingsProfile[] = await resSettings.json();
-          const active = profiles.find(p => p.is_active === 1) || null;
+          const profs: PosSettingsProfile[] = await resSettings.json();
+          setProfiles(profs);
+          const active = profs.find(p => p.is_active === 1) || null;
           setActiveProfileState(active);
         }
       }
@@ -217,6 +231,7 @@ export function PosProvider({ children }: { children: ReactNode }) {
     <PosContext.Provider
       value={{
         posStatus,
+        profiles,
         activeProfile,
         loading,
         refreshPosStatus,

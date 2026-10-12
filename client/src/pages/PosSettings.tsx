@@ -24,6 +24,9 @@ import SecurityIcon from '@mui/icons-material/Security';
 import FolderOpenIcon from '@mui/icons-material/FolderOpen';
 import TuneIcon from '@mui/icons-material/Tune';
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
+import LanIcon from '@mui/icons-material/Lan';
+import RestartAltIcon from '@mui/icons-material/RestartAlt';
+import PlayCircleFilledWhiteIcon from '@mui/icons-material/PlayCircleFilledWhite';
 import { usePos, type PosSettingsProfile } from '../context/PosContext';
 
 export interface PosAuditRecord {
@@ -51,7 +54,7 @@ const CONNECTION_TYPES = [
 
 export default function PosSettings() {
   const [searchParams] = useSearchParams();
-  const { refreshPosStatus, activateProfile } = usePos();
+  const { refreshPosStatus, activateProfile, setMockMode } = usePos();
   const [profiles, setProfiles] = useState<PosSettingsProfile[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
@@ -116,12 +119,88 @@ export default function PosSettings() {
     currency_code: '643',
     execution_timeout_seconds: 60,
     driver_executable_path: 'C:\\Arcus2\\pos.exe',
+    service_name: 'DualConnectorService',
+    exchange_path: 'C:\\Program Files (x86)\\INPAS\\DualConnector\\Exchange',
     enable_sbp_qr: 1,
     mock_scenario: 'success',
     mock_delay_seconds: 2,
     is_active: 0,
     notes: ''
   });
+
+  // Windows Service (INPAS DualConnector) management state
+  const [serviceStatus, setServiceStatus] = useState<{
+    found: boolean;
+    status: string;
+    displayName: string;
+    startType: string;
+    error?: string;
+  } | null>(null);
+  const [checkingService, setCheckingService] = useState(false);
+  const [restartingService, setRestartingService] = useState(false);
+  const [launchingDcControl, setLaunchingDcControl] = useState(false);
+
+  const checkWindowsService = async (customServiceName?: string) => {
+    const sName = customServiceName || form.service_name || 'DualConnectorService';
+    setCheckingService(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/pos/inpas/service-status?service_name=${encodeURIComponent(sName)}`);
+      if (res.ok) {
+        const data = await res.json();
+        setServiceStatus(data);
+      }
+    } catch (e: any) {
+      console.error('Error checking service status:', e);
+    } finally {
+      setCheckingService(false);
+    }
+  };
+
+  const handleRestartService = async () => {
+    const sName = form.service_name || 'DualConnectorService';
+    setRestartingService(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/pos/inpas/restart-service`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ service_name: sName })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setAlert({ type: 'success', message: data.message });
+      } else {
+        setAlert({ type: 'error', message: data.message || data.error });
+      }
+      await checkWindowsService(sName);
+      await refreshPosStatus();
+    } catch (e: any) {
+      setAlert({ type: 'error', message: `Ошибка перезапуска службы: ${e.message}` });
+    } finally {
+      setRestartingService(false);
+    }
+  };
+
+  const handleLaunchDcControl = async () => {
+    const exePath = form.driver_executable_path || 'C:\\Program Files (x86)\\INPAS\\DualConnector\\DCControl.exe';
+    setLaunchingDcControl(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/pos/inpas/launch-dc-control`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: exePath })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setAlert({ type: 'success', message: data.message });
+      } else {
+        setAlert({ type: 'error', message: data.message || data.error });
+      }
+    } catch (e: any) {
+      setAlert({ type: 'error', message: `Ошибка запуска DC Control: ${e.message}` });
+    } finally {
+      setLaunchingDcControl(false);
+    }
+  };
 
   const checkDriverPath = async (customPath?: string) => {
     const pathToCheck = customPath || form.driver_executable_path || 'C:\\Arcus2\\pos.exe';
@@ -363,6 +442,25 @@ export default function PosSettings() {
               </Select>
             </FormControl>
 
+            {currentSelectedProfile && currentSelectedProfile.is_active !== 1 && (
+              <Button
+                variant="contained"
+                size="small"
+                onClick={handleActivate}
+                startIcon={<CheckCircleIcon />}
+                sx={{
+                  bgcolor: '#16A34A',
+                  color: '#FFFFFF',
+                  fontWeight: 800,
+                  textTransform: 'none',
+                  borderRadius: 1.5,
+                  '&:hover': { bgcolor: '#15803D' }
+                }}
+              >
+                Активировать этот профиль
+              </Button>
+            )}
+
             <Button
               variant="contained"
               size="small"
@@ -450,14 +548,24 @@ export default function PosSettings() {
                   <Typography variant="body2" sx={{ color: form.is_mock_mode ? '#B45309' : '#15803D' }}>
                     {form.is_mock_mode
                       ? 'Транзакции симулируются программно. Реальные карты не требуются, списание средств не происходит.'
-                      : 'Команды направляются на физический терминал через драйвер Arcus-2. Требуется реальный считыватель.'}
+                      : `Команды направляются на физический терминал через ${form.driver_type === 'INPAS' ? 'Windows-службу DualConnectorService (XML)' : 'драйвер Arcus-2'}. Требуется реальный считыватель.`}
                   </Typography>
                 </Box>
                 <FormControlLabel
                   control={
                     <Switch
                       checked={form.is_mock_mode === 0}
-                      onChange={(e) => setForm({ ...form, is_mock_mode: e.target.checked ? 0 : 1 })}
+                      onChange={async (e) => {
+                        const newMock = e.target.checked ? 0 : 1;
+                        setForm(prev => ({ ...prev, is_mock_mode: newMock }));
+                        if (currentSelectedProfile?.is_active === 1 && selectedId) {
+                          try {
+                            await setMockMode(newMock === 1, selectedId);
+                          } catch (err: any) {
+                            console.error('Error auto-syncing mock mode:', err);
+                          }
+                        }
+                      }}
                       color="success"
                     />
                   }
@@ -659,6 +767,7 @@ export default function PosSettings() {
                 {[
                   { label: 'C:\\Arcus2\\pos.exe (Arcus-2 по умолчанию)', path: 'C:\\Arcus2\\pos.exe' },
                   { label: 'C:\\sc552\\pos.exe (SC552)', path: 'C:\\sc552\\pos.exe' },
+                  { label: 'C:\\Program Files (x86)\\INPAS\\DualConnector\\DCControl.exe (INPAS DualConnector 2.x)', path: 'C:\\Program Files (x86)\\INPAS\\DualConnector\\DCControl.exe' },
                   { label: 'C:\\DualConnector\\pos.exe (INPAS DualConnector)', path: 'C:\\DualConnector\\pos.exe' },
                   { label: 'C:\\inpas\\pos.exe (INPAS)', path: 'C:\\inpas\\pos.exe' }
                 ].map((preset) => (
@@ -668,7 +777,18 @@ export default function PosSettings() {
                     size="small"
                     clickable
                     onClick={() => {
-                      setForm(prev => ({ ...prev, driver_executable_path: preset.path }));
+                      setForm(prev => ({
+                        ...prev,
+                        driver_executable_path: preset.path,
+                        ...(preset.path.includes('INPAS') ? {
+                          driver_type: 'INPAS',
+                          connection_type: 'TCP_IP',
+                          ip_address: '127.0.0.1',
+                          ip_port: 8888,
+                          service_name: 'DualConnectorService',
+                          exchange_path: 'C:\\Program Files (x86)\\INPAS\\DualConnector\\Exchange'
+                        } : {})
+                      }));
                       checkDriverPath(preset.path);
                     }}
                     sx={{
@@ -681,6 +801,100 @@ export default function PosSettings() {
                     }}
                   />
                 ))}
+              </Box>
+            </Paper>
+
+            {/* INPAS DualConnector Windows Service Control Panel */}
+            <Paper
+              sx={{
+                p: 2.5,
+                mb: 3,
+                borderRadius: 2.5,
+                bgcolor: form.driver_type === 'INPAS' ? '#F0FDF4' : '#F8FAFC',
+                border: '1px solid',
+                borderColor: form.driver_type === 'INPAS' ? '#86EFAC' : '#E2E8F0',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.03)'
+              }}
+            >
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2, flexWrap: 'wrap', gap: 1 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.2 }}>
+                  <LanIcon sx={{ color: form.driver_type === 'INPAS' ? '#166534' : '#475569' }} />
+                  <Typography variant="subtitle1" sx={{ fontWeight: 800, color: form.driver_type === 'INPAS' ? '#166534' : '#334155' }}>
+                    Служба Windows: INPAS Dual Connector Service
+                  </Typography>
+                </Box>
+                {serviceStatus && (
+                  <Chip
+                    size="small"
+                    icon={serviceStatus.status === 'Running' ? <CheckCircleIcon sx={{ fontSize: 16 }} /> : <ErrorIcon sx={{ fontSize: 16 }} />}
+                    label={`Статус: ${serviceStatus.status === 'Running' ? 'Работает (Running)' : serviceStatus.status === 'Stopped' ? 'Остановлена' : 'Не установлена'}`}
+                    sx={{
+                      fontWeight: 700,
+                      bgcolor: serviceStatus.status === 'Running' ? '#DCFCE7' : '#FEE2E2',
+                      color: serviceStatus.status === 'Running' ? '#15803D' : '#B91C1C'
+                    }}
+                  />
+                )}
+              </Box>
+
+              <Typography variant="body2" sx={{ color: '#64748B', mb: 2 }}>
+                Для работы через INPAS DualConnector 2.x требуется запущенная фоновая служба Windows <code>{form.service_name || 'DualConnectorService'}</code> и настроенный XML-обмен через утилиту <b>DC Control</b>.
+              </Typography>
+
+              <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 2, mb: 2 }}>
+                <TextField
+                  label="Системное имя службы Windows"
+                  value={form.service_name || 'DualConnectorService'}
+                  onChange={(e) => setForm({ ...form, service_name: e.target.value })}
+                  fullWidth
+                  size="small"
+                  helperText="По умолчанию: DualConnectorService"
+                />
+
+                <TextField
+                  label="Каталог обмена XML (Fallback)"
+                  value={form.exchange_path || 'C:\\Program Files (x86)\\INPAS\\DualConnector\\Exchange'}
+                  onChange={(e) => setForm({ ...form, exchange_path: e.target.value })}
+                  fullWidth
+                  size="small"
+                  helperText="Каталог для сохранения request.xml / response.xml"
+                />
+              </Box>
+
+              <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  onClick={() => checkWindowsService(form.service_name)}
+                  disabled={checkingService}
+                  startIcon={checkingService ? <CircularProgress size={14} /> : <RefreshIcon fontSize="small" />}
+                  sx={{ textTransform: 'none', fontWeight: 700, borderRadius: 1.5 }}
+                >
+                  {checkingService ? 'Опрос службы...' : 'Проверить службу'}
+                </Button>
+
+                <Button
+                  size="small"
+                  variant="outlined"
+                  color="warning"
+                  onClick={handleRestartService}
+                  disabled={restartingService}
+                  startIcon={restartingService ? <CircularProgress size={14} /> : <RestartAltIcon fontSize="small" />}
+                  sx={{ textTransform: 'none', fontWeight: 700, borderRadius: 1.5 }}
+                >
+                  {restartingService ? 'Перезапуск...' : 'Перезапустить службу Windows'}
+                </Button>
+
+                <Button
+                  size="small"
+                  variant="contained"
+                  onClick={handleLaunchDcControl}
+                  disabled={launchingDcControl}
+                  startIcon={launchingDcControl ? <CircularProgress size={14} /> : <PlayCircleFilledWhiteIcon fontSize="small" />}
+                  sx={{ textTransform: 'none', fontWeight: 700, borderRadius: 1.5, bgcolor: '#0F3C64', '&:hover': { bgcolor: '#1E40AF' } }}
+                >
+                  {launchingDcControl ? 'Запуск...' : 'Открыть DC Control'}
+                </Button>
               </Box>
             </Paper>
 

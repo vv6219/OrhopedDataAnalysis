@@ -54,7 +54,7 @@ export const PosFiscalManualPrintTemplate = React.forwardRef<HTMLDivElement, Pos
             Технологическая инструкция кассира: Эквайринг и Фискализация
           </Typography>
           <Typography variant="subtitle2" sx={{ color: '#4A5568', mt: 0.3, fontSize: '9pt', fontWeight: 500 }}>
-            Порядок работы с POS-терминалом АО «АЛЬФА-БАНК» (Arcus-2) и ККТ «АТОЛ 91Ф» (ФФД 1.2, 54-ФЗ) в МИС «ОртоERP»
+            Порядок работы с POS-терминалами АО «АЛЬФА-БАНК» (Arcus-2 / INPAS DualConnector 2.x) и ККТ «АТОЛ 91Ф» (ФФД 1.2, 54-ФЗ) в МИС «ОртоERP»
           </Typography>
         </Box>
 
@@ -79,8 +79,8 @@ export const PosFiscalManualPrintTemplate = React.forwardRef<HTMLDivElement, Pos
             <TableBody>
               <TableRow>
                 <TableCell sx={{ fontWeight: 700, fontSize: '8pt', py: 0.5 }}>Банковский терминал</TableCell>
-                <TableCell sx={{ fontSize: '8pt', py: 0.5 }}>Ingenico / Verifone (Arcus-2 / <code>pos.exe</code>)</TableCell>
-                <TableCell sx={{ fontSize: '8pt', py: 0.5 }}>COM4 (USB-VCP), 115200 бод, таймаут 60 с</TableCell>
+                <TableCell sx={{ fontSize: '8pt', py: 0.5 }}>Ingenico / Verifone / PAX (Arcus-2 <code>pos.exe</code> или INPAS DualConnector 2.x)</TableCell>
+                <TableCell sx={{ fontSize: '8pt', py: 0.5 }}>COM4 (USB-VCP 115200) или TCP 127.0.0.1:8888 (служба DualConnector), таймаут 60 с</TableCell>
                 <TableCell sx={{ fontSize: '8pt', py: 0.5 }}>Очный прием карт МИР/Visa/MC, СБП QR, авторизация в Альфа-Банке</TableCell>
               </TableRow>
               <TableRow>
@@ -114,17 +114,17 @@ export const PosFiscalManualPrintTemplate = React.forwardRef<HTMLDivElement, Pos
 
           <Box component="ol" sx={{ pl: 2.5, m: 0, fontSize: '8.5pt', color: '#1F2937', '& li': { mb: 0.6 } }}>
             <li>
-              <strong>Шаг 1. Включение и внешний осмотр:</strong> Включить ККТ АТОЛ 91Ф (дождаться одиночного звукового сигнала готовности) и POS-терминал Ingenico/Verifone. Убедиться в отсутствии повреждений кабелей.
+              <strong>Шаг 1. Включение и внешний осмотр:</strong> Включить ККТ АТОЛ 91Ф (дождаться одиночного звукового сигнала готовности) и POS-терминал Ingenico/Verifone/PAX. Убедиться в отсутствии повреждений кабелей.
             </li>
             <li>
               <strong>Шаг 2. Контроль чековой ленты:</strong> Проверить наличие рулона термобумаги 57 мм в ККТ и терминале. При диаметре рулона менее 2 см установить новый рулон (термослоем наружу).
             </li>
             <li>
-              <strong>Шаг 3. Тест связи с процессингом Альфа-Банка (Команда 05):</strong> Открыть сервисную панель <code>PosDeviceCard</code> в правом верхнем углу МИС и запустить <em>«Тест связи с процессингом»</em>. Убедиться в успешном прохождении всех 5 фаз:
+              <strong>Шаг 3. Тест связи с процессингом Альфа-Банка (Команда 05/09):</strong> Открыть сервисную панель <code>PosDeviceCard</code> в правом верхнем углу МИС и запустить <em>«Тест связи с процессингом»</em>. Убедиться в успешном прохождении всех фаз диагностики:
               <Box component="div" sx={{ pl: 1.5, my: 0.3, fontSize: '8pt', color: '#4B5563' }}>
-                • 1. Шлюз МИС (OK) • 2. Файл драйвера <code>pos.exe</code> (OK, найден) • 3. Порт COM4 (OK) • 4. Пинг хоста Альфа-Банка (Код 00, RTT &lt; 500ms) • 5. Ключи криптографии (OK).
+                • 1. Шлюз МИС (OK) • 2. Драйвер / Служба Windows <code>DualConnectorService</code> (OK) • 3. Порт связи (OK) • 4. Пинг хоста Альфа-Банка (Код 00, RTT &lt; 500ms) • 5. Ключи криптографии (OK).
               </Box>
-              <em>При ошибке шага 2 («Файл не найден»):</em> нажать кнопку <em>«Изменить путь к файлу драйвера»</em>, выбрать путь <code>C:\Arcus2\pos.exe</code> и нажать <em>«Проверить файл»</em>.
+              <em>При использовании INPAS:</em> в <code>/admin/pos-settings</code> на вкладке 2 доступен перезапуск службы Windows и запуск утилиты <code>DCControl.exe</code>.
             </li>
             <li>
               <strong>Шаг 4. Контроль фискальной смены (&lt; 24 часов):</strong> Проверить статус смены в <code>/admin/fiscal-shifts</code>. Если смена была открыта накануне и длится &gt; 22 часов, выполнить закрытие смены (Z-отчет) во избежание блокировки ККТ налогами.

@@ -28,6 +28,8 @@ function initPosSchema(db, callback) {
       currency_code TEXT NOT NULL DEFAULT '643',        -- 643 = RUB
       execution_timeout_seconds INTEGER NOT NULL DEFAULT 60 CHECK(execution_timeout_seconds BETWEEN 15 AND 180),
       driver_executable_path TEXT DEFAULT 'C:\\Arcus2\\pos.exe',
+      service_name TEXT DEFAULT 'DualConnectorService',
+      exchange_path TEXT DEFAULT 'C:\\Program Files (x86)\\INPAS\\DualConnector\\Exchange',
       enable_sbp_qr INTEGER NOT NULL DEFAULT 1,         -- SBP dynamic QR display on PIN-pad
       mock_scenario TEXT DEFAULT 'success',             -- 'success', 'insufficient_funds', 'cancelled', 'timeout'
       mock_delay_seconds INTEGER DEFAULT 2,             -- Simulated delay in seconds
@@ -36,6 +38,10 @@ function initPosSchema(db, callback) {
       updated_at TEXT DEFAULT (datetime('now', 'localtime')),
       updated_by TEXT DEFAULT 'Администратор'
     )`);
+
+    // Migration for existing tables
+    db.run("ALTER TABLE pos_terminal_settings ADD COLUMN service_name TEXT DEFAULT 'DualConnectorService'", () => {});
+    db.run("ALTER TABLE pos_terminal_settings ADD COLUMN exchange_path TEXT DEFAULT 'C:\\Program Files (x86)\\INPAS\\DualConnector\\Exchange'", () => {});
 
     // 2. Trigger: Single Active Profile constraint
     // When activating one profile, all other profiles are automatically set to is_active = 0
@@ -167,6 +173,30 @@ function initPosSchema(db, callback) {
           )
         `);
       }
+
+      // Ensure INPAS DualConnector preset profile is available
+      db.get("SELECT COUNT(*) as cnt FROM pos_terminal_settings WHERE driver_type = 'INPAS'", (inpasErr, inpasRow) => {
+        if (!inpasErr && (!inpasRow || inpasRow.cnt === 0)) {
+          db.run(`
+            INSERT OR IGNORE INTO pos_terminal_settings (
+              profile_name, is_mock_mode, driver_type, connection_type, port, baud_rate,
+              ip_address, ip_port, terminal_id, merchant_id, bank_name, currency_code,
+              execution_timeout_seconds, driver_executable_path, service_name, exchange_path,
+              enable_sbp_qr, mock_scenario, mock_delay_seconds, is_active, notes, updated_at, updated_by
+            ) VALUES (
+              'Терминал Альфа-Банк (INPAS DualConnector 2.x)', 1, 'INPAS', 'TCP_IP', 'COM4', 115200,
+              '127.0.0.1', 8888, 'ALFA_770192', 'MERCH_884102', 'АО «АЛЬФА-БАНК»', '643',
+              60, 'C:\\Program Files (x86)\\INPAS\\DualConnector\\DCControl.exe',
+              'DualConnectorService', 'C:\\Program Files (x86)\\INPAS\\DualConnector\\Exchange',
+              1, 'success', 2, 0,
+              'Профиль интеграции через Windows-службу Dual Connector Service и XML-протокол (SmartSale / UNIPOS).',
+              datetime('now', 'localtime'), 'Система'
+            )
+          `, (insertErr) => {
+            if (insertErr) console.warn('[initPosSchema] INPAS seed warning:', insertErr.message);
+          });
+        }
+      });
     });
 
     if (callback) callback();

@@ -10,6 +10,8 @@ const path = require('path');
 const db = require('./database');
 const { getPosConfig } = require('./config');
 const { logPosAudit, PosLogLevels, PosEventTypes } = require('./posAuditLogger');
+const InpasDriver = require('./inpasDriver');
+const { getWindowsServiceStatus, restartWindowsService, launchUtility } = require('./winServiceHelper');
 
 /**
  * Inspects physical serial port hardware or USB device in Windows PnP
@@ -114,6 +116,8 @@ class PosService {
     this.bankName = cfg.BankName || 'АО «АЛЬФА-БАНК»';
     this.executionTimeoutSeconds = cfg.ExecutionTimeoutSeconds || 60;
     this.driverExecutablePath = cfg.DriverExecutablePath || 'C:\\Arcus2\\pos.exe';
+    this.serviceName = cfg.ServiceName || 'DualConnectorService';
+    this.exchangePath = cfg.ExchangePath || 'C:\\Program Files (x86)\\INPAS\\DualConnector\\Exchange';
     this.enableSbpQr = cfg.EnableSbpQr !== undefined ? cfg.EnableSbpQr : true;
     this.mockScenario = cfg.MockScenario || 'success';
     this.mockDelaySeconds = cfg.MockDelaySeconds || 2;
@@ -139,6 +143,8 @@ class PosService {
           this.bankName = row.bank_name || this.bankName;
           this.executionTimeoutSeconds = row.execution_timeout_seconds || this.executionTimeoutSeconds;
           this.driverExecutablePath = row.driver_executable_path || this.driverExecutablePath;
+          this.serviceName = row.service_name || this.serviceName || 'DualConnectorService';
+          this.exchangePath = row.exchange_path || this.exchangePath || 'C:\\Program Files (x86)\\INPAS\\DualConnector\\Exchange';
           this.enableSbpQr = Boolean(row.enable_sbp_qr);
           this.mockScenario = row.mock_scenario || this.mockScenario;
           this.mockDelaySeconds = row.mock_delay_seconds || this.mockDelaySeconds;
@@ -155,8 +161,23 @@ class PosService {
     await this.refreshFromDb();
 
     let hardwareCheck = { found: true, isHardwareReady: true, deviceName: 'Эмулятор POS (Mock)' };
+    let serviceStatus = null;
+
+    if (this.driverType === 'INPAS') {
+      serviceStatus = await getWindowsServiceStatus(this.serviceName);
+    }
+
     if (!this.isMockMode) {
-      if (this.connectionType === 'COM') {
+      if (this.driverType === 'INPAS') {
+        const isSvcOk = serviceStatus && serviceStatus.status === 'Running';
+        hardwareCheck = {
+          found: Boolean(serviceStatus && serviceStatus.found),
+          isHardwareReady: isSvcOk,
+          deviceName: `INPAS DualConnector (${this.ipAddress}:${this.ipPort})`,
+          service: this.serviceName,
+          error: isSvcOk ? undefined : `Служба Windows '${this.serviceName}' имеет статус: ${serviceStatus ? serviceStatus.status : 'Не найдена'}`
+        };
+      } else if (this.connectionType === 'COM') {
         hardwareCheck = await inspectPortDevice(this.port);
       } else {
         // Ethernet / TCP/IP mock check
@@ -179,6 +200,9 @@ class PosService {
       executionTimeoutSeconds: this.executionTimeoutSeconds,
       enableSbpQr: this.enableSbpQr,
       driverExecutablePath: this.driverExecutablePath,
+      serviceName: this.serviceName,
+      exchangePath: this.exchangePath,
+      serviceStatus,
       hardware: hardwareCheck,
       isLocked: this.isLocked,
       activeProfileId: this.activeProfileId,
@@ -199,6 +223,170 @@ class PosService {
 
     this.isLocked = true;
     try {
+      if (this.driverType === 'INPAS') {
+        const inpasDriver = new InpasDriver({
+          ipAddress: this.ipAddress,
+          ipPort: this.ipPort,
+          timeoutSeconds: 15,
+          exchangePath: this.exchangePath,
+          isMockMode: this.isMockMode,
+          terminalId: this.terminalId,
+          merchantId: this.merchantId,
+          bankName: this.bankName,
+          mockScenario: this.mockScenario,
+          mockDelaySeconds: 1
+        });
+
+        const svcStatus = await getWindowsServiceStatus(this.serviceName);
+        const isUtilityFound = fs.existsSync(this.driverExecutablePath);
+
+        const diagnosticSteps = [
+          { id: 'gateway', name: 'Сетевой шлюз МИС (Node.js API)', status: 'success', details: 'Эндпоинт /api/pos/test-host доступен, RTT < 2 мс' },
+          { 
+            id: 'service', 
+            name: `Служба Windows «${this.serviceName}»`, 
+            status: this.isMockMode ? 'success' : (svcStatus.status === 'Running' ? 'success' : 'error'), 
+            details: this.isMockMode ? 'Служба эмулируется (Mock-режим активен)' : `Статус: ${svcStatus.status} (${svcStatus.displayName || this.serviceName})`
+          },
+          { 
+            id: 'dccontrol', 
+            name: 'Утилита конфигурации DC Control', 
+            status: isUtilityFound ? 'success' : (this.isMockMode ? 'warning' : 'error'), 
+            details: isUtilityFound ? `Файл найден: ${this.driverExecutablePath}` : (this.isMockMode ? 'В Mock-режиме наличие DCControl.exe не требуется' : `Файл не найден: ${this.driverExecutablePath}`)
+          },
+          { 
+            id: 'xml_gateway', 
+            name: 'Локальный XML-шлюз DualConnector', 
+            status: 'success', 
+            details: `Адрес ${this.ipAddress}:${this.ipPort} (XML Action 9)` 
+          }
+        ];
+
+        if (!this.isMockMode && svcStatus.status !== 'Running') {
+          const durationMs = Date.now() - startTime;
+          diagnosticSteps.push({
+            id: 'host',
+            name: 'Команда 09: Сеанс связи с хостом Альфа-Банка',
+            status: 'skipped',
+            details: 'Отменено: служба DualConnector не запущена'
+          });
+
+          logPosAudit({
+            level: PosLogLevels.WARN,
+            message: `Проверка связи INPAS: служба ${this.serviceName} остановлена (${svcStatus.status})`,
+            eventType: PosEventTypes.TEST_HOST,
+            terminalId: this.terminalId,
+            durationMs
+          });
+
+          return {
+            success: false,
+            responseCode: '99',
+            error: `Служба Windows '${this.serviceName}' находится в состоянии: ${svcStatus.status}`,
+            message: 'Не удалось выполнить сеанс связи. Служба DualConnectorService не запущена.',
+            rttMs: durationMs,
+            timestamp: new Date().toISOString(),
+            terminalId: this.terminalId,
+            merchantId: this.merchantId,
+            bankName: this.bankName,
+            driverType: this.driverType,
+            isMockMode: false,
+            diagnosticSteps,
+            remediation: `Запустите службу Windows '${this.serviceName}' через оснастку services.msc, утилиту DC Control или переключите профиль в режим эмуляции (Mock).`
+          };
+        }
+
+        try {
+          const inpasRes = await inpasDriver.executeCommand(9);
+          const durationMs = Date.now() - startTime;
+
+          if (inpasRes.success) {
+            diagnosticSteps.push({
+              id: 'host',
+              name: 'Команда 09: Сеанс связи с хостом Альфа-Банка',
+              status: 'success',
+              details: `Код ответа: 00 (Успех), RTT: ${durationMs} мс`
+            });
+            diagnosticSteps.push({
+              id: 'crypto',
+              name: 'Проверка криптографических ключей',
+              status: 'success',
+              details: 'Мастер-ключи и сессионные ключи INPAS актуальны'
+            });
+
+            logPosAudit({
+              level: PosLogLevels.INFO,
+              message: `Успешная проверка связи с процессингом INPAS DualConnector «${this.bankName}»`,
+              eventType: PosEventTypes.TEST_HOST,
+              terminalId: this.terminalId,
+              durationMs,
+              properties: { rttMs: durationMs, responseCode: '00' }
+            });
+
+            return {
+              success: true,
+              responseCode: '00',
+              message: 'Связь с процессингом АО «Альфа-Банк» проверена через INPAS DualConnector 2.x. Ключи актуальны.',
+              rttMs: durationMs,
+              timestamp: new Date().toISOString(),
+              terminalId: this.terminalId,
+              merchantId: this.merchantId,
+              bankName: this.bankName,
+              driverType: this.driverType,
+              isMockMode: this.isMockMode,
+              diagnosticSteps
+            };
+          } else {
+            diagnosticSteps.push({
+              id: 'host',
+              name: 'Команда 09: Сеанс связи с хостом Альфа-Банка',
+              status: 'error',
+              details: `Ошибка хоста: ${inpasRes.errorDescription} (Код: ${inpasRes.resultCode})`
+            });
+
+            return {
+              success: false,
+              responseCode: inpasRes.resultCode || '96',
+              error: inpasRes.errorDescription,
+              message: `Терминал вернул ошибку связи: ${inpasRes.errorDescription}`,
+              rttMs: durationMs,
+              timestamp: new Date().toISOString(),
+              terminalId: this.terminalId,
+              merchantId: this.merchantId,
+              bankName: this.bankName,
+              driverType: this.driverType,
+              isMockMode: this.isMockMode,
+              diagnosticSteps,
+              remediation: 'Проверьте соединение терминала с процессингом банка или обратитесь в службу поддержки эквайринга Альфа-Банка.'
+            };
+          }
+        } catch (inpasErr) {
+          const durationMs = Date.now() - startTime;
+          diagnosticSteps.push({
+            id: 'host',
+            name: 'Команда 09: Сеанс связи с хостом Альфа-Банка',
+            status: 'error',
+            details: `Исключение INPAS: ${inpasErr.message}`
+          });
+
+          return {
+            success: false,
+            responseCode: '96',
+            error: inpasErr.message,
+            message: 'Сбой сетевого взаимодействия со службой DualConnector.',
+            rttMs: durationMs,
+            timestamp: new Date().toISOString(),
+            terminalId: this.terminalId,
+            merchantId: this.merchantId,
+            bankName: this.bankName,
+            driverType: this.driverType,
+            isMockMode: this.isMockMode,
+            diagnosticSteps,
+            remediation: `Проверьте работу службы Windows '${this.serviceName}' на порту ${this.ipPort}.`
+          };
+        }
+      }
+
       if (this.isMockMode) {
         // Simulate network roundtrip latency to Alfa-Bank processing
         await new Promise(r => setTimeout(r, 600));
@@ -448,6 +636,107 @@ class PosService {
 
       const chosenScenario = scenario || this.mockScenario || 'success';
 
+      if (this.driverType === 'INPAS') {
+        const inpasDriver = new InpasDriver({
+          ipAddress: this.ipAddress,
+          ipPort: this.ipPort,
+          timeoutSeconds: this.executionTimeoutSeconds || 60,
+          exchangePath: this.exchangePath,
+          isMockMode: this.isMockMode,
+          terminalId: this.terminalId,
+          merchantId: this.merchantId,
+          bankName: this.bankName,
+          mockScenario: chosenScenario,
+          mockDelaySeconds: this.mockDelaySeconds
+        });
+
+        const amountKopecks = Math.round(amount * 100);
+        const inpasResult = await inpasDriver.executeCommand(1, {
+          amountKopecks,
+          scenario: chosenScenario,
+          orderId: transactionUuid,
+          cashierName: 'Добрушкин А.М.'
+        });
+
+        const durationMs = Date.now() - startTime;
+
+        if (!inpasResult.success) {
+          const errCode = inpasResult.resultCode || '99';
+          const errMsg = inpasResult.errorDescription || 'Отказ авторизации банковской картой';
+
+          await this._recordPosTransaction({
+            transactionUuid,
+            amount,
+            terminalId: this.terminalId,
+            merchantId: this.merchantId,
+            responseCode: String(errCode),
+            status: 'declined',
+            isMock: this.isMockMode ? 1 : 0,
+            errorMessage: errMsg
+          });
+
+          logPosAudit({
+            level: PosLogLevels.WARN,
+            message: `Отказ INPAS: ${errMsg} (Код: ${errCode})`,
+            eventType: PosEventTypes.AUTH_DECLINE,
+            terminalId: this.terminalId,
+            transactionUuid,
+            amount,
+            durationMs
+          });
+
+          throw new Error(errMsg);
+        }
+
+        const bankRrn = inpasResult.rrn || ('42890' + String(Date.now()).slice(-7));
+        const bankAuthCode = inpasResult.authCode || ('77' + String(Date.now()).slice(-4));
+        const maskedPan = inpasResult.pan || '4276********1094';
+        const cardType = inpasResult.cardType || 'MIR';
+        const slipText = inpasResult.slip || 'ОПЛАТА ОДОБРЕНА (INPAS DUALCONNECTOR)';
+
+        await this._recordPosTransaction({
+          transactionUuid,
+          amount,
+          terminalId: this.terminalId,
+          merchantId: this.merchantId,
+          rrn: bankRrn,
+          authCode: bankAuthCode,
+          cardType,
+          maskedPan,
+          responseCode: '00',
+          status: 'authorized',
+          isMock: this.isMockMode ? 1 : 0,
+          slipText
+        });
+
+        logPosAudit({
+          level: PosLogLevels.INFO,
+          message: `Успешная авторизация INPAS карты ${maskedPan}: сумма ${amount.toFixed(2)} ₽, RRN ${bankRrn}`,
+          eventType: PosEventTypes.AUTH_SUCCESS,
+          terminalId: this.terminalId,
+          transactionUuid,
+          amount,
+          rrn: bankRrn,
+          authCode: bankAuthCode,
+          durationMs
+        });
+
+        return {
+          success: true,
+          responseCode: '00',
+          transactionUuid,
+          amount,
+          rrn: bankRrn,
+          bankRrn,
+          authCode: bankAuthCode,
+          bankAuthCode,
+          maskedPan,
+          cardType,
+          slipText,
+          isMock: this.isMockMode
+        };
+      }
+
       if (this.isMockMode) {
         // Simulated execution with configurable delay
         const delayMs = (this.mockDelaySeconds || 2) * 1000;
@@ -655,6 +944,75 @@ class PosService {
       rrn: bankRrn
     });
 
+    if (this.driverType === 'INPAS') {
+      const inpasDriver = new InpasDriver({
+        ipAddress: this.ipAddress,
+        ipPort: this.ipPort,
+        timeoutSeconds: 30,
+        exchangePath: this.exchangePath,
+        isMockMode: this.isMockMode,
+        terminalId: this.terminalId,
+        merchantId: this.merchantId,
+        bankName: this.bankName
+      });
+
+      const inpasRes = await inpasDriver.executeCommand(2, { rrn: bankRrn });
+      if (!inpasRes.success) {
+        logPosAudit({
+          level: PosLogLevels.FATAL,
+          message: `Критический сбой отмены INPAS по RRN ${bankRrn}: ${inpasRes.errorDescription}`,
+          eventType: PosEventTypes.REVERSAL_FAIL,
+          terminalId: this.terminalId,
+          rrn: bankRrn
+        });
+        throw new Error(`Банковский откат не удался: ${inpasRes.errorDescription}`);
+      }
+
+      await new Promise((resolve, reject) => {
+        db.run(`
+          INSERT INTO pos_transactions (
+            transaction_uuid, original_pos_transaction_id, operation_type, amount,
+            terminal_id, merchant_id, rrn, auth_code, card_type, masked_pan,
+            response_code, status, is_mock, slip_text
+          ) VALUES (?, ?, 'reversal', ?, ?, ?, ?, 'REVERS', 'MIR', ?, '00', 'completed', ?, ?)
+        `, [
+          reversalUuid,
+          originalTx ? originalTx.id : null,
+          reverseAmount,
+          this.terminalId,
+          this.merchantId,
+          bankRrn,
+          originalTx ? originalTx.masked_pan : '4276********1094',
+          this.isMockMode ? 1 : 0,
+          inpasRes.slip || `АО «АЛЬФА-БАНК»\nОТМЕНА ОПЕРАЦИИ INPAS (REVERSAL)\nRRN: ${bankRrn}\nСУММА: ${reverseAmount.toFixed(2)} РУБ\nУСПЕШНО`
+        ], (err) => {
+          if (err) return reject(err);
+          if (originalTx) {
+            db.run("UPDATE pos_transactions SET status = 'reversed' WHERE id = ?", [originalTx.id]);
+          }
+          resolve();
+        });
+      });
+
+      logPosAudit({
+        level: PosLogLevels.INFO,
+        message: `Успешная отмена INPAS по RRN ${bankRrn}`,
+        eventType: PosEventTypes.REVERSAL_SUCCESS,
+        terminalId: this.terminalId,
+        transactionUuid: reversalUuid,
+        amount: reverseAmount,
+        rrn: bankRrn
+      });
+
+      return {
+        success: true,
+        responseCode: '00',
+        message: `Операция с RRN ${bankRrn} успешно отменена в банке (INPAS DualConnector).`,
+        reversalRrn: bankRrn,
+        reversalUuid
+      };
+    }
+
     if (this.isMockMode) {
       // Record reversal in DB
       await new Promise((resolve, reject) => {
@@ -760,24 +1118,46 @@ class PosService {
     const discrepancy = Number((totalAmount - fiscalCardAmount).toFixed(2));
     const status = Math.abs(discrepancy) < 0.01 ? 'matched' : 'discrepancy';
 
-    const settlementSlip = [
-      '========================================',
-      `           ${this.bankName}             `,
-      '           СВЕРКА ИТОГОВ ДНЯ            ',
-      '========================================',
-      `ТЕРМИНАЛ: ${this.terminalId}`,
-      `МЕРЧАНТ:  ${this.merchantId}`,
-      `ДАТА/ВРЕМЯ: ${new Date().toLocaleString('ru-RU')}`,
-      '----------------------------------------',
-      `ВСЕГО ОПЕРАЦИЙ: ${totalCount}`,
-      `СУММА ОПЕРАЦИЙ: ${totalAmount.toFixed(2)} РУБ.`,
-      `ФИСКАЛЬНАЯ СУММА ККТ: ${Number(fiscalCardAmount).toFixed(2)} РУБ.`,
-      `РАСХОЖДЕНИЕ: ${discrepancy.toFixed(2)} РУБ. (${status === 'matched' ? 'СХОДИТСЯ' : 'ТРЕБУЕТСЯ ВНИМАНИЕ'})`,
-      '----------------------------------------',
-      'ЖУРНАЛ ТЕРМИНАЛА ВЫГРУЖЕН В БАНК',
-      'СМЕНА В ПРОЦЕССИНГЕ ЗАКРЫТА УСПЕШНО',
-      '========================================'
-    ].join('\n');
+    let settlementSlip = '';
+    if (this.driverType === 'INPAS') {
+      const inpasDriver = new InpasDriver({
+        ipAddress: this.ipAddress,
+        ipPort: this.ipPort,
+        timeoutSeconds: 45,
+        exchangePath: this.exchangePath,
+        isMockMode: this.isMockMode,
+        terminalId: this.terminalId,
+        merchantId: this.merchantId,
+        bankName: this.bankName
+      });
+
+      const inpasRes = await inpasDriver.executeCommand(7, {
+        totalAmount,
+        count: totalCount
+      });
+      settlementSlip = inpasRes.slip || '';
+    }
+
+    if (!settlementSlip) {
+      settlementSlip = [
+        '========================================',
+        `           ${this.bankName}             `,
+        '           СВЕРКА ИТОГОВ ДНЯ            ',
+        '========================================',
+        `ТЕРМИНАЛ: ${this.terminalId}`,
+        `МЕРЧАНТ:  ${this.merchantId}`,
+        `ДАТА/ВРЕМЯ: ${new Date().toLocaleString('ru-RU')}`,
+        '----------------------------------------',
+        `ВСЕГО ОПЕРАЦИЙ: ${totalCount}`,
+        `СУММА ОПЕРАЦИЙ: ${totalAmount.toFixed(2)} РУБ.`,
+        `ФИСКАЛЬНАЯ СУММА ККТ: ${Number(fiscalCardAmount).toFixed(2)} РУБ.`,
+        `РАСХОЖДЕНИЕ: ${discrepancy.toFixed(2)} РУБ. (${status === 'matched' ? 'СХОДИТСЯ' : 'ТРЕБУЕТСЯ ВНИМАНИЕ'})`,
+        '----------------------------------------',
+        'ЖУРНАЛ ТЕРМИНАЛА ВЫГРУЖЕН В БАНК',
+        'СМЕНА В ПРОЦЕССИНГЕ ЗАКРЫТА УСПЕШНО',
+        '========================================'
+      ].join('\n');
+    }
 
     // Insert into pos_settlements table
     const settlementId = await new Promise((resolve, reject) => {

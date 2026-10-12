@@ -5,6 +5,7 @@ const db = require('./database');
 const { posService, inspectPortDevice } = require('./posService');
 const { logPosAudit, PosLogLevels, PosEventTypes } = require('./posAuditLogger');
 const { exec } = require('child_process');
+const { getWindowsServiceStatus, restartWindowsService, launchUtility } = require('./winServiceHelper');
 
 // ============================================================================
 // REAL-TIME STATUS & DIAGNOSTICS
@@ -128,6 +129,98 @@ router.get('/hardware-ports', (req, res) => {
       res.json([{ port: 'COM4', name: 'COM4 (По умолчанию)' }]);
     }
   });
+});
+
+// ============================================================================
+// INPAS DUALCONNECTOR 2.X SERVICE & SYSTEM MANAGEMENT
+// ============================================================================
+
+/**
+ * GET /api/pos/inpas/service-status
+ * Inspects Windows Service status (DualConnectorService)
+ */
+router.get('/inpas/service-status', async (req, res) => {
+  const serviceName = req.query.service_name || posService.serviceName || 'DualConnectorService';
+  try {
+    const status = await getWindowsServiceStatus(serviceName);
+    res.json(status);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /api/pos/inpas/restart-service
+ * Restarts Windows Service (DualConnectorService)
+ */
+router.post('/inpas/restart-service', async (req, res) => {
+  const serviceName = req.body.service_name || posService.serviceName || 'DualConnectorService';
+  try {
+    logPosAudit({
+      level: PosLogLevels.INFO,
+      message: `Запрос перезапуска службы Windows: ${serviceName}`,
+      eventType: PosEventTypes.POS_CONNECT,
+      terminalId: posService.terminalId
+    });
+
+    const result = await restartWindowsService(serviceName);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /api/pos/inpas/launch-dc-control
+ * Launches DCControl.exe utility on Windows host
+ */
+router.post('/inpas/launch-dc-control', async (req, res) => {
+  const targetPath = req.body.path || posService.driverExecutablePath || 'C:\\Program Files (x86)\\INPAS\\DualConnector\\DCControl.exe';
+  try {
+    const result = await launchUtility(targetPath);
+    logPosAudit({
+      level: result.success ? PosLogLevels.INFO : PosLogLevels.WARN,
+      message: `Запуск утилиты DC Control (${targetPath}): ${result.message}`,
+      eventType: PosEventTypes.POS_CONNECT,
+      terminalId: posService.terminalId
+    });
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * GET /api/pos/inpas/diagnose
+ * Comprehensive hardware and software diagnosis for INPAS DualConnector
+ */
+router.get('/inpas/diagnose', async (req, res) => {
+  try {
+    const serviceName = posService.serviceName || 'DualConnectorService';
+    const exePath = posService.driverExecutablePath || 'C:\\Program Files (x86)\\INPAS\\DualConnector\\DCControl.exe';
+    const exchangePath = posService.exchangePath || 'C:\\Program Files (x86)\\INPAS\\DualConnector\\Exchange';
+
+    const serviceStatus = await getWindowsServiceStatus(serviceName);
+    const exeExists = fs.existsSync(exePath);
+    const exchangeExists = fs.existsSync(exchangePath);
+
+    res.json({
+      serviceName,
+      serviceStatus,
+      exePath,
+      exeExists,
+      exchangePath,
+      exchangeExists,
+      isMockMode: posService.isMockMode,
+      terminalId: posService.terminalId,
+      merchantId: posService.merchantId,
+      ipAddress: posService.ipAddress,
+      ipPort: posService.ipPort,
+      timestamp: new Date().toISOString()
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ============================================================================
@@ -336,6 +429,8 @@ router.post('/settings', async (req, res) => {
     currency_code = '643',
     execution_timeout_seconds = 60,
     driver_executable_path = 'C:\\Arcus2\\pos.exe',
+    service_name = 'DualConnectorService',
+    exchange_path = 'C:\\Program Files (x86)\\INPAS\\DualConnector\\Exchange',
     enable_sbp_qr = 1,
     mock_scenario = 'success',
     mock_delay_seconds = 2,
@@ -359,9 +454,9 @@ router.post('/settings', async (req, res) => {
       INSERT INTO pos_terminal_settings (
         profile_name, is_mock_mode, driver_type, connection_type, port, baud_rate,
         ip_address, ip_port, terminal_id, merchant_id, bank_name, currency_code,
-        execution_timeout_seconds, driver_executable_path, enable_sbp_qr, mock_scenario,
-        mock_delay_seconds, is_active, notes, updated_at, updated_by
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now', 'localtime'), ?)
+        execution_timeout_seconds, driver_executable_path, service_name, exchange_path,
+        enable_sbp_qr, mock_scenario, mock_delay_seconds, is_active, notes, updated_at, updated_by
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now', 'localtime'), ?)
     `;
 
     db.run(sql, [
@@ -379,6 +474,8 @@ router.post('/settings', async (req, res) => {
       currency_code,
       Number(execution_timeout_seconds) || 60,
       driver_executable_path,
+      service_name || 'DualConnectorService',
+      exchange_path || 'C:\\Program Files (x86)\\INPAS\\DualConnector\\Exchange',
       enable_sbp_qr ? 1 : 0,
       mock_scenario,
       Number(mock_delay_seconds) || 2,
@@ -426,6 +523,8 @@ router.put('/settings/:id', async (req, res) => {
     currency_code,
     execution_timeout_seconds,
     driver_executable_path,
+    service_name,
+    exchange_path,
     enable_sbp_qr,
     mock_scenario,
     mock_delay_seconds,
@@ -457,6 +556,8 @@ router.put('/settings/:id', async (req, res) => {
         currency_code = COALESCE(?, currency_code),
         execution_timeout_seconds = COALESCE(?, execution_timeout_seconds),
         driver_executable_path = COALESCE(?, driver_executable_path),
+        service_name = COALESCE(?, service_name),
+        exchange_path = COALESCE(?, exchange_path),
         enable_sbp_qr = COALESCE(?, enable_sbp_qr),
         mock_scenario = COALESCE(?, mock_scenario),
         mock_delay_seconds = COALESCE(?, mock_delay_seconds),
@@ -482,6 +583,8 @@ router.put('/settings/:id', async (req, res) => {
       currency_code || null,
       execution_timeout_seconds ? Number(execution_timeout_seconds) : null,
       driver_executable_path || null,
+      service_name || null,
+      exchange_path || null,
       enable_sbp_qr !== undefined ? (enable_sbp_qr ? 1 : 0) : null,
       mock_scenario || null,
       mock_delay_seconds ? Number(mock_delay_seconds) : null,
