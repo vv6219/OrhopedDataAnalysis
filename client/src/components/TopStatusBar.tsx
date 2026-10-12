@@ -19,16 +19,19 @@ import LogoutIcon from '@mui/icons-material/Logout';
 import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
 import PointOfSaleIcon from '@mui/icons-material/PointOfSale';
 import CreditCardIcon from '@mui/icons-material/CreditCard';
+import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
 import { routeMetaMap } from '../config/navigationConfig';
 import { useAuth } from '../context/AuthContext';
 import { usePos } from '../context/PosContext';
+import { useFiscal } from '../context/FiscalContext';
 import FiscalShiftCloseModal from './FiscalShiftCloseModal';
 
 export default function TopStatusBar() {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, logout, isAuthenticated } = useAuth();
-  const { posStatus } = usePos();
+  const { posStatus, refreshPosStatus } = usePos();
+  const { fiscalStatus, refreshFiscalStatus } = useFiscal();
   const [shiftStatus, setShiftStatus] = useState<any>(null);
   const [closeShiftModalOpen, setCloseShiftModalOpen] = useState(false);
 
@@ -44,7 +47,11 @@ export default function TopStatusBar() {
 
   useEffect(() => {
     fetchShiftStatus();
-    const interval = setInterval(fetchShiftStatus, 30000);
+    const interval = setInterval(() => {
+      fetchShiftStatus();
+      refreshFiscalStatus();
+      refreshPosStatus();
+    }, 30000);
     return () => clearInterval(interval);
   }, []);
 
@@ -262,6 +269,59 @@ export default function TopStatusBar() {
                 shiftStatus?.isOpen
                   ? (shiftStatus.currentShift?.is_expired ? '#FCA5A5' : '#BBF7D0')
                   : '#CBD5E1'
+              }`,
+              fontWeight: 700,
+              fontSize: '0.75rem',
+              height: 28,
+              cursor: 'pointer'
+            }}
+          />
+        </Tooltip>
+
+        {/* ATOL 91F KKT Device Status Badge */}
+        <Tooltip
+          title={`Онлайн-касса «${fiscalStatus?.deviceModel || 'АТОЛ 91Ф'}» (ФФД 1.2, 54-ФЗ). Порт: ${fiscalStatus?.port || 'COM3'}. Режим: ${fiscalStatus?.isMockMode ? 'Эмуляция (Mock)' : 'Физический ККТ'}. Связь: ${fiscalStatus?.online !== false ? 'Готова к фискализации' : 'Ошибка связи'}. Нажмите для перехода в мастер тестов ККТ.`}
+        >
+          <Chip
+            icon={
+              <ReceiptLongIcon
+                sx={{
+                  fontSize: '15px !important',
+                  color: fiscalStatus?.isMockMode
+                    ? '#D97706 !important'
+                    : fiscalStatus?.online === false
+                    ? '#DC2626 !important'
+                    : '#166534 !important'
+                }}
+              />
+            }
+            label={
+              fiscalStatus?.isMockMode
+                ? 'АТОЛ 91Ф: Mock'
+                : fiscalStatus?.online === false
+                ? 'АТОЛ 91Ф: Ошибка'
+                : 'АТОЛ 91Ф: Ок'
+            }
+            size="small"
+            onClick={() => navigate('/admin/fiscal-test-wizard')}
+            clickable
+            sx={{
+              bgcolor: fiscalStatus?.isMockMode
+                ? '#FFFBEB'
+                : fiscalStatus?.online === false
+                ? '#FEF2F2'
+                : '#F0FDF4',
+              color: fiscalStatus?.isMockMode
+                ? '#B45309'
+                : fiscalStatus?.online === false
+                ? '#DC2626'
+                : '#166534',
+              border: `1px solid ${
+                fiscalStatus?.isMockMode
+                  ? '#FDE68A'
+                  : fiscalStatus?.online === false
+                  ? '#FCA5A5'
+                  : '#BBF7D0'
               }`,
               fontWeight: 700,
               fontSize: '0.75rem',
