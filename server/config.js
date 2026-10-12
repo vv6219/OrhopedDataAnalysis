@@ -117,6 +117,29 @@ function getFiscalConfig() {
   };
 }
 
+/**
+ * Dynamically resolves Alfa-Bank Acquiring POS Terminal configuration
+ */
+function getPosConfig() {
+  const settings = getAppSettings();
+  return settings?.AlfaPosTerminal || {
+    Port: 'COM4',
+    BaudRate: 115200,
+    IpAddress: '192.168.1.150',
+    IpPort: 8888,
+    TerminalId: 'ALFA_770192',
+    MerchantId: 'MERCH_884102',
+    DriverType: 'Arcus-2',
+    ConnectionType: 'COM',
+    IsMockMode: true,
+    ExecutionTimeoutSeconds: 60,
+    DriverExecutablePath: 'C:\\Arcus2\\pos.exe',
+    EnableSbpQr: true,
+    MockScenario: 'success',
+    MockDelaySeconds: 2
+  };
+}
+
 module.exports = {
   getAppSettings,
   saveAppSettings,
@@ -125,5 +148,7 @@ module.exports = {
   getSqliteConfig,
   getBackupConfig,
   getFiscalConfig,
+  getPosConfig,
   configPath
 };
+

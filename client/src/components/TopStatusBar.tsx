@@ -18,14 +18,17 @@ import MenuBookIcon from '@mui/icons-material/MenuBook';
 import LogoutIcon from '@mui/icons-material/Logout';
 import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
 import PointOfSaleIcon from '@mui/icons-material/PointOfSale';
+import CreditCardIcon from '@mui/icons-material/CreditCard';
 import { routeMetaMap } from '../config/navigationConfig';
 import { useAuth } from '../context/AuthContext';
+import { usePos } from '../context/PosContext';
 import FiscalShiftCloseModal from './FiscalShiftCloseModal';
 
 export default function TopStatusBar() {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, logout, isAuthenticated } = useAuth();
+  const { posStatus } = usePos();
   const [shiftStatus, setShiftStatus] = useState<any>(null);
   const [closeShiftModalOpen, setCloseShiftModalOpen] = useState(false);
 
@@ -260,6 +263,28 @@ export default function TopStatusBar() {
                   ? (shiftStatus.currentShift?.is_expired ? '#FCA5A5' : '#BBF7D0')
                   : '#CBD5E1'
               }`,
+              fontWeight: 700,
+              fontSize: '0.75rem',
+              height: 28,
+              cursor: 'pointer'
+            }}
+          />
+        </Tooltip>
+
+        {/* Alfa-Bank POS Terminal Badge */}
+        <Tooltip
+          title={`Банковский терминал Альфа-Банка (TID: ${posStatus?.terminalId || 'ALFA_770192'}). Режим: ${posStatus?.isMockMode ? 'Эмуляция (Mock)' : 'Физический POS'}. Нажмите для перехода в мастер тестов эквайринга.`}
+        >
+          <Chip
+            icon={<CreditCardIcon sx={{ fontSize: '15px !important', color: posStatus?.isMockMode ? '#D97706 !important' : '#2563EB !important' }} />}
+            label={posStatus?.isMockMode ? 'Альфа-Банк: Mock' : 'Альфа-Банк POS: Ок'}
+            size="small"
+            onClick={() => navigate('/admin/pos-test-wizard')}
+            clickable
+            sx={{
+              bgcolor: posStatus?.isMockMode ? '#FFFBEB' : '#EFF6FF',
+              color: posStatus?.isMockMode ? '#B45309' : '#1D4ED8',
+              border: `1px solid ${posStatus?.isMockMode ? '#FDE68A' : '#BFDBFE'}`,
               fontWeight: 700,
               fontSize: '0.75rem',
               height: 28,

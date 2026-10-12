@@ -17,7 +17,10 @@ import {
   Chip,
   Accordion,
   AccordionSummary,
-  AccordionDetails
+  AccordionDetails,
+  FormControlLabel,
+  Switch,
+  Divider
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import PrintIcon from '@mui/icons-material/Print';
@@ -31,6 +34,7 @@ import LockIcon from '@mui/icons-material/Lock';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import { useReactToPrint } from 'react-to-print';
 import { FiscalZReportPrintTemplate } from './FiscalZReportPrintTemplate';
+import { API_BASE_URL } from '../config/apiConfig';
 
 interface FiscalShiftCloseModalProps {
   open: boolean;
@@ -42,6 +46,7 @@ export default function FiscalShiftCloseModal({ open, onClose, onShiftClosed }: 
   const [loading, setLoading] = useState(false);
   const [currentShiftData, setCurrentShiftData] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
+  const [settleBankAcquiring, setSettleBankAcquiring] = useState(true);
 
   // Denominations for interactive cash calculator
   const [calcOpen, setCalcOpen] = useState(false);
@@ -141,7 +146,30 @@ export default function FiscalShiftCloseModal({ open, onClose, onShiftClosed }: 
         throw new Error(data.error || 'Ошибка закрытия смены');
       }
 
-      setClosedResult(data);
+      // Execute bank acquiring daily settlement (сверка итогов дня)
+      let posSettlementResult: any = null;
+      if (settleBankAcquiring) {
+        try {
+          const posRes = await fetch(`${API_BASE_URL}/api/pos/settlement`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              fiscal_shift_id: currentShiftData.id,
+              fiscal_card_amount: currentShiftData.expected_card || currentShiftData.card_amount || 0
+            })
+          });
+          if (posRes.ok) {
+            posSettlementResult = await posRes.json();
+          }
+        } catch (posErr) {
+          console.warn('[FiscalShiftCloseModal] POS settlement warning:', posErr);
+        }
+      }
+
+      setClosedResult({
+        ...data,
+        posSettlement: posSettlementResult
+      });
       if (onShiftClosed) onShiftClosed();
     } catch (err: any) {
       setError(err.message || 'Сбой закрытия смены');
@@ -248,6 +276,55 @@ export default function FiscalShiftCloseModal({ open, onClose, onShiftClosed }: 
                 </Box>
               </Card>
             </Box>
+
+            {/* Bank Acquiring Settlement Card */}
+            {closedResult.posSettlement && (
+              <Box sx={{ display: 'flex', justifyContent: 'center', mb: 3 }}>
+                <Card sx={{ maxWidth: 360, width: '100%', boxShadow: 4, borderRadius: 2, border: '1px solid #BAE6FD', bgcolor: '#F0F9FF' }}>
+                  <Box sx={{ bgcolor: '#0284C7', color: '#FFFFFF', p: 1.5, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <CreditCardIcon sx={{ fontSize: 20 }} />
+                      <Typography variant="caption" sx={{ fontWeight: 800 }}>
+                        СВЕРКА ИТОГОВ АЛЬФА-БАНКА
+                      </Typography>
+                    </Box>
+                    <Chip
+                      size="small"
+                      label={closedResult.posSettlement.status === 'matched' ? '🟢 Сошлось' : '⚠️ Расхождение'}
+                      sx={{
+                        fontWeight: 700,
+                        bgcolor: closedResult.posSettlement.status === 'matched' ? '#DCFCE7' : '#FEE2E2',
+                        color: closedResult.posSettlement.status === 'matched' ? '#166534' : '#991B1B'
+                      }}
+                    />
+                  </Box>
+                  <CardContent sx={{ p: 2 }}>
+                    <Typography variant="caption" sx={{ display: 'block', color: '#64748B', mb: 1 }}>
+                      Терминал: <b>{closedResult.posSettlement.terminalId || 'ALFA_770192'}</b> • Слип: <b>№{closedResult.posSettlement.settlementSequenceNumber || 1}</b>
+                    </Typography>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                      <Typography variant="body2" sx={{ color: '#475569' }}>Банк (эквайринг):</Typography>
+                      <Typography variant="body2" sx={{ fontWeight: 700, color: '#0F3C64' }}>
+                        {formatCurrency(closedResult.posSettlement.totalAuthorizedAmount || 0)}
+                      </Typography>
+                    </Box>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                      <Typography variant="body2" sx={{ color: '#475569' }}>ККТ (по чекам):</Typography>
+                      <Typography variant="body2" sx={{ fontWeight: 700, color: '#0F3C64' }}>
+                        {formatCurrency(closedResult.posSettlement.fiscalCardAmount || 0)}
+                      </Typography>
+                    </Box>
+                    <Divider sx={{ my: 1 }} />
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <Typography variant="body2" sx={{ fontWeight: 700, color: '#475569' }}>Расхождение:</Typography>
+                      <Typography variant="body2" sx={{ fontWeight: 800, color: closedResult.posSettlement.discrepancyAmount === 0 ? '#166534' : '#DC2626' }}>
+                        {formatCurrency(closedResult.posSettlement.discrepancyAmount || 0)}
+                      </Typography>
+                    </Box>
+                  </CardContent>
+                </Card>
+              </Box>
+            )}
           </Box>
         )}
 
@@ -474,6 +551,31 @@ export default function FiscalShiftCloseModal({ open, onClose, onShiftClosed }: 
                     <strong>Обнаружена недостача наличности: {formatCurrency(cashDifference)}.</strong> Проверьте правильность пересчета или укажите объяснение.
                   </Alert>
                 )}
+              </Box>
+
+              {/* Settle Bank Acquiring Switch */}
+              <Box sx={{ mt: 2, p: 1.5, bgcolor: '#F0F9FF', borderRadius: 2, border: '1px solid #BAE6FD', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <CreditCardIcon sx={{ color: '#0284C7' }} />
+                  <Box>
+                    <Typography variant="body2" sx={{ fontWeight: 700, color: '#0F3C64' }}>
+                      Сверка итогов эквайринга (АО «АЛЬФА-БАНК»)
+                    </Typography>
+                    <Typography variant="caption" sx={{ color: '#64748B' }}>
+                      Автоматическая выгрузка банковского отчета и сопоставление выручки по картам
+                    </Typography>
+                  </Box>
+                </Box>
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={settleBankAcquiring}
+                      onChange={(e) => setSettleBankAcquiring(e.target.checked)}
+                      color="primary"
+                    />
+                  }
+                  label={<Typography variant="body2" sx={{ fontWeight: 700, color: '#0F3C64' }}>Сверка дня</Typography>}
+                />
               </Box>
 
               <TextField

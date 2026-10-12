@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { API_BASE_URL } from '../config/apiConfig';
 import { 
   Typography, Box, Paper, Button, Stepper, Step, StepLabel, 
@@ -31,7 +31,10 @@ import UsbIcon from '@mui/icons-material/Usb';
 import SpeedIcon from '@mui/icons-material/Speed';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import ErrorIcon from '@mui/icons-material/Error';
+import CreditCardIcon from '@mui/icons-material/CreditCard';
 import { useFiscal } from '../context/FiscalContext';
+import { usePos } from '../context/PosContext';
+import { PosSlipPrintTemplate } from './PosTestWizard';
 
 const steps = ['Выбор пациента и сервисов', 'Назначение сотрудников', 'Расход материалов', 'Расчет и оплата'];
 
@@ -132,6 +135,13 @@ export default function CheckoutWizard() {
     testConnection: testGlobalConnection
   } = useFiscal();
 
+  // POS Acquiring Terminal State (Альфа-Банк Arcus-2)
+  const {
+    posStatus,
+    setMockMode: setGlobalPosMockMode,
+    testHost: testGlobalPosHost
+  } = usePos();
+
   const [fiscalize, setFiscalize] = useState(true);
   const [patientContact, setPatientContact] = useState('');
   const [fiscalStatus, setFiscalStatus] = useState<any | null>(globalFiscalStatus || null);
@@ -140,6 +150,18 @@ export default function CheckoutWizard() {
   const [testingFiscalConnection, setTestingFiscalConnection] = useState(false);
   const [fiscalTestDialogOpen, setFiscalTestDialogOpen] = useState(false);
   const [fiscalTestResult, setFiscalTestResult] = useState<any | null>(null);
+
+  // POS State
+  const [switchingPosMode, setSwitchingPosMode] = useState(false);
+  const [testingPosHost, setTestingPosHost] = useState(false);
+  const [posSlipDialogOpen, setPosSlipDialogOpen] = useState(false);
+  const [activePosSlipTx, setActivePosSlipTx] = useState<any | null>(null);
+  const printSlipRef = useRef<HTMLDivElement>(null);
+
+  const handlePrintPosSlip = useReactToPrint({
+    contentRef: printSlipRef,
+    documentTitle: `AlfaBank_Slip_${savedTransactionResult?.posPayment?.rrn || 'Auth'}`
+  });
 
   useEffect(() => {
     if (globalFiscalStatus) {
@@ -152,6 +174,34 @@ export default function CheckoutWizard() {
       await refreshFiscalStatus();
     } catch {
       // fallback silent
+    }
+  };
+
+  const handleTogglePosMode = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const newIsMock = !event.target.checked;
+    setSwitchingPosMode(true);
+    try {
+      await setGlobalPosMockMode(newIsMock);
+    } catch (err: any) {
+      alert('Ошибка переключения режима эквайринга: ' + (err.message || err));
+    } finally {
+      setSwitchingPosMode(false);
+    }
+  };
+
+  const handleTestPosHost = async () => {
+    setTestingPosHost(true);
+    try {
+      const res = await testGlobalPosHost();
+      if (res.success) {
+        alert(`Связь с процессингом Альфа-Банка подтверждена!\nКод ответа: ${res.responseCode || '00'}\nТерминал: ${posStatus?.terminalId || 'ALFA_770192'}\nРежим: ${posStatus?.isMockMode ? 'Эмуляция (Mock)' : 'Физический терминал'}`);
+      } else {
+        alert('Ошибка связи с банком: ' + (res.error || res.message || 'Нет ответа от хоста'));
+      }
+    } catch (err: any) {
+      alert('Сбой проверки связи с банком: ' + err.message);
+    } finally {
+      setTestingPosHost(false);
     }
   };
 
@@ -542,6 +592,37 @@ export default function CheckoutWizard() {
     if (selectedOperations.length === 0) return;
     setSubmittingTransaction(true);
 
+    let posPaymentData: any = null;
+
+    if (paymentMethod === 'card') {
+      try {
+        const txUuid = 'tx_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
+        const posPayload = {
+          amount: totalBilledPrice,
+          transaction_uuid: txUuid,
+          patient_name: getPatientDisplayName(selectedPatient),
+          patient_contact: patientContact,
+          patient_id: selectedPatient?.id || null
+        };
+        const posRes = await fetch(`${API_BASE_URL}/api/pos/pay`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(posPayload)
+        });
+        const posJson = await posRes.json();
+        if (!posRes.ok || !posJson.success) {
+          alert('Отказ банковского терминала Альфа-Банка: ' + (posJson.error || posJson.message || 'Ошибка авторизации карты'));
+          setSubmittingTransaction(false);
+          return;
+        }
+        posPaymentData = posJson.transaction || posJson;
+      } catch (err: any) {
+        alert('Сбой связи с POS-терминалом Альфа-Банка: ' + err.message);
+        setSubmittingTransaction(false);
+        return;
+      }
+    }
+
     const payload = {
       patient_id: selectedPatient?.id || 1,
       doctor_id: selectedDoctor?.id,
@@ -550,7 +631,7 @@ export default function CheckoutWizard() {
       billed_price: totalBilledPrice,
       calculated_cost: totalMaterialsCost,
       net_profit: totalNetProfit,
-      notes: visitNotes || `Сервисы: ${selectedOperations.map(o => `${o.name} (x${o.quantity})`).join(', ')}. Врач: ${selectedDoctor?.full_name || 'Н/Д'}. Оплата: ${paymentMethod}`,
+      notes: visitNotes || `Сервисы: ${selectedOperations.map(o => `${o.name} (x${o.quantity})`).join(', ')}. Врач: ${selectedDoctor?.full_name || 'Н/Д'}. Оплата: ${paymentMethod === 'card' ? 'Банковская карта (Альфа-Банк)' : paymentMethod}`,
       operations: selectedOperations.map(o => ({
         operation_id: o.id,
         quantity: o.quantity,
@@ -565,7 +646,13 @@ export default function CheckoutWizard() {
       })),
       fiscalize,
       patient_contact: patientContact,
-      payment_type: paymentMethod
+      payment_type: paymentMethod,
+      pos_rrn: posPaymentData?.rrn || null,
+      pos_transaction_uuid: posPaymentData?.transaction_uuid || posPaymentData?.transactionUuid || null,
+      pos_auth_code: posPaymentData?.auth_code || posPaymentData?.authCode || null,
+      pos_card_type: posPaymentData?.card_type || posPaymentData?.cardType || 'MIR',
+      pos_masked_pan: posPaymentData?.masked_pan || posPaymentData?.maskedPan || '4276********1094',
+      pos_slip_text: posPaymentData?.slip_text || posPaymentData?.slipText || null
     };
 
     try {
@@ -576,6 +663,17 @@ export default function CheckoutWizard() {
       });
       if (res.ok) {
         const result = await res.json();
+        if (!result.posPayment && posPaymentData) {
+          result.posPayment = {
+            id: posPaymentData.id,
+            transaction_uuid: posPaymentData.transaction_uuid || posPaymentData.transactionUuid,
+            rrn: posPaymentData.rrn,
+            authCode: posPaymentData.auth_code || posPaymentData.authCode,
+            cardType: posPaymentData.card_type || posPaymentData.cardType || 'MIR',
+            maskedPan: posPaymentData.masked_pan || posPaymentData.maskedPan || '4276********1094',
+            slipText: posPaymentData.slip_text || posPaymentData.slipText
+          };
+        }
         setSavedTransactionResult(result);
         setActiveStep(steps.length);
       } else {
@@ -1499,6 +1597,101 @@ export default function CheckoutWizard() {
                 </RadioGroup>
               </FormControl>
 
+              {/* Alfa-Bank POS Acquiring Card (Arcus-2) */}
+              {paymentMethod === 'card' && (
+                <Paper sx={{ p: 2.5, mt: 3, borderRadius: 2.5, border: '1px solid #CBD5E1', bgcolor: '#F0F9FF' }}>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 1.5 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                      <CreditCardIcon sx={{ color: '#0284C7', fontSize: 32 }} />
+                      <Box>
+                        <Typography variant="subtitle1" sx={{ fontWeight: 800, color: '#0F3C64', lineHeight: 1.2 }}>
+                          Эквайринг «АО «АЛЬФА-БАНК»» (Терминал {posStatus?.terminalId || 'ALFA_770192'})
+                        </Typography>
+                        <Typography variant="caption" sx={{ color: '#64748B' }}>
+                          Протокол: {posStatus?.driverType || 'Arcus-2'} • Безналичная оплата банковскими картами и QR СБП
+                        </Typography>
+                      </Box>
+                    </Box>
+
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
+                      {/* Switch: Эмулятор POS / Реальный терминал */}
+                      <Tooltip title="Переключение режима эквайринга: программная эмуляция (Mock) или физический POS-терминал">
+                        <FormControlLabel
+                          control={
+                            <Switch
+                              size="small"
+                              checked={!posStatus?.isMockMode}
+                              onChange={handleTogglePosMode}
+                              disabled={switchingPosMode}
+                              color="primary"
+                            />
+                          }
+                          label={
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                              <Typography variant="body2" sx={{ fontWeight: 700, fontSize: '0.8rem', color: !posStatus?.isMockMode ? '#0284C7' : '#0F3C64' }}>
+                                {!posStatus?.isMockMode ? 'Реальный POS (COM/IP)' : 'Эмулятор POS (Mock)'}
+                              </Typography>
+                              {switchingPosMode && <CircularProgress size={12} />}
+                            </Box>
+                          }
+                          sx={{ mr: 0, bgcolor: '#FFFFFF', px: 1, py: 0.3, borderRadius: 1.5, border: '1px solid #BAE6FD' }}
+                        />
+                      </Tooltip>
+
+                      {/* Button: Проверить связь с хостом */}
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        startIcon={testingPosHost ? <CircularProgress size={14} /> : <SpeedIcon sx={{ fontSize: 16, color: '#0284C7' }} />}
+                        onClick={handleTestPosHost}
+                        disabled={testingPosHost}
+                        sx={{
+                          fontWeight: 700,
+                          fontSize: '0.78rem',
+                          borderColor: '#0284C7',
+                          color: '#0284C7',
+                          bgcolor: '#FFFFFF',
+                          borderRadius: 1.5,
+                          py: 0.5,
+                          px: 1.3
+                        }}
+                      >
+                        Ping хоста
+                      </Button>
+                    </Box>
+                  </Box>
+
+                  {/* Sub-row with status chip and terminal parameters */}
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mt: 1.5, flexWrap: 'wrap' }}>
+                    <Chip
+                      size="small"
+                      label={
+                        posStatus?.isMockMode
+                          ? '🟡 Эмулятор терминала (Mock • Мгновенная авторизация)'
+                          : (posStatus?.hardware?.isHardwareReady || posStatus?.status === 'Ready'
+                              ? `🟢 Реальный терминал: ${posStatus?.port || 'COM4'} (${posStatus?.baudRate || 115200} бод) • Готов к приёму карт`
+                              : `🔴 Реальный терминал: ${posStatus?.port || 'COM4'} • Нет связи`)
+                      }
+                      sx={{
+                        fontWeight: 600,
+                        fontSize: '0.78rem',
+                        bgcolor: posStatus?.isMockMode ? '#FEF3C7' : ((posStatus?.hardware?.isHardwareReady || posStatus?.status === 'Ready') ? '#ECFDF5' : '#FEE2E2'),
+                        color: posStatus?.isMockMode ? '#92400E' : ((posStatus?.hardware?.isHardwareReady || posStatus?.status === 'Ready') ? '#065F46' : '#991B1B'),
+                        border: '1px solid',
+                        borderColor: posStatus?.isMockMode ? '#FCD34D' : ((posStatus?.hardware?.isHardwareReady || posStatus?.status === 'Ready') ? '#A7F3D0' : '#FCA5A5')
+                      }}
+                    />
+                    <Typography variant="caption" sx={{ color: '#64748B' }}>
+                      TID: <b>{posStatus?.terminalId || 'ALFA_770192'}</b> • MID: <b>{posStatus?.merchantId || 'MERCH_884102'}</b> • СБП QR: <b>{posStatus?.enableSbpQr ? 'Включен' : 'Отключен'}</b> • Банк: <b>АО «АЛЬФА-БАНК»</b>
+                    </Typography>
+                  </Box>
+
+                  <Typography variant="caption" sx={{ display: 'block', mt: 1, color: '#0369A1' }}>
+                    💡 При нажатии «Завершить транзакцию и оплатить» терминал запросит вставку/прикладывание карты или сканирование QR-кода СБП.
+                  </Typography>
+                </Paper>
+              )}
+
               {/* Fiscal Registration Card (ККТ АТОЛ 91Ф) */}
               <Paper sx={{ p: 2.5, mt: 3, borderRadius: 2.5, border: '1px solid #CBD5E1', bgcolor: '#F8FAFC' }}>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 1.5 }}>
@@ -1765,6 +1958,107 @@ export default function CheckoutWizard() {
                     Повторить печать чека
                   </Button>
                 )}
+              </Box>
+            </Paper>
+          )}
+
+          {/* POS Authorization Slip Card (Альфа-Банк) */}
+          {savedTransactionResult?.posPayment && (
+            <Paper sx={{ 
+              p: 3, 
+              my: 3, 
+              maxWidth: 720, 
+              mx: 'auto', 
+              borderRadius: 3, 
+              border: '1px solid #BAE6FD', 
+              bgcolor: '#F0F9FF',
+              textAlign: 'left',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.05)'
+            }}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, flexWrap: 'wrap', gap: 1 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                  <CreditCardIcon sx={{ color: '#0284C7', fontSize: 28 }} />
+                  <Box>
+                    <Typography variant="subtitle1" sx={{ fontWeight: 800, color: '#0F3C64' }}>
+                      Банковский слип-чек авторизации (АО «АЛЬФА-БАНК»)
+                    </Typography>
+                    <Typography variant="caption" sx={{ color: '#64748B' }}>
+                      Эквайринг • Безналичная оплата картой
+                    </Typography>
+                  </Box>
+                </Box>
+                <Chip 
+                  label="🟢 Одобрено банком (Код 00)"
+                  size="small"
+                  sx={{ 
+                    fontWeight: 700, 
+                    bgcolor: '#C6F6D5', 
+                    color: '#22543D' 
+                  }}
+                />
+              </Box>
+
+              <Divider sx={{ mb: 2 }} />
+
+              <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr 1fr', sm: 'repeat(4, 1fr)' }, gap: 2, mb: 2 }}>
+                <Box sx={{ p: 1.5, bgcolor: '#FFFFFF', borderRadius: 2, border: '1px solid #E2E8F0' }}>
+                  <Typography variant="caption" sx={{ color: '#64748B', fontWeight: 600 }}>RRN авторизации</Typography>
+                  <Typography variant="h6" sx={{ fontWeight: 800, color: '#0F3C64' }}>
+                    №{savedTransactionResult.posPayment.rrn || '—'}
+                  </Typography>
+                </Box>
+                <Box sx={{ p: 1.5, bgcolor: '#FFFFFF', borderRadius: 2, border: '1px solid #E2E8F0' }}>
+                  <Typography variant="caption" sx={{ color: '#64748B', fontWeight: 600 }}>Код авторизации</Typography>
+                  <Typography variant="h6" sx={{ fontWeight: 800, color: '#0F3C64', letterSpacing: 0.5 }}>
+                    {savedTransactionResult.posPayment.authCode || '—'}
+                  </Typography>
+                </Box>
+                <Box sx={{ p: 1.5, bgcolor: '#FFFFFF', borderRadius: 2, border: '1px solid #E2E8F0' }}>
+                  <Typography variant="caption" sx={{ color: '#64748B', fontWeight: 600 }}>Платёжная система</Typography>
+                  <Typography variant="h6" sx={{ fontWeight: 800, color: '#0F3C64' }}>
+                    {savedTransactionResult.posPayment.cardType || 'MIR'}
+                  </Typography>
+                </Box>
+                <Box sx={{ p: 1.5, bgcolor: '#FFFFFF', borderRadius: 2, border: '1px solid #E2E8F0' }}>
+                  <Typography variant="caption" sx={{ color: '#64748B', fontWeight: 600 }}>Номер карты (PAN)</Typography>
+                  <Typography variant="h6" sx={{ fontWeight: 800, color: '#0F3C64', fontSize: '0.9rem' }}>
+                    {savedTransactionResult.posPayment.maskedPan || '•••• 1094'}
+                  </Typography>
+                </Box>
+              </Box>
+
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 1 }}>
+                <Typography variant="caption" sx={{ color: '#64748B' }}>
+                  Терминал: <b>{posStatus?.terminalId || 'ALFA_770192'}</b> • Процессинг: <b>АО «АЛЬФА-БАНК»</b>
+                </Typography>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  startIcon={<PrintIcon />}
+                  onClick={() => {
+                    setActivePosSlipTx({
+                      id: savedTransactionResult.posPayment.id || 1,
+                      transaction_uuid: savedTransactionResult.posPayment.transaction_uuid || 'tx_0',
+                      operation_type: 'pay',
+                      amount: totalBilledPrice,
+                      terminal_id: posStatus?.terminalId || 'ALFA_770192',
+                      merchant_id: posStatus?.merchantId || 'MERCH_884102',
+                      rrn: savedTransactionResult.posPayment.rrn,
+                      auth_code: savedTransactionResult.posPayment.authCode,
+                      card_type: savedTransactionResult.posPayment.cardType,
+                      masked_pan: savedTransactionResult.posPayment.maskedPan,
+                      status: 'authorized',
+                      is_mock: posStatus?.isMockMode ? 1 : 0,
+                      slip_text: savedTransactionResult.posPayment.slipText,
+                      created_at: new Date().toISOString(),
+                      authorized_at: new Date().toISOString()
+                    });
+                    setPosSlipDialogOpen(true);
+                  }}
+                  sx={{ textTransform: 'none', fontWeight: 600, fontSize: '0.8rem', color: '#0284C7', borderColor: '#0284C7' }}
+                >
+                  Просмотреть / Распечатать слип-чек
+                </Button>
               </Box>
             </Paper>
           )}
@@ -2198,6 +2492,30 @@ export default function CheckoutWizard() {
               Закрыть
             </Button>
           </Box>
+        </DialogActions>
+      </Dialog>
+
+      {/* Alfa-Bank POS Slip Preview & Print Modal */}
+      <Dialog open={posSlipDialogOpen} onClose={() => setPosSlipDialogOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle sx={{ fontWeight: 800, color: '#0F3C64', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span>Банковский слип-чек</span>
+          <IconButton size="small" onClick={() => setPosSlipDialogOpen(false)}><CloseIcon /></IconButton>
+        </DialogTitle>
+        <DialogContent dividers sx={{ bgcolor: '#F8FAFC', p: 2 }}>
+          <Box sx={{ bgcolor: '#FFFFFF', p: 1, borderRadius: 2, border: '1px solid #E2E8F0', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
+            <PosSlipPrintTemplate ref={printSlipRef} tx={activePosSlipTx} posInfo={posStatus} />
+          </Box>
+        </DialogContent>
+        <DialogActions sx={{ p: 2, display: 'flex', justifyContent: 'space-between' }}>
+          <Button onClick={() => setPosSlipDialogOpen(false)}>Закрыть</Button>
+          <Button
+            variant="contained"
+            onClick={() => handlePrintPosSlip()}
+            startIcon={<PrintIcon />}
+            sx={{ bgcolor: '#0F3C64', fontWeight: 700 }}
+          >
+            Печать на принтер (57мм)
+          </Button>
         </DialogActions>
       </Dialog>
 

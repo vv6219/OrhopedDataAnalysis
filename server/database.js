@@ -403,6 +403,14 @@ const db = new sqlite3.Database(dbPath, (err) => {
       } catch (err) {
         console.error('Error initializing Fiscal schema:', err.message);
       }
+
+      // Initialize Alfa-Bank POS Terminal Acquiring schema
+      try {
+        const initPosSchema = require('./initPosSchema');
+        initPosSchema(db);
+      } catch (err) {
+        console.error('Error initializing POS Acquiring schema:', err.message);
+      }
     });
   }
 });

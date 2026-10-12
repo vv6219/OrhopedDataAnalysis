@@ -21,10 +21,13 @@ import ServicesBiAnalytics from './pages/ServicesBiAnalytics';
 import FiscalAuditLog from './pages/FiscalAuditLog';
 import FiscalTestWizard from './pages/FiscalTestWizard';
 import FiscalSettings from './pages/FiscalSettings';
+import PosSettings from './pages/PosSettings';
+import PosTestWizard from './pages/PosTestWizard';
 import ServerHealth from './pages/ServerHealth';
 import FiscalShiftsAnalytics from './pages/FiscalShiftsAnalytics';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { FiscalProvider } from './context/FiscalContext';
+import { PosProvider } from './context/PosContext';
 import LoginModal from './components/LoginModal';
 
 const theme = createTheme({
@@ -236,6 +239,10 @@ function AppContent() {
             <Route path="/fiscal-audit" element={<FiscalAuditLog />} />
             <Route path="/admin/fiscal-test-wizard" element={<FiscalTestWizard />} />
             <Route path="/fiscal-test-wizard" element={<FiscalTestWizard />} />
+            <Route path="/admin/pos-settings" element={<PosSettings />} />
+            <Route path="/pos-settings" element={<PosSettings />} />
+            <Route path="/admin/pos-test-wizard" element={<PosTestWizard />} />
+            <Route path="/pos-test-wizard" element={<PosTestWizard />} />
             <Route path="/admin/fiscal-shifts" element={<FiscalShiftsAnalytics />} />
             <Route path="/fiscal-shifts" element={<FiscalShiftsAnalytics />} />
             <Route path="/sqlite-studio" element={<SqliteStudio />} />
@@ -255,9 +262,11 @@ function App() {
       <CssBaseline />
       <AuthProvider>
         <FiscalProvider>
-          <BrowserRouter>
-            <AppContent />
-          </BrowserRouter>
+          <PosProvider>
+            <BrowserRouter>
+              <AppContent />
+            </BrowserRouter>
+          </PosProvider>
         </FiscalProvider>
       </AuthProvider>
     </ThemeProvider>

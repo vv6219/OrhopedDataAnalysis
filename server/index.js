@@ -27,6 +27,9 @@ app.use('/api/fiscal', fiscalRoutes);
 const fiscalShiftRoutes = require('./fiscalShiftRoutes');
 app.use('/api/fiscal/shifts', fiscalShiftRoutes);
 
+const posRoutes = require('./posRoutes');
+app.use('/api/pos', posRoutes);
+
 const servicesHealthRoutes = require('./servicesHealthRoutes');
 app.use('/api/admin/services', servicesHealthRoutes);
 
@@ -2076,6 +2079,22 @@ app.post('/api/transactions', (req, res) => {
       matStmt.finalize();
     }
 
+    // Link POS transaction if acquiring authorization was performed
+    if (req.body.pos_rrn || req.body.pos_transaction_uuid) {
+      db.run(
+        "UPDATE pos_transactions SET operation_transaction_id = ?, patient_id = ?, status = 'completed' WHERE rrn = ? OR transaction_uuid = ?",
+        [transactionId, patient_id, req.body.pos_rrn, req.body.pos_transaction_uuid]
+      );
+    }
+
+    const posPaymentInfo = req.body.pos_rrn ? {
+      rrn: req.body.pos_rrn,
+      authCode: req.body.pos_auth_code,
+      cardType: req.body.pos_card_type || 'MIR',
+      maskedPan: req.body.pos_masked_pan || '4276********1094',
+      slipText: req.body.pos_slip_text || null
+    } : null;
+
     if (fiscalize) {
       try {
         const fiscalService = require('./fiscalService');
@@ -2096,7 +2115,8 @@ app.post('/api/transactions', (req, res) => {
             success: true,
             transactionId,
             transaction_date,
-            fiscalReceipt: fiscalRes
+            fiscalReceipt: fiscalRes,
+            posPayment: posPaymentInfo
           });
         }).catch(fErr => {
           console.error('[Transaction] Fiscalization error:', fErr.message);
@@ -2108,7 +2128,8 @@ app.post('/api/transactions', (req, res) => {
             fiscalReceipt: {
               status: 'failed',
               errorMessage: fErr.message
-            }
+            },
+            posPayment: posPaymentInfo
           });
         });
         return;
@@ -2117,7 +2138,7 @@ app.post('/api/transactions', (req, res) => {
       }
     }
 
-    res.json({ success: true, transactionId, transaction_date });
+    res.json({ success: true, transactionId, transaction_date, posPayment: posPaymentInfo });
   });
   stmt.finalize();
 });

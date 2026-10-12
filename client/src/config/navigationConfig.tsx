@@ -28,6 +28,7 @@ import TuneIcon from '@mui/icons-material/Tune';
 import DnsIcon from '@mui/icons-material/Dns';
 import ScienceIcon from '@mui/icons-material/Science';
 import UsbIcon from '@mui/icons-material/Usb';
+import CreditCardIcon from '@mui/icons-material/CreditCard';
 
 export interface NavItem {
   text: string;
@@ -142,6 +143,12 @@ export const navigationGroups: NavGroup[] = [
         path: '/admin/fiscal-settings',
         icon: <TuneIcon sx={{ fontSize: 20 }} />,
         tooltip: 'Конфигурация фискального регистратора: управление профилями подключения, COM-портом, скоростью обмена и параметрами в базе SQLite'
+      },
+      {
+        text: 'Параметры POS Альфа-Банка',
+        path: '/admin/pos-settings',
+        icon: <CreditCardIcon sx={{ fontSize: 20 }} />,
+        tooltip: 'Конфигурация эквайринга: управление профилями подключения, Arcus-2 драйвером, портами, СБП и режимом эмуляции'
       }
     ]
   },
@@ -242,6 +249,12 @@ export const navigationGroups: NavGroup[] = [
         path: '/admin/fiscal-test-wizard',
         icon: <PointOfSaleIcon sx={{ fontSize: 20 }} />,
         tooltip: 'Мастер тестирования фискализации: интерактивная симуляция пробития чеков, возвратов и верификация протокола ККТ'
+      },
+      {
+        text: 'Мастер тестов эквайринга',
+        path: '/admin/pos-test-wizard',
+        icon: <CreditCardIcon sx={{ fontSize: 20, color: '#D97706' }} />,
+        tooltip: 'Мастер тестирования эквайринга: пинг процессинга Альфа-Банка, тестовые списания с авто-отменой, сверка итогов и печать слипов'
       },
       {
         text: 'Тест связи с ККТ «АТОЛ 91Ф»',
@@ -427,6 +440,30 @@ export const routeMetaMap: Record<string, RouteMeta> = {
     title: 'Журнал и Аналитика смен',
     groupTitle: 'Сервисы',
     groupId: 'operations_and_wizards',
+    parentPath: '/'
+  },
+  '/admin/pos-settings': {
+    title: 'Параметры POS Альфа-Банка',
+    groupTitle: 'Базовые данные',
+    groupId: 'base_entities',
+    parentPath: '/'
+  },
+  '/pos-settings': {
+    title: 'Параметры POS Альфа-Банка',
+    groupTitle: 'Базовые данные',
+    groupId: 'base_entities',
+    parentPath: '/'
+  },
+  '/admin/pos-test-wizard': {
+    title: 'Мастер тестов эквайринга',
+    groupTitle: 'ТЕСТЫ',
+    groupId: 'tests',
+    parentPath: '/'
+  },
+  '/pos-test-wizard': {
+    title: 'Мастер тестов эквайринга',
+    groupTitle: 'ТЕСТЫ',
+    groupId: 'tests',
     parentPath: '/'
   }
 };
