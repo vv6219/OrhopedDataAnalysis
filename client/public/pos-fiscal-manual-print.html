@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Технологическая инструкция кассира: Эквайринг и Фискализация (Альфа-Банк POS + АТОЛ 91Ф)</title>
+  <style>
+    @page {
+      size: A4 portrait;
+      margin: 10mm 12mm;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      color: #1A202C;
+      background-color: #FFFFFF;
+      margin: 0;
+      padding: 0;
+      font-size: 9.5pt;
+      line-height: 1.45;
+    }
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 2.5px solid #0F3C64;
+      padding-bottom: 8px;
+      margin-bottom: 12px;
+    }
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .header-logo {
+      width: 58px;
+      height: 58px;
+      object-fit: contain;
+    }
+    .clinic-title {
+      font-size: 13pt;
+      font-weight: 800;
+      color: #0F3C64;
+      margin: 0;
+      line-height: 1.15;
+    }
+    .clinic-sub {
+      font-size: 7.5pt;
+      color: #4A5568;
+      margin-top: 3px;
+    }
+    .header-right {
+      text-align: right;
+    }
+    .badge-top {
+      font-size: 8pt;
+      font-weight: 800;
+      color: #0F3C64;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .version-tag {
+      font-size: 7.5pt;
+      color: #718096;
+      margin-top: 2px;
+    }
+    .doc-banner {
+      background-color: #F8FAFC;
+      border: 1px solid #CBD5E1;
+      border-radius: 6px;
+      padding: 8px 12px;
+      text-align: center;
+      margin-bottom: 14px;
+    }
+    .doc-title {
+      font-size: 12pt;
+      font-weight: 800;
+      color: #0F3C64;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+      margin: 0;
+    }
+    .doc-subtitle {
+      font-size: 8pt;
+      color: #475569;
+      margin: 3px 0 0 0;
+      font-weight: 500;
+    }
+    .section-title {
+      font-size: 10pt;
+      font-weight: 800;
+      color: #0F3C64;
+      border-bottom: 1.5px solid #CBD5E1;
+      padding-bottom: 3px;
+      margin: 12px 0 6px 0;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .section-title.warning {
+      color: #B45309;
+      border-bottom-color: #FDE68A;
+    }
+    .pill {
+      display: inline-block;
+      padding: 1px 6px;
+      border-radius: 4px;
+      font-size: 7pt;
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+    .pill-blue { background: #0F3C64; color: #FFF; }
+    .pill-amber { background: #D97706; color: #FFF; }
+    .pill-green { background: #16A34A; color: #FFF; }
+    .pill-purple { background: #7C3AED; color: #FFF; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 6px 0 10px 0;
+      font-size: 7.8pt;
+    }
+    th, td {
+      border: 1px solid #CBD5E1;
+      padding: 4px 6px;
+      text-align: left;
+      vertical-align: top;
+    }
+    th {
+      background-color: #F1F5F9;
+      font-weight: 700;
+      color: #0F3C64;
+    }
+    .callout-box {
+      border-radius: 6px;
+      padding: 7px 10px;
+      margin: 6px 0;
+      font-size: 8pt;
+    }
+    .callout-amber {
+      background-color: #FFFBEB;
+      border: 1.5px solid #FDE68A;
+      color: #78350F;
+    }
+    .callout-blue {
+      background-color: #EFF6FF;
+      border: 1px solid #BFDBFE;
+      color: #1E3A8A;
+    }
+    .steps-list {
+      margin: 4px 0;
+      padding-left: 18px;
+    }
+    .steps-list li {
+      margin-bottom: 5px;
+      line-height: 1.4;
+    }
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin: 6px 0;
+    }
+    .card-box {
+      background-color: #F8FAFC;
+      border: 1px solid #E2E8F0;
+      border-radius: 6px;
+      padding: 7px 9px;
+      font-size: 7.8pt;
+    }
+    .card-box h4 {
+      margin: 0 0 4px 0;
+      color: #0F3C64;
+      font-size: 8.2pt;
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+    .avoid-break {
+      page-break-inside: avoid;
+      break-inside: avoid;
+    }
+    .signatures {
+      margin-top: 14px;
+      padding-top: 8px;
+      border-top: 2px solid #0F3C64;
+      page-break-inside: avoid;
+      break-inside: avoid;
+    }
+    .sig-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 14px;
+      margin-top: 6px;
+    }
+    .sig-col {
+      font-size: 7.5pt;
+    }
+    .sig-line {
+      border-bottom: 1px solid #718096;
+      height: 18px;
+      margin-bottom: 3px;
+    }
+    .code-tag {
+      background-color: #F1F5F9;
+      color: #0F3C64;
+      padding: 1px 4px;
+      border-radius: 3px;
+      font-family: Consolas, monospace;
+      font-size: 7.5pt;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- HEADER -->
+  <div class="header">
+    <div class="header-left">
+      <div>
+        <h1 class="clinic-title">Центр Ортопедии и Травматологии доктора Добрушкина</h1>
+        <div class="clinic-sub">
+          г. Сочи, ул. Транспортная 65, 3 этаж • Тел: +7 (862) 267-00-00 • ИНН: 450107060083 • ОГРНИП: 323237500208220
+        </div>
+      </div>
+    </div>
+    <div class="header-right">
+      <div class="badge-top">ТЕХНОЛОГИЧЕСКИЙ РЕГЛАМЕНТ</div>
+      <div class="version-tag">Ред. v2.1 • 12 октября 2026 г. • Касса №1</div>
+    </div>
+  </div>
+
+  <!-- TITLE BANNER -->
+  <div class="doc-banner">
+    <h2 class="doc-title">Пошаговая инструкция кассира: Эквайринг + Фискализация</h2>
+    <div class="doc-subtitle">
+      Порядок эксплуатации банковского POS-терминала АО «АЛЬФА-БАНК» (Arcus-2) и онлайн-кассы «АТОЛ 91Ф» (ФФД 1.2, 54-ФЗ)
+    </div>
+  </div>
+
+  <!-- SECTION 1: DEFINING -->
+  <div class="avoid-break">
+    <div class="section-title">
+      <span class="pill pill-blue">РАЗДЕЛ 1</span> 1. Определение и архитектура кассового узла (Defining)
+    </div>
+    <div style="font-size: 8pt; color: #334155; margin-bottom: 4px;">
+      Кассовый узел клиники предназначен для приема наличных денежных средств, карт платежных систем МИР / Visa / MasterCard и СБП (QR-код) с гарантией одновременной фискализации по требованиям Федерального закона № 54-ФЗ:
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Устройство / Компонент</th>
+          <th>Аппаратный стек и драйвер</th>
+          <th>Интерфейс и порт</th>
+          <th>Функции и стандарты учета</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Банковский терминал POS</strong></td>
+          <td>Ingenico / Verifone (<span class="code-tag">Arcus-2 / pos.exe</span>)</td>
+          <td>COM4 (USB-Serial), 115200 бод, таймаут 60 с</td>
+          <td>Очный прием банковских карт, СБП, авторизация Альфа-Банка, печать слипов</td>
+        </tr>
+        <tr>
+          <td><strong>Фискальный регистратор</strong></td>
+          <td>АТОЛ 91Ф (ДТО 10 / <span class="code-tag">fptr10.dll</span>)</td>
+          <td>COM3 (USB-VCP), 115200 бод</td>
+          <td>54-ФЗ, ФФД 1.2, запись ФД в ФН, печать чека с QR-кодом, передача в ОФД</td>
+        </tr>
+        <tr>
+          <td><strong>Шлюз МИС Сервер</strong></td>
+          <td>Node.js Express + SQLite WAL</td>
+          <td>Порт 5000 (REST) / 5050 (Fiscal Daemon)</td>
+          <td>Двухфазная транзакция, идемпотентность по <span class="code-tag">transaction_uuid</span></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div style="font-size: 7.8pt; color: #475569; background: #F8FAFC; padding: 4px 8px; border-radius: 4px; border: 1px dashed #CBD5E1;">
+      <strong>Экраны администрирования в МИС:</strong> Параметры терминала: <span class="code-tag">/admin/pos-settings</span> • Фискальные профили ККТ: <span class="code-tag">/admin/fiscal-profiles</span> • Диагностика служб: <span class="code-tag">/admin/server-health</span>.
+    </div>
+  </div>
+
+  <!-- SECTION 2: TEST OPERATIONS BEFORE START TO WORK -->
+  <div class="avoid-break" style="margin-top: 10px;">
+    <div class="section-title warning">
+      <span class="pill pill-amber">РАЗДЕЛ 2</span> 2. Обязательные тестовые операции перед началом работы (Before Start Checklist)
+    </div>
+
+    <div class="callout-box callout-amber">
+      <strong>ВНИМАНИЕ!</strong> Данный чек-лист выполняется администратором-кассиром ежедневно строго до 08:45 утра до вызова первого пациента. Невыполнение регламента может повлечь налоговую блокировку кассы или срыв оплат!
+    </div>
+
+    <ol class="steps-list" style="font-size: 8pt; color: #1F2937;">
+      <li>
+        <strong>Шаг 1. Включение питания:</strong> Включить ККТ АТОЛ 91Ф (дождаться звукового сигнала готовности) и POS-терминал Ingenico/Verifone. Убедиться, что на дисплее пин-пада отображается логотип банка и текущая дата.
+      </li>
+      <li>
+        <strong>Шаг 2. Контроль чековой ленты:</strong> Проверить наличие рулона термобумаги 57 мм в ККТ и пин-паде. При диаметре рулона менее 2 см заменить рулон термослоем наружу.
+      </li>
+      <li>
+        <strong>Шаг 3. Тест связи с процессингом (Команда 05):</strong> Открыть карточку терминала <span class="code-tag">PosDeviceCard</span> в шапке МИС и нажать <em>«Тест связи с процессингом (Команда 05)»</em>. Проверить 5 уровней:
+        <div style="font-size: 7.5pt; color: #4B5563; margin-top: 2px;">
+          • 1. Шлюз МИС (OK) • 2. Файл драйвера pos.exe (OK, найден) • 3. Порт COM4 (OK) • 4. Пинг хоста Альфа-Банка (Код 00, RTT &lt; 500ms) • 5. Ключи шифрования (OK).
+        </div>
+        <div style="font-size: 7.5pt; color: #B45309; margin-top: 1px;">
+          <em>При ошибке «Файл не найден C:\Arcus2\pos.exe»:</em> прямо в окне кликнуть «Изменить путь к файлу драйвера», выбрать пресет <span class="code-tag">C:\Arcus2\pos.exe</span> и нажать кнопку «Проверить файл».
+        </div>
+      </li>
+      <li>
+        <strong>Шаг 4. Контроль статуса ККТ и длительности смены (&lt; 24 ч):</strong> В разделе <span class="code-tag">/admin/fiscal-shifts</span> убедиться, что смена не превышает 24 часов. Если смена длится более 22 часов — немедленно выполнить закрытие смены (Z-отчет) до начала обслуживания пациентов.
+      </li>
+      <li>
+        <strong>Шаг 5. Контрольный X-отчет (без гашения):</strong> Нажать «Снять X-отчет» на кассе: проверить четкость термопечати, правильность реквизитов (ИНН 450107060083) и нулевые утренние итоги.
+      </li>
+    </ol>
+  </div>
+
+  <!-- SECTION 3: USING -->
+  <div class="avoid-break" style="margin-top: 10px;">
+    <div class="section-title">
+      <span class="pill pill-green">РАЗДЕЛ 3</span> 3. Порядок проведения кассовых операций (Using)
+    </div>
+
+    <div class="grid-2">
+      <div class="card-box">
+        <h4>Двухфазная оплата (Two-Phase Commit)</h4>
+        <div><strong>1. Выбор услуг:</strong> В <span class="code-tag">/checkout</span> выбрать пациента, услуги из прайса и списание медикаментов.</div>
+        <div><strong>2. Контакт пациента:</strong> Ввести телефон/email (Тег 1008) для отправки электронного чека в ОФД.</div>
+        <div><strong>3. Фаза 1 (POS):</strong> Нажать «Оплатить через терминал» (Команда 00). Пациент прикладывает карту/QR. При одобрении (Код 00) терминал печатает 2 слипа.</div>
+        <div><strong>4. Фаза 2 (ФР):</strong> МИС автоматически передает команду в АТОЛ 91Ф. ККТ пробивает чек с QR-кодом (Тег 1081 — безналичные).</div>
+      </div>
+
+      <div class="card-box">
+        <h4>Отмена (Void) и Возврат (Refund)</h4>
+        <div><strong>• Отмена внутри смены (Void):</strong> До вечерней сверки итогов. Деньги мгновенно разблокируются на карте без комиссии банка. ККТ печатает чек отмены.</div>
+        <div><strong>• Возврат после сверки (Refund):</strong> В журнале выбрать «Возврат прихода». Пациент прикладывает ту же карту. На ККТ пробивается чек <em>sell_return</em>.</div>
+        <div><strong>• Наличные и смешанная оплата:</strong> Калькулятор сдачи, печать чека с наличной частью (Тег 1031).</div>
+      </div>
+    </div>
+
+    <div class="callout-box callout-blue">
+      <strong>ВЕЧЕРНЕЕ ЗАКРЫТИЕ КАССОВОГО ДНЯ (СТРОГИЙ ПОРЯДОК):</strong><br />
+      <strong>1. Сверка итогов эквайринга (Команда 26):</strong> В карточке терминала запустить <em>«Сверка итогов»</em>. Распечатывается банковский Z-отчет с суммой безнала. Сверить с журналом МИС.<br />
+      <strong>2. Закрытие смены ККТ (Z-отчет):</strong> В <span class="code-tag">/admin/fiscal-shifts</span> нажать <em>«Закрыть фискальную смену»</em>. ККТ печатает Z-отчет с гашением.<br />
+      <strong>3. Калькулятор наличности и Акт А4:</strong> Внести количество купюр в купюроприемную форму и распечатать официальный Акт закрытия смены формата А4.
+    </div>
+  </div>
+
+  <!-- SECTION 4: TESTING & TROUBLESHOOTING -->
+  <div class="avoid-break" style="margin-top: 10px;">
+    <div class="section-title">
+      <span class="pill pill-purple">РАЗДЕЛ 4</span> 4. Диагностика, тестирование и устранение сбоев (Testing & Troubleshooting)
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Сбой / Ошибка</th>
+          <th>Причина</th>
+          <th>Оперативный регламент устранения</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong style="color: #DC2626;">Файл не найден pos.exe</strong></td>
+          <td>Неверный путь в настройках</td>
+          <td>В окне ошибки нажать «Изменить путь к файлу драйвера» -> вкладка «Оборудование» -> пресет C:\Arcus2\pos.exe -> нажать «Проверить файл».</td>
+        </tr>
+        <tr>
+          <td><strong style="color: #DC2626;">Код 68 / Таймаут терминала</strong></td>
+          <td>Карта не приложена за 60 с или завис пин-пад</td>
+          <td>Перезагрузить терминал: удерживать 3 сек [Желтая клавиша Clear] + [Точка .]. Дождаться перезагрузки пин-пада и повторить.</td>
+        </tr>
+        <tr>
+          <td><strong style="color: #D97706;">Код 51 / Отказ карты</strong></td>
+          <td>Недостаточно средств у пациента</td>
+          <td>Предложить пациенту оплатить другой картой, через QR СБП или внести часть суммы наличными.</td>
+        </tr>
+        <tr>
+          <td><strong style="color: #DC2626;">Смена > 24 часов (0x48)</strong></td>
+          <td>ККТ заблокирована по 54-ФЗ</td>
+          <td>Перейти в <span class="code-tag">/admin/fiscal-shifts</span>, нажать «Закрыть фискальную смену (Z-отчет)». После печати Z-отчета пробить чек снова.</td>
+        </tr>
+        <tr>
+          <td><strong style="color: #DC2626;">Рассинхронизация POS/ККТ</strong></td>
+          <td>Деньги списаны, в ККТ кончилась бумага</td>
+          <td>Карту повторно НЕ прикладывать! Заправить термобумагу и нажать «Допечатать фискальный чек» в журнале по RRN первичной транзакции.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div style="font-size: 7.5pt; color: #475569;">
+      <strong>Лабораторные полигоны в МИС:</strong> <span class="code-tag">/admin/pos-test-wizard</span> (тестовая оплата 1.00 ₽, симуляция сбоев 51/68/99 в Mock-режиме, печать слипа) и <span class="code-tag">/admin/fiscal-test-wizard</span> (опрос ДТО 10, X-отчет, статус ОФД).
+    </div>
+  </div>
+
+  <!-- SIGNATURES BLOCK -->
+  <div class="signatures">
+    <div style="font-size: 8.5pt; font-weight: 800; color: #0F3C64; text-transform: uppercase;">
+      Лист согласования и ввода регламента в действие
+    </div>
+    <div class="sig-grid">
+      <div class="sig-col">
+        <strong>Главный врач клиники:</strong>
+        <div class="sig-line"></div>
+        Добрушкин В.А. / «___» ________ 2026 г.
+      </div>
+      <div class="sig-col">
+        <strong>Главный бухгалтер:</strong>
+        <div class="sig-line"></div>
+        (Подпись) / «___» ________ 2026 г.
+      </div>
+      <div class="sig-col">
+        <strong>Старший администратор кассы:</strong>
+        <div class="sig-line"></div>
+        (Подпись) / «___» ________ 2026 г.
+      </div>
+    </div>
+    <div style="text-align: center; margin-top: 10px; font-size: 6.8pt; color: #94A3B8;">
+      Официальный документ МИС «ОртоERP» v1.4.1 • Экземпляр кассира • Центр Ортопедии и Травматологии доктора Добрушкина
+    </div>
+  </div>
+
+</body>
+</html>

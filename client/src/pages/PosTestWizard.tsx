@@ -18,6 +18,7 @@ import {
 import { useReactToPrint } from 'react-to-print';
 import { API_BASE_URL } from '../config/apiConfig';
 import PosDeviceCard from '../components/PosDeviceCard';
+import { PosFiscalManualPrintTemplate } from '../components/PosFiscalManualPrintTemplate';
 import { usePos } from '../context/PosContext';
 
 // Icons
@@ -133,9 +134,27 @@ export default function PosTestWizard() {
   const [slipModalOpen, setSlipModalOpen] = useState(false);
   const [selectedTx, setSelectedTx] = useState<PosTxRecord | null>(null);
   const printSlipRef = useRef<HTMLDivElement>(null);
+  const posFiscalPrintRef = useRef<HTMLDivElement>(null);
 
   const handlePrintSlip = useReactToPrint({
     contentRef: printSlipRef
+  });
+
+  const handlePrintManual = useReactToPrint({
+    contentRef: posFiscalPrintRef,
+    documentTitle: `Инструкция_кассира_Эквайринг_и_Фискализация_АльфаБанк_АТОЛ91Ф_${new Date().toISOString().slice(0, 10)}`,
+    pageStyle: `
+      @page {
+        size: A4 portrait;
+        margin: 8mm 10mm;
+      }
+      @media print {
+        body {
+          -webkit-print-color-adjust: exact !important;
+          print-color-adjust: exact !important;
+        }
+      }
+    `
   });
 
   const fetchTransactions = async () => {
@@ -536,15 +555,34 @@ export default function PosTestWizard() {
             </Typography>
           </Box>
 
-          <Button
-            size="small"
-            variant="outlined"
-            onClick={fetchTransactions}
-            startIcon={<RefreshIcon />}
-            sx={{ borderColor: '#CBD5E1', color: '#475569' }}
-          >
-            Обновить данные
-          </Button>
+          <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+            <Tooltip title="Сформировать отдельную пошаговую инструкцию кассира (PDF): Эквайринг + Фискализация (Defining, Using, Testing)">
+              <Button
+                size="small"
+                variant="contained"
+                onClick={() => handlePrintManual()}
+                startIcon={<ReceiptLongIcon />}
+                sx={{
+                  bgcolor: '#D97706',
+                  color: '#FFFFFF',
+                  fontWeight: 700,
+                  textTransform: 'none',
+                  '&:hover': { bgcolor: '#B45309' }
+                }}
+              >
+                Инструкция (PDF)
+              </Button>
+            </Tooltip>
+            <Button
+              size="small"
+              variant="outlined"
+              onClick={fetchTransactions}
+              startIcon={<RefreshIcon />}
+              sx={{ borderColor: '#CBD5E1', color: '#475569', textTransform: 'none' }}
+            >
+              Обновить данные
+            </Button>
+          </Box>
         </Box>
 
         {alert && (
@@ -777,6 +815,11 @@ export default function PosTestWizard() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Hidden printable manual for react-to-print */}
+      <Box sx={{ display: 'none' }}>
+        <PosFiscalManualPrintTemplate ref={posFiscalPrintRef} />
+      </Box>
     </Box>
   );
 }

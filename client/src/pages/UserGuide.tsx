@@ -43,6 +43,8 @@ import DnsIcon from '@mui/icons-material/Dns';
 import SmartToyIcon from '@mui/icons-material/SmartToy';
 
 import { UserGuidePrintTemplate } from '../components/UserGuidePrintTemplate';
+import { PosFiscalManualPrintTemplate } from '../components/PosFiscalManualPrintTemplate';
+import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
 
 interface GuideSection {
   id: string;
@@ -72,10 +74,28 @@ export default function UserGuide() {
   });
 
   const printRef = useRef<HTMLDivElement>(null);
+  const posFiscalPrintRef = useRef<HTMLDivElement>(null);
 
   const handlePrintTrigger = useReactToPrint({
     contentRef: printRef,
     documentTitle: `Руководство_пользователя_ОртоERP_v1.4.1_${new Date().toISOString().slice(0, 10)}`,
+    pageStyle: `
+      @page {
+        size: A4 portrait;
+        margin: 8mm 10mm;
+      }
+      @media print {
+        body {
+          -webkit-print-color-adjust: exact !important;
+          print-color-adjust: exact !important;
+        }
+      }
+    `
+  });
+
+  const handlePrintPosFiscalManual = useReactToPrint({
+    contentRef: posFiscalPrintRef,
+    documentTitle: `Инструкция_кассира_Эквайринг_и_Фискализация_АльфаБанк_АТОЛ91Ф_${new Date().toISOString().slice(0, 10)}`,
     pageStyle: `
       @page {
         size: A4 portrait;
@@ -692,10 +712,46 @@ export default function UserGuide() {
             </Box>
           </Box>
 
-          {/* PART 2: USING */}
+          {/* PART 2: BEFORE START CHECKLIST */}
+          <Box sx={{ p: 2.5, bgcolor: '#FFFBEB', border: '1.5px solid #FDE68A', borderRadius: 2 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
+              <Chip label="ЧАСТЬ 2: ОБЯЗАТЕЛЬНО УТРОМ" size="small" sx={{ bgcolor: '#D97706', color: '#FFFFFF', fontWeight: 800 }} />
+              <Typography variant="h6" sx={{ fontWeight: 800, color: '#92400E', fontSize: '1.05rem' }}>
+                Test Operations Before Start to Work: Утренний регламент администратора-кассира до начала приема
+              </Typography>
+            </Box>
+
+            <Typography variant="body2" sx={{ color: '#78350F', mb: 1.5, lineHeight: 1.6, fontWeight: 500 }}>
+              Каждое утро строго до 08:45 (до прихода первого пациента) администратор-кассир обязан выполнить 5 шагов аппаратного тестирования кассового узла:
+            </Typography>
+
+            <Box component="ol" sx={{ pl: 2.5, m: 0, color: '#451A03', '& li': { mb: 1.2, lineHeight: 1.5 } }}>
+              <li>
+                <strong>Шаг 1: Включение питания устройств.</strong> Подать питание на ККТ АТОЛ 91Ф (дождаться звукового сигнала готовности) и банковский терминал Ingenico/Verifone. Убедиться, что на дисплее пин-пада горит дата и логотип банка.
+              </li>
+              <li>
+                <strong>Шаг 2: Контроль термобумаги 57 мм.</strong> Проверить наличие бумаги в ККТ и POS-терминале. При остатке ленты менее 2 см заменить рулон, чтобы избежать остановки принтера во время пробития чека.
+              </li>
+              <li>
+                <strong>Шаг 3: Тест связи с процессингом (Команда 05).</strong> В шапке МИС кликнуть на карточку терминала <code>PosDeviceCard</code> и нажать <em>«Тест связи с процессингом (Команда 05)»</em>. Проверить 5 уровней:
+                <Box sx={{ mt: 0.5, pl: 1, borderLeft: '3px solid #D97706', fontSize: '0.85rem' }}>
+                  1. Шлюз МИС (OK) • 2. Драйвер <code>pos.exe</code> (OK, найден) • 3. Порт COM4 (OK) • 4. Пинг хоста Альфа-Банка (Код 00, RTT &lt; 500ms) • 5. Ключи криптографии (OK).<br />
+                  <em>Если шаг 2 выдает «Файл не найден»:</em> прямо в окне нажать <em>«Изменить путь к файлу драйвера»</em>, указать <code>C:\Arcus2\pos.exe</code> и нажать кнопку <em>«Проверить файл»</em>.
+                </Box>
+              </li>
+              <li>
+                <strong>Шаг 4: Контроль статуса ККТ и длительности смены (&lt; 24 ч).</strong> В разделе <code>/admin/fiscal-shifts</code> убедиться, что смена не превышает 24 часов (требование 54-ФЗ). Если смена длится более 22 часов — немедленно выполнить закрытие смены (Z-отчет) до начала приема пациентов.
+              </li>
+              <li>
+                <strong>Шаг 5: Пробный X-отчет (без гашения).</strong> Нажать «Снять X-отчет» для проверки четкости печати фискального принтера и контроля нулевых утренних остатков в кассе.
+              </li>
+            </Box>
+          </Box>
+
+          {/* PART 3: USING */}
           <Box sx={{ p: 2.5, bgcolor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 2 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
-              <Chip label="ЧАСТЬ 2" size="small" sx={{ bgcolor: '#16A34A', color: '#FFFFFF', fontWeight: 800 }} />
+              <Chip label="ЧАСТЬ 3" size="small" sx={{ bgcolor: '#16A34A', color: '#FFFFFF', fontWeight: 800 }} />
               <Typography variant="h6" sx={{ fontWeight: 800, color: '#0F3C64', fontSize: '1.05rem' }}>
                 Using: Регламент кассира-администратора, двухфазная оплата (Эквайринг + Чек) и сверка итогов
               </Typography>
@@ -747,10 +803,10 @@ export default function UserGuide() {
             </Box>
           </Box>
 
-          {/* PART 3: TESTING */}
+          {/* PART 4: TESTING */}
           <Box sx={{ p: 2.5, bgcolor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 2 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
-              <Chip label="ЧАСТЬ 3" size="small" sx={{ bgcolor: '#7C3AED', color: '#FFFFFF', fontWeight: 800 }} />
+              <Chip label="ЧАСТЬ 4" size="small" sx={{ bgcolor: '#7C3AED', color: '#FFFFFF', fontWeight: 800 }} />
               <Typography variant="h6" sx={{ fontWeight: 800, color: '#0F3C64', fontSize: '1.05rem' }}>
                 Testing: Сервисная панель диагностики, тест хоста (Команда 05), мастер тестирования и устранение неполадок
               </Typography>
@@ -1210,7 +1266,24 @@ export default function UserGuide() {
               Свернуть все
             </Button>
           </Tooltip>
-          <Tooltip title="Сформировать и сохранить официальную версию инструкции в PDF (формат А4)" arrow enterDelay={200}>
+          <Tooltip title="Сформировать отдельную пошаговую инструкцию кассира (PDF): Эквайринг + Фискализация (Defining, Using, Testing)" arrow enterDelay={200}>
+            <Button
+              variant="contained"
+              startIcon={<ReceiptLongIcon />}
+              onClick={() => handlePrintPosFiscalManual()}
+              sx={{
+                bgcolor: '#D97706',
+                color: '#FFFFFF',
+                textTransform: 'none',
+                fontWeight: 700,
+                boxShadow: 'none',
+                '&:hover': { bgcolor: '#B45309' }
+              }}
+            >
+              Инструкция: Эквайринг + ККТ (PDF)
+            </Button>
+          </Tooltip>
+          <Tooltip title="Сформировать и сохранить официальную версию общего руководства МИС в PDF (формат А4)" arrow enterDelay={200}>
             <Button
               variant="contained"
               startIcon={<PictureAsPdfIcon />}
@@ -1223,7 +1296,7 @@ export default function UserGuide() {
                 '&:hover': { bgcolor: '#0A2744' }
               }}
             >
-              Печать / Скачать PDF
+              Руководство МИС (PDF)
             </Button>
           </Tooltip>
         </Box>
@@ -1375,6 +1448,12 @@ export default function UserGuide() {
             </Accordion>
           );
         })}
+      </Box>
+
+      {/* Hidden printable components for react-to-print */}
+      <Box sx={{ display: 'none' }}>
+        <UserGuidePrintTemplate ref={printRef} />
+        <PosFiscalManualPrintTemplate ref={posFiscalPrintRef} />
       </Box>
     </Box>
   );

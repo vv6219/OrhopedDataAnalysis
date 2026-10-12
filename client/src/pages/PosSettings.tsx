@@ -1,14 +1,16 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   Box, Typography, Paper, Button, TextField, Switch, FormControlLabel,
   MenuItem, Select, FormControl, InputLabel, Chip,
   Alert, Dialog, DialogTitle,
   DialogContent, DialogActions, Tab, Tabs, FormHelperText, CircularProgress,
-  Slider
+  Slider, Tooltip
 } from '@mui/material';
+import { useReactToPrint } from 'react-to-print';
 import { API_BASE_URL } from '../config/apiConfig';
 import PosDeviceCard from '../components/PosDeviceCard';
+import { PosFiscalManualPrintTemplate } from '../components/PosFiscalManualPrintTemplate';
 import CreditCardIcon from '@mui/icons-material/CreditCard';
 import SaveIcon from '@mui/icons-material/Save';
 import AddCircleIcon from '@mui/icons-material/AddCircle';
@@ -21,6 +23,7 @@ import UsbIcon from '@mui/icons-material/Usb';
 import SecurityIcon from '@mui/icons-material/Security';
 import FolderOpenIcon from '@mui/icons-material/FolderOpen';
 import TuneIcon from '@mui/icons-material/Tune';
+import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
 import { usePos, type PosSettingsProfile } from '../context/PosContext';
 
 export interface PosAuditRecord {
@@ -55,6 +58,25 @@ export default function PosSettings() {
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState(0);
   const [alert, setAlert] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+  const posFiscalPrintRef = useRef<HTMLDivElement>(null);
+
+  const handlePrintManual = useReactToPrint({
+    contentRef: posFiscalPrintRef,
+    documentTitle: `Инструкция_кассира_Эквайринг_и_Фискализация_АльфаБанк_АТОЛ91Ф_${new Date().toISOString().slice(0, 10)}`,
+    pageStyle: `
+      @page {
+        size: A4 portrait;
+        margin: 8mm 10mm;
+      }
+      @media print {
+        body {
+          -webkit-print-color-adjust: exact !important;
+          print-color-adjust: exact !important;
+        }
+      }
+    `
+  });
 
   // Driver check state
   const [driverCheckStatus, setDriverCheckStatus] = useState<{ checked: boolean; exists: boolean; message: string; checking: boolean }>({
@@ -350,6 +372,25 @@ export default function PosSettings() {
             >
               Новый профиль
             </Button>
+
+            <Tooltip title="Сформировать отдельную пошаговую инструкцию кассира (PDF): Эквайринг + Фискализация (Defining, Using, Testing)">
+              <Button
+                variant="outlined"
+                size="small"
+                onClick={() => handlePrintManual()}
+                startIcon={<ReceiptLongIcon />}
+                sx={{
+                  color: '#FFFFFF',
+                  borderColor: 'rgba(255, 255, 255, 0.4)',
+                  fontWeight: 700,
+                  textTransform: 'none',
+                  borderRadius: 1.5,
+                  '&:hover': { borderColor: '#FFFFFF', bgcolor: 'rgba(255, 255, 255, 0.1)' }
+                }}
+              >
+                Инструкция кассира (PDF)
+              </Button>
+            </Tooltip>
           </Box>
         </Box>
 
@@ -880,6 +921,11 @@ export default function PosSettings() {
           <Button onClick={() => setAuditDetailOpen(false)} variant="contained" sx={{ bgcolor: '#0F3C64' }}>Закрыть</Button>
         </DialogActions>
       </Dialog>
+
+      {/* Hidden printable manual for react-to-print */}
+      <Box sx={{ display: 'none' }}>
+        <PosFiscalManualPrintTemplate ref={posFiscalPrintRef} />
+      </Box>
     </Box>
   );
 }
