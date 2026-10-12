@@ -24,7 +24,7 @@ $toolsDir = Join-Path $rootDir "tools"
 $publicDir = Join-Path $rootDir "public"
 
 Write-Host "======================================================================" -ForegroundColor Cyan
-Write-Host " Distributive Build: Orthopedic Clinic Dobrushkin (v1.4.1)" -ForegroundColor Cyan
+Write-Host " Distributive Build: Orthopedic Clinic Dobrushkin (v1.4.2)" -ForegroundColor Cyan
 Write-Host " Full Standalone Zero-Dependency Installation Package" -ForegroundColor Cyan
 Write-Host "======================================================================" -ForegroundColor Cyan
 Write-Host "Root Directory:   $rootDir" -ForegroundColor Gray
@@ -136,7 +136,7 @@ if ($backupDbTemp -and (Test-Path $backupDbTemp)) {
 } elseif (Test-Path $sourceDb) {
     Copy-Item -Path $sourceDb -Destination $destDb -Force
     $dbSizeMb = (Get-Item $destDb).Length / 1MB
-    Write-Host ("  -> Copied master SQLite database with data: " + [Math]::Round($dbSizeMb, 2) + " MB (61k+ records, v1.4.1 schemas)") -ForegroundColor Green
+    Write-Host ("  -> Copied master SQLite database with data: " + [Math]::Round($dbSizeMb, 2) + " MB (61k+ records, v1.4.2 schemas)") -ForegroundColor Green
 } else {
     Write-Host "  [WARNING] Master SQLite database not found!" -ForegroundColor Red
 }
