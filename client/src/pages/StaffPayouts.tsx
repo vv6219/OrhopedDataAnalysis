@@ -507,7 +507,7 @@ export default function StaffPayouts() {
 
   // Export to Excel (CSV with UTF-8 BOM)
   const handleExportCsv = () => {
-    if (accruals.length === 0) return;
+    if (filteredAccruals.length === 0) return;
 
     let headers = ['ID', 'Дата', 'Пациент', 'Сервис', 'Выручка (руб)', 'Расходники*1.15', 'Маржа (руб)'];
     if (viewMode === 'staff') {
@@ -516,7 +516,7 @@ export default function StaffPayouts() {
       headers.push('Выплаты бригаде (руб)', 'Остаток клиники (руб)', 'Состав бригады');
     }
 
-    const rows = accruals.map(r => {
+    const rows = filteredAccruals.map(r => {
       const common = [
         r.id,
         `"${r.service_date ? r.service_date.slice(0, 10) : ''}"`,
@@ -601,7 +601,7 @@ export default function StaffPayouts() {
     }
   };
 
-  // Accounting totals calculations for footer
+  // Accounting totals calculations for footer (dynamically calculated on filtered data)
   const gridTotals = useMemo(() => {
     let rev = 0;
     let mat = 0;
@@ -609,7 +609,7 @@ export default function StaffPayouts() {
     let pay = 0;
     let clProf = 0;
 
-    accruals.forEach(it => {
+    filteredAccruals.forEach(it => {
       rev += Number(it.revenue || 0);
       mat += Number(it.materials_cost || 0) * Number(it.material_cost_factor || 1.15);
       mar += Number(it.margin_base || 0);
@@ -622,14 +622,14 @@ export default function StaffPayouts() {
     });
 
     return {
-      totalCount: accruals.length,
+      totalCount: filteredAccruals.length,
       totalRevenue: rev,
       totalMaterials: mat,
       totalMargin: mar,
       totalPayout: pay,
       totalClinicProfit: clProf
     };
-  }, [accruals, viewMode]);
+  }, [filteredAccruals, viewMode]);
 
   // COLUMNS: Procedure-Centric Brigade View
   const procedureColumns: GridColDef[] = [

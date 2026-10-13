@@ -535,7 +535,6 @@ if should_sync('protdict'):
         moduser TEXT
     );
     """)
-    sqlite_cur.execute("DELETE FROM protdict;")
     fb_cur.execute("SELECT ID, DOCN, KIND, NAME, TITLE, CONTENT, POST, FNAME, HIDE_F, MODDATE, MODUSER FROM PROTDICT")
     rows = []
     for r in fb_cur.fetchall():
@@ -555,19 +554,77 @@ if should_sync('protdict'):
             r[9].isoformat() if r[9] else None,
             (r[10] or '').strip()
         ))
-    sqlite_cur.executemany("INSERT INTO protdict VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", rows)
+    sqlite_cur.executemany("""
+    INSERT INTO protdict (id, docn, kind, name, title, content, post, fname, hide_f, moddate, moduser)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET
+        docn = excluded.docn,
+        kind = excluded.kind,
+        name = excluded.name,
+        title = excluded.title,
+        content = excluded.content,
+        post = excluded.post,
+        fname = excluded.fname,
+        hide_f = excluded.hide_f,
+        moddate = excluded.moddate,
+        moduser = excluded.moduser;
+    """, rows)
     sqlite_cur.execute("CREATE INDEX IF NOT EXISTS idx_protdict_docn ON protdict(docn);")
     sqlite_cur.execute("CREATE INDEX IF NOT EXISTS idx_protdict_kind ON protdict(kind);")
+    sqlite_cur.execute("CREATE INDEX IF NOT EXISTS idx_protdict_hide ON protdict(hide_f);")
+    sqlite_cur.execute("CREATE INDEX IF NOT EXISTS idx_protdict_name ON protdict(name);")
     sqlite_conn.commit()
-    print(f"  -> Импортировано {len(rows)} шаблонов протоколов ({time.time()-t0:.2f}с)")
+    print(f"  -> Импортировано/обновлено {len(rows)} шаблонов протоколов ({time.time()-t0:.2f}с)")
 
 # -------------------------------------------------------------
 # 7. PROTOCOLS (Медицинские протоколы приёмов)
 # -------------------------------------------------------------
-if should_sync('protocols'):
-    print("\n[+] Синхронизация PROTOCOLS (Клинические протоколы приемов)...")
-    t0 = time.time()
-    sqlite_cur.execute("""
+import re
+
+def detect_joint_and_side(title, content):
+    text = f"{title or ''} {content or ''}".lower()
+    
+    joint = None
+    if any(k in text for k in ['колен', 'гонартроз', 'мениск', 'пкс', 'зкс']):
+        joint = 'knee'
+    elif any(k in text for k in ['плеч', 'ротатор', 'импиджмент', 'акроми']):
+        joint = 'shoulder'
+    elif any(k in text for k in ['тазобедр', 'коксартроз', 'вертлуж']):
+        joint = 'hip'
+    elif any(k in text for k in ['голеностоп', 'ахилл', 'таран', 'фасциит', 'пяточн']):
+        joint = 'ankle'
+    elif any(k in text for k in ['лучезапяст', 'кист', 'карпальн', 'ладьевид']):
+        joint = 'wrist'
+    elif any(k in text for k in ['локтев', 'эпикондилит']):
+        joint = 'elbow'
+    elif any(k in text for k in ['позвоноч', 'пояснич', 'шейн', 'остеохондроз', 'грыж']):
+        joint = 'spine'
+
+    side = None
+    if any(k in text for k in ['прав', 'справа', 'dextra']):
+        side = 'right'
+    elif any(k in text for k in ['лев', 'слева', 'sinistra']):
+        side = 'left'
+    elif any(k in text for k in ['двусторон', 'обеих', 'обоих']):
+        side = 'bilateral'
+        
+    return joint, side
+
+def extract_vas_score(content):
+    if not content:
+        return 0
+    m = re.search(r'(?:ваш|vas)\s*[:=\-]?\s*(\d{1,2})', content, re.IGNORECASE)
+    if m:
+        try:
+            val = int(m.group(1))
+            if 0 <= val <= 10:
+                return val
+        except ValueError:
+            pass
+    return 0
+
+def ensure_protocols_schema(cur):
+    cur.execute("""
     CREATE TABLE IF NOT EXISTS protocols (
         id INTEGER PRIMARY KEY,
         docn INTEGER,
@@ -583,24 +640,94 @@ if should_sync('protocols'):
         hide_f INTEGER DEFAULT 0,
         moddate TEXT,
         moduser TEXT,
-        shot_f INTEGER DEFAULT 0
+        shot_f INTEGER DEFAULT 0,
+        protocol_json TEXT,
+        schema_version TEXT DEFAULT '2.0',
+        appointment_id INTEGER,
+        status TEXT DEFAULT 'signed',
+        vas_score INTEGER DEFAULT 0,
+        primary_joint TEXT,
+        side TEXT,
+        is_signed INTEGER DEFAULT 1,
+        signed_at TEXT,
+        signed_by_docn INTEGER,
+        signature_hash TEXT,
+        revocation_reason TEXT
     );
     """)
-    sqlite_cur.execute("DELETE FROM protocols;")
+    cur.execute("PRAGMA table_info(protocols);")
+    existing_cols = {row[1] for row in cur.fetchall()}
+    needed_cols = [
+        ("protocol_json", "TEXT"),
+        ("schema_version", "TEXT DEFAULT '2.0'"),
+        ("appointment_id", "INTEGER"),
+        ("status", "TEXT DEFAULT 'signed'"),
+        ("vas_score", "INTEGER DEFAULT 0"),
+        ("primary_joint", "TEXT"),
+        ("side", "TEXT"),
+        ("is_signed", "INTEGER DEFAULT 1"),
+        ("signed_at", "TEXT"),
+        ("signed_by_docn", "INTEGER"),
+        ("signature_hash", "TEXT"),
+        ("revocation_reason", "TEXT")
+    ]
+    for col_name, col_type in needed_cols:
+        if col_name not in existing_cols:
+            try:
+                cur.execute(f"ALTER TABLE protocols ADD COLUMN {col_name} {col_type};")
+            except Exception:
+                pass
+
+if should_sync('protocols'):
+    print("\n[+] Синхронизация PROTOCOLS (Клинические протоколы приемов)...")
+    t0 = time.time()
+    ensure_protocols_schema(sqlite_cur)
+
     fb_cur.execute("SELECT ID, DOCN, PT_ID, VDATE, KIND, MODE, TITLE, CONTENT, POST, RDATE, FNAME, HIDE_F, MODDATE, MODUSER, SHOT_F FROM PROTOCOLS")
     p_batch = []
     p_count = 0
+    upsert_sql = """
+    INSERT INTO protocols (
+        id, docn, pt_id, vdate, kind, mode, title, content, post, rdate, fname, hide_f, moddate, moduser, shot_f,
+        status, is_signed, schema_version, primary_joint, side, vas_score
+    ) VALUES (
+        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+        'signed', 1, '2.0', ?, ?, ?
+    )
+    ON CONFLICT(id) DO UPDATE SET
+        docn = excluded.docn,
+        pt_id = excluded.pt_id,
+        vdate = excluded.vdate,
+        kind = excluded.kind,
+        mode = excluded.mode,
+        title = excluded.title,
+        content = excluded.content,
+        post = excluded.post,
+        rdate = excluded.rdate,
+        fname = excluded.fname,
+        hide_f = excluded.hide_f,
+        moddate = excluded.moddate,
+        moduser = excluded.moduser,
+        shot_f = excluded.shot_f,
+        primary_joint = COALESCE(protocols.primary_joint, excluded.primary_joint),
+        side = COALESCE(protocols.side, excluded.side),
+        vas_score = CASE WHEN protocols.vas_score > 0 THEN protocols.vas_score ELSE excluded.vas_score END;
+    """
     for r in fb_cur.fetchall():
         content_val = r[7]
         if isinstance(content_val, bytes):
             content_val = content_val.decode('cp1251', errors='replace')
         elif content_val is None:
             content_val = ''
+        title_val = (r[6] or '').strip()
+        joint, side = detect_joint_and_side(title_val, content_val)
+        vas = extract_vas_score(content_val)
+
         p_batch.append((
             r[0], r[1], r[2],
             r[3].isoformat() if r[3] else None,
             r[4], r[5],
-            (r[6] or '').strip(),
+            title_val,
             content_val,
             (r[8] or '').strip(),
             r[9].isoformat() if r[9] else None,
@@ -608,24 +735,60 @@ if should_sync('protocols'):
             int(r[11] or 0),
             r[12].isoformat() if r[12] else None,
             (r[13] or '').strip(),
-            int(r[14] or 0)
+            int(r[14] or 0),
+            joint,
+            side,
+            vas
         ))
         p_count += 1
         if len(p_batch) >= 2000:
-            sqlite_cur.executemany("INSERT INTO protocols VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", p_batch)
+            sqlite_cur.executemany(upsert_sql, p_batch)
             sqlite_conn.commit()
             p_batch = []
 
     if p_batch:
-        sqlite_cur.executemany("INSERT INTO protocols VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", p_batch)
+        sqlite_cur.executemany(upsert_sql, p_batch)
         sqlite_conn.commit()
 
     sqlite_cur.execute("CREATE INDEX IF NOT EXISTS idx_protocols_pt_id ON protocols(pt_id);")
     sqlite_cur.execute("CREATE INDEX IF NOT EXISTS idx_protocols_vdate ON protocols(vdate);")
     sqlite_cur.execute("CREATE INDEX IF NOT EXISTS idx_protocols_docn ON protocols(docn);")
     sqlite_cur.execute("CREATE INDEX IF NOT EXISTS idx_protocols_kind ON protocols(kind);")
+    sqlite_cur.execute("CREATE INDEX IF NOT EXISTS idx_protocols_joint ON protocols(primary_joint);")
     sqlite_conn.commit()
-    print(f"  -> Импортировано {p_count} протоколов осмотра ({time.time()-t0:.2f}с)")
+    print(f"  -> Импортировано/обновлено {p_count} протоколов осмотра ({time.time()-t0:.2f}с)")
+
+    # Rebuild FTS5 if protocols_fts virtual table exists
+    try:
+        sqlite_cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='protocols_fts'")
+        if sqlite_cur.fetchone():
+            print("  -> Обновление полнотекстового индекса protocols_fts...")
+            sqlite_cur.execute("DELETE FROM protocols_fts;")
+            sqlite_cur.execute("""
+            INSERT INTO protocols_fts (protocol_id, patient_id, patient_name, doctor_name, joint_area, mkb_codes, mkb_names, full_content)
+            SELECT 
+                p.id,
+                p.pt_id,
+                COALESCE(pt.full_name, ''),
+                'Врач ортопед',
+                COALESCE(p.primary_joint, p.title, ''),
+                COALESCE(diag.mkb_codes, ''),
+                COALESCE(diag.mkb_names, ''),
+                COALESCE(p.content, '')
+            FROM protocols p
+            LEFT JOIN patients pt ON pt.id = p.pt_id
+            LEFT JOIN (
+                SELECT pr_id, 
+                       GROUP_CONCAT(mkb_code, ', ') AS mkb_codes,
+                       GROUP_CONCAT(mkb_name, '; ') AS mkb_names
+                FROM diagnoses
+                GROUP BY pr_id
+            ) diag ON diag.pr_id = p.id;
+            """)
+            sqlite_conn.commit()
+            print("  -> Полнотекстовый индекс protocols_fts успешно обновлен!")
+    except Exception as e_fts:
+        print(f"  -> Предупреждение при обновлении FTS5: {e_fts}")
 
 # -------------------------------------------------------------
 # 8. PROTSHOTS (Снимки и изображения к протоколам)
@@ -719,7 +882,6 @@ if should_sync('diagnoses'):
         mkb_name TEXT
     );
     """)
-    sqlite_cur.execute("DELETE FROM diagnoses;")
     fb_cur.execute("SELECT ID, PR_ID, MK_ID FROM DIAGNOSES")
     diag_rows = []
     for r in fb_cur.fetchall():
@@ -730,11 +892,18 @@ if should_sync('diagnoses'):
             info.get('code', ''),
             info.get('name', '')
         ))
-    sqlite_cur.executemany("INSERT INTO diagnoses VALUES (?, ?, ?, ?, ?)", diag_rows)
+    sqlite_cur.executemany("""
+    INSERT INTO diagnoses (id, pr_id, mk_id, mkb_code, mkb_name) VALUES (?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET
+        pr_id = excluded.pr_id,
+        mk_id = excluded.mk_id,
+        mkb_code = excluded.mkb_code,
+        mkb_name = excluded.mkb_name;
+    """, diag_rows)
     sqlite_cur.execute("CREATE INDEX IF NOT EXISTS idx_diagnoses_pr_id ON diagnoses(pr_id);")
     sqlite_cur.execute("CREATE INDEX IF NOT EXISTS idx_diagnoses_mk_id ON diagnoses(mk_id);")
     sqlite_conn.commit()
-    print(f"  -> Импортировано {len(diag_rows)} установленных диагнозов ({time.time()-t0:.2f}с)")
+    print(f"  -> Импортировано/обновлено {len(diag_rows)} установленных диагнозов ({time.time()-t0:.2f}с)")
 
 # -------------------------------------------------------------
 # 11. SERVDICT (Справочник медицинских услуг / прайс-лист)
@@ -891,12 +1060,20 @@ if should_sync('servplan'):
         cnt INTEGER
     );
     """)
-    sqlite_cur.execute("DELETE FROM servplan;")
+    sqlite_cur.execute("CREATE INDEX IF NOT EXISTS idx_servplan_pr_id ON servplan(pr_id);")
+    sqlite_cur.execute("CREATE INDEX IF NOT EXISTS idx_servplan_sd_id ON servplan(sd_id);")
     fb_cur.execute("SELECT ID, PR_ID, SD_ID, SR_ID, CNT FROM SERVPLAN")
     spl_rows = [(r[0], r[1], r[2], r[3], int(r[4] or 0)) for r in fb_cur.fetchall()]
-    sqlite_cur.executemany("INSERT INTO servplan VALUES (?, ?, ?, ?, ?)", spl_rows)
+    sqlite_cur.executemany("""
+    INSERT INTO servplan (id, pr_id, sd_id, sr_id, cnt) VALUES (?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET
+        pr_id = excluded.pr_id,
+        sd_id = excluded.sd_id,
+        sr_id = excluded.sr_id,
+        cnt = excluded.cnt;
+    """, spl_rows)
     sqlite_conn.commit()
-    print(f"  -> Импортировано {len(spl_rows)} планов SERVPLAN ({time.time()-t0:.2f}с)")
+    print(f"  -> Импортировано/обновлено {len(spl_rows)} планов SERVPLAN ({time.time()-t0:.2f}с)")
 
 # -------------------------------------------------------------
 # 15. LABDICT, LABPDF, LABPLAN

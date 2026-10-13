@@ -127,8 +127,12 @@ export function parseProtocolContent(rawContent: string | null | undefined): Par
       diagnosisArr.push(text);
     } else if (/сделано|обезболиван|манипуляц/.test(lowerCapt)) {
       performedArr.push(item.capt.endsWith(':') ? `${item.capt} ${text}` : `${item.capt}: ${text}`);
-    } else if (/рекоменд|план|лечени|назначен/.test(lowerCapt)) {
-      recommendationsArr.push(text);
+    } else if (/рекоменд|план|лечени|назначен|повторн/.test(lowerCapt)) {
+      if (text) {
+        recommendationsArr.push(text);
+      } else if (item.capt) {
+        recommendationsArr.push(`[${item.capt}]`);
+      }
     } else if (/объективн|местн|локальн|исследован|рентген|статус/.test(lowerCapt)) {
       objectiveArr.push(item.capt ? `${item.capt} ${text}` : text);
     } else {

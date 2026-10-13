@@ -299,23 +299,18 @@ export default function CheckoutWizard() {
           fetch(`${API_BASE_URL}/api/materials`)
         ]);
 
+        let loadedOps: any[] = [];
+        let loadedPatients: any[] = [];
+
         if (opsRes.ok) {
-          const opsData = await opsRes.json();
-          setOperationsList(opsData);
-          if (opsData.length > 0) {
-            setSelectedOperations([
-              { ...opsData[0], quantity: 1, unit_price: opsData[0].price, subtotal: opsData[0].price }
-            ]);
-          }
+          loadedOps = await opsRes.json();
+          setOperationsList(loadedOps);
         }
 
         if (patientsRes.ok) {
-          const patientsData = await patientsRes.json();
-          setPatientsList(patientsData);
-          setDefaultPatients(patientsData);
-          if (patientsData.length > 0) {
-            setSelectedPatient(patientsData[0]);
-          }
+          loadedPatients = await patientsRes.json();
+          setPatientsList(loadedPatients);
+          setDefaultPatients(loadedPatients);
         }
 
         if (staffRes.ok) {
@@ -334,31 +329,53 @@ export default function CheckoutWizard() {
 
         // Check for prefill from Ortho Workstation
         const prefillStr = sessionStorage.getItem('ortho_checkout_prefill');
+        let prefillApplied = false;
+
         if (prefillStr) {
           try {
             const prefill = JSON.parse(prefillStr);
-            if (prefill.patientId && patientsRes.ok) {
-              const patientsData = await patientsRes.clone().json();
-              const matchPt = patientsData.find((p: any) => p.id === prefill.patientId);
-              if (matchPt) setSelectedPatient(matchPt);
-              else if (prefill.patientName) {
-                setSelectedPatient({ id: prefill.patientId, full_name: prefill.patientName });
+            if (prefill.patientId) {
+              const matchPt = loadedPatients.find((p: any) => p.id === prefill.patientId);
+              if (matchPt) {
+                setSelectedPatient(matchPt);
+                const contact = matchPt.phone || matchPt.sphone || matchPt.contact_phone || matchPt.email || '';
+                if (contact) setPatientContact(contact);
+              } else if (prefill.patientName) {
+                setSelectedPatient({ id: prefill.patientId, full_name: prefill.patientName, surname: prefill.patientName });
               }
             }
-            if (prefill.items && prefill.items.length > 0) {
-              const mapped = prefill.items.map((it: any, i: number) => ({
-                id: it.id || (99000 + i),
-                name: it.name,
-                price: it.price,
-                unit_price: it.price,
-                quantity: it.quantity || 1,
-                subtotal: it.price * (it.quantity || 1)
-              }));
+            if (prefill.items && Array.isArray(prefill.items) && prefill.items.length > 0) {
+              const mapped = prefill.items.map((it: any, i: number) => {
+                const itemPrice = Number(it.price ?? it.unitPrice ?? it.unit_price ?? 0);
+                const itemQty = Number(it.quantity || 1);
+                return {
+                  id: it.id || (99000 + i),
+                  name: it.name || it.title || 'Медицинская услуга',
+                  code: it.code || '',
+                  price: itemPrice,
+                  unit_price: itemPrice,
+                  quantity: itemQty,
+                  subtotal: itemPrice * itemQty
+                };
+              });
               setSelectedOperations(mapped);
+              prefillApplied = true;
             }
             sessionStorage.removeItem('ortho_checkout_prefill');
           } catch (e) {
             console.error('Error applying ortho prefill:', e);
+          }
+        }
+
+        // Default fallbacks only if no prefill was applied
+        if (!prefillApplied) {
+          if (loadedOps.length > 0) {
+            setSelectedOperations([
+              { ...loadedOps[0], quantity: 1, unit_price: loadedOps[0].price, subtotal: loadedOps[0].price }
+            ]);
+          }
+          if (loadedPatients.length > 0) {
+            setSelectedPatient(loadedPatients[0]);
           }
         }
       } catch (err) {

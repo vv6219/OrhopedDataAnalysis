@@ -9,11 +9,17 @@
 ### Вариант 1: Через npm
 ```bash
 cd server
-npm run sync:patients
+npm run sync:protocols   # Быстрая синхронизация протоколов, диагнозов, шаблонов и планов
+npm run sync:patients    # Полная синхронизация пациентов
+npm run sync:all         # Синхронизация всех таблиц Firebird
 ```
 
 ### Вариант 2: Напрямую через Python
 ```bash
+# Синхронизация только протоколов, диагнозов и планов
+python server/sync_patients_firebird.py --tables=protocols,diagnoses,protdict,servplan
+
+# Полная синхронизация
 python server/sync_patients_firebird.py
 ```
 

@@ -215,7 +215,6 @@ export default function OrthoWorkstation() {
         if (parsedJson) {
           if (parsedJson.vasScore !== undefined) setVasScore(parsedJson.vasScore);
           if (parsedJson.jointArea) setSelectedJoint(parsedJson.jointArea as JointAreaId);
-          if (parsedJson.prescriptions) setPrescriptions(parsedJson.prescriptions);
           if (parsedJson.rom || parsedJson.tests) {
             const targetArea: JointAreaId = (parsedJson.jointArea as JointAreaId) || 'knee_r';
             setJointExamsMap((prev) => ({
@@ -232,6 +231,41 @@ export default function OrthoWorkstation() {
           }
         } else if (cp.vas_score !== undefined && cp.vas_score !== null) {
           setVasScore(cp.vas_score);
+        }
+
+        // Hydrate prescriptions from parsedJson or fallback to backend currentPrescriptions (servplan / ortho_treatment_prescriptions)
+        if (parsedJson?.prescriptions && parsedJson.prescriptions.length > 0) {
+          setPrescriptions(
+            parsedJson.prescriptions.map((p: any, i: number) => ({
+              id: p.id || `presc-${i}`,
+              category: p.category || 'service',
+              title: p.title || p.name || 'Медицинская услуга',
+              name: p.name || p.title || 'Медицинская услуга',
+              serviceId: p.serviceId || p.service_id,
+              serviceCode: p.code || p.serviceCode || p.service_code || '',
+              code: p.code || p.serviceCode || p.service_code || '',
+              unitPrice: Number(p.price ?? p.unitPrice ?? p.unit_price ?? 0),
+              price: Number(p.price ?? p.unitPrice ?? p.unit_price ?? 0),
+              quantity: Number(p.quantity || 1),
+              details: typeof p.details_json === 'string' ? JSON.parse(p.details_json || '{}') : (p.details || {})
+            }))
+          );
+        } else if (data.currentPrescriptions && data.currentPrescriptions.length > 0) {
+          setPrescriptions(
+            data.currentPrescriptions.map((p: any) => ({
+              id: `presc-${p.id}`,
+              category: p.category || 'service',
+              title: p.title || p.name || 'Медицинская услуга',
+              name: p.name || p.title || 'Медицинская услуга',
+              serviceId: p.service_id,
+              serviceCode: p.service_code,
+              code: p.service_code,
+              unitPrice: Number(p.unit_price ?? p.price ?? 0),
+              price: Number(p.unit_price ?? p.price ?? 0),
+              quantity: Number(p.quantity || 1),
+              details: typeof p.details_json === 'string' ? JSON.parse(p.details_json || '{}') : (p.details_json || {})
+            }))
+          );
         }
 
         // Diagnosis
@@ -292,38 +326,78 @@ export default function OrthoWorkstation() {
     return summary;
   }, [selectedJoint, vasScore, mediaList]);
 
-  // Fast Clinical Template Fill
+  // Fast Clinical Template Fill (ortho_templates + protdict)
   const handleApplyTemplate = (tmpl: any) => {
     try {
-      const parsed = typeof tmpl.template_json === 'string' ? JSON.parse(tmpl.template_json) : tmpl.template_json;
-      if (parsed.complaints) setComplaints(parsed.complaints);
-      if (parsed.anamnesis) setAnamnesis(parsed.anamnesis);
-      if (parsed.vas) setVasScore(parsed.vas);
-      if (tmpl.default_mkb_code) {
-        const found = COMMON_MKB10.find((m) => m.code === tmpl.default_mkb_code);
-        if (found) setSelectedMkb(found);
-        else setSelectedMkb({ code: tmpl.default_mkb_code, name: tmpl.title });
-      }
-      if (parsed.clinicalDiagnosis) setClinicalDiagnosis(parsed.clinicalDiagnosis);
-      if (parsed.recommendations) setRecommendations(parsed.recommendations);
-      if (parsed.prescriptions) {
-        setPrescriptions(parsed.prescriptions);
-      }
-      if (tmpl.joint_name) {
-        const matchingArea: JointAreaId = (tmpl.joint_name + '_r') as JointAreaId;
-        setSelectedJoint(matchingArea);
-        if (parsed.rom || parsed.tests) {
-          setJointExamsMap((prev) => ({
-            ...prev,
-            [matchingArea]: {
-              jointArea: matchingArea,
-              side: 'right',
-              axis: parsed.axis || 'norm',
-              effusion: parsed.effusion || 0,
-              rom: parsed.rom || { flexion_active: 140, flexion_passive: 140, extension_deficit: 0 },
-              tests: parsed.tests || {}
-            }
-          }));
+      if (tmpl.source === 'protdict' || tmpl.content) {
+        // CLINICAL PROTOCOL TEMPLATE (Firebird protdict)
+        const parsed = parseProtocolContent(tmpl.content);
+        if (parsed.complaints) setComplaints(parsed.complaints);
+        if (parsed.anamnesis) setAnamnesis(parsed.anamnesis);
+        if (parsed.diagnosis) setClinicalDiagnosis(parsed.diagnosis);
+        if (parsed.recommendations || parsed.performed) {
+          const combinedRec = [
+            parsed.recommendations,
+            parsed.performed ? `Выполнено:\n${parsed.performed}` : ''
+          ].filter(Boolean).join('\n\n');
+          setRecommendations(combinedRec);
+        }
+
+        const effectiveMkb = tmpl.default_mkb_code || parsed.mkb;
+        if (effectiveMkb) {
+          const found = COMMON_MKB10.find((m) => m.code === effectiveMkb);
+          if (found) setSelectedMkb(found);
+          else setSelectedMkb({ code: effectiveMkb, name: tmpl.title });
+        }
+
+        if (tmpl.joint_name) {
+          const matchingArea: JointAreaId = (tmpl.joint_name + '_r') as JointAreaId;
+          setSelectedJoint(matchingArea);
+        }
+      } else {
+        // BIOMECHANICS TEMPLATE (ortho_templates)
+        const parsed = typeof tmpl.template_json === 'string' ? JSON.parse(tmpl.template_json) : tmpl.template_json;
+        if (parsed.complaints) setComplaints(parsed.complaints);
+        if (parsed.anamnesis) setAnamnesis(parsed.anamnesis);
+        if (parsed.vas) setVasScore(parsed.vas);
+        if (tmpl.default_mkb_code) {
+          const found = COMMON_MKB10.find((m) => m.code === tmpl.default_mkb_code);
+          if (found) setSelectedMkb(found);
+          else setSelectedMkb({ code: tmpl.default_mkb_code, name: tmpl.title });
+        }
+        if (parsed.clinicalDiagnosis) setClinicalDiagnosis(parsed.clinicalDiagnosis);
+        if (parsed.recommendations) setRecommendations(parsed.recommendations);
+        if (parsed.prescriptions) {
+          setPrescriptions(
+            parsed.prescriptions.map((p: any, i: number) => ({
+              id: p.id || `tpl-presc-${i}`,
+              category: p.category || 'manipulation',
+              title: p.title || p.name || 'Медицинская услуга',
+              name: p.name || p.title || 'Медицинская услуга',
+              code: p.code || '',
+              unitPrice: Number(p.price ?? p.unitPrice ?? p.unit_price ?? 0),
+              price: Number(p.price ?? p.unitPrice ?? p.unit_price ?? 0),
+              quantity: Number(p.quantity || 1),
+              details: p.details || {}
+            }))
+          );
+        }
+        if (tmpl.joint_name) {
+          const matchingArea: JointAreaId = (tmpl.joint_name + '_r') as JointAreaId;
+          setSelectedJoint(matchingArea);
+          if (parsed.rom || parsed.tests) {
+            setJointExamsMap((prev) => ({
+              ...prev,
+              [matchingArea]: {
+                jointArea: matchingArea,
+                side: 'right',
+                axis: parsed.axis || 'norm',
+                effusion: parsed.effusion || 0,
+                rom: parsed.rom || { flexion_active: 140, flexion_passive: 140, extension_deficit: 0 },
+                tests: parsed.tests || {}
+              }
+            }));
+          }
         }
       }
       setToastMessage(`Шаблон «${tmpl.title}» успешно применён`);
@@ -336,20 +410,25 @@ export default function OrthoWorkstation() {
   // Add Prescribed Service from Catalog
   const handleAddService = () => {
     if (!pendingService) return;
-    const exists = prescriptions.find((p) => p.name === pendingService.name);
+    const exists = prescriptions.find((p) => (p.name || (p as any).title) === pendingService.name);
     if (exists) {
       setPrescriptions((prev) =>
-        prev.map((p) => (p.name === pendingService.name ? { ...p, quantity: (p.quantity || 1) + 1 } : p))
+        prev.map((p) => ((p.name || (p as any).title) === pendingService.name ? { ...p, quantity: (p.quantity || 1) + 1 } : p))
       );
     } else {
       setPrescriptions((prev) => [
         ...prev,
         {
-          code: pendingService.code,
+          id: `serv-${pendingService.id || Date.now()}`,
+          code: pendingService.code || '',
+          serviceCode: pendingService.code || '',
           name: pendingService.name,
+          title: pendingService.name,
           category: pendingService.kind || 'Ортопедия',
           quantity: 1,
-          price: pendingService.price || 0
+          price: Number(pendingService.price || 0),
+          unitPrice: Number(pendingService.price || 0),
+          serviceId: pendingService.id
         }
       ]);
     }
@@ -441,15 +520,24 @@ export default function OrthoWorkstation() {
               diagnosis_type: 'clinical'
             }
           : undefined,
-        prescriptions: prescriptions.map((p) => ({
-          service_code: p.code,
-          service_name: p.name,
-          category: p.category || 'Ортопедия',
-          quantity: p.quantity || 1,
-          unit_price: p.price || 0,
-          total_price: (p.price || 0) * (p.quantity || 1),
-          dosage_notes: p.dosage_notes || ''
-        })),
+        prescriptions: prescriptions.map((p) => {
+          const itemPrice = Number(p.price ?? (p as any).unitPrice ?? (p as any).unit_price ?? 0);
+          const itemQty = Number(p.quantity || 1);
+          return {
+            serviceId: (p as any).serviceId || null,
+            serviceCode: p.code || (p as any).serviceCode || '',
+            code: p.code || (p as any).serviceCode || '',
+            title: p.name || (p as any).title || 'Медицинская услуга',
+            name: p.name || (p as any).title || 'Медицинская услуга',
+            category: p.category || 'Ортопедия',
+            quantity: itemQty,
+            unitPrice: itemPrice,
+            unit_price: itemPrice,
+            price: itemPrice,
+            total_price: itemPrice * itemQty,
+            dosage_notes: (p as any).dosage_notes || ''
+          };
+        }),
         contentText: clinicalDiagnosis,
         status
       };
@@ -494,12 +582,20 @@ export default function OrthoWorkstation() {
         protocolId,
         patientId: contextData?.patient?.id,
         patientName: contextData?.patient?.full_name,
-        items: prescriptions.map((p) => ({
-          title: p.name,
-          price: p.price || 0,
-          quantity: p.quantity || 1,
-          code: p.code
-        }))
+        items: prescriptions.map((p) => {
+          const itemPrice = Number(p.price ?? (p as any).unitPrice ?? (p as any).unit_price ?? 0);
+          const itemQty = Number(p.quantity || 1);
+          return {
+            title: p.name || (p as any).title || 'Медицинская услуга',
+            name: p.name || (p as any).title || 'Медицинская услуга',
+            price: itemPrice,
+            unitPrice: itemPrice,
+            unit_price: itemPrice,
+            quantity: itemQty,
+            code: p.code || (p as any).serviceCode || '',
+            category: p.category || 'Ортопедия'
+          };
+        })
       };
 
       const res = await fetch(`${API_BASE_URL}/api/ortho/transfer-to-checkout`, {
@@ -634,13 +730,14 @@ export default function OrthoWorkstation() {
             <Autocomplete
               size="small"
               options={templates}
+              groupBy={(option) => option.category || 'Шаблоны'}
               getOptionLabel={(t) => t.title}
               onChange={(_, val) => val && handleApplyTemplate(val)}
               renderInput={(params) => (
                 <TextField
                   {...params}
                   placeholder="Быстрый шаблон (F4)..."
-                  sx={{ width: 200 }}
+                  sx={{ width: 260 }}
                 />
               )}
             />
@@ -677,7 +774,7 @@ export default function OrthoWorkstation() {
             disabled={saving || prescriptions.length === 0}
             sx={{ fontWeight: 800, px: 2 }}
           >
-            В кассу ({prescriptions.reduce((s, p) => s + (p.price || 0) * (p.quantity || 1), 0).toLocaleString('ru-RU')} ₽)
+            В кассу ({prescriptions.reduce((s, p) => s + ((p.price ?? (p as any).unitPrice ?? (p as any).unit_price) || 0) * (p.quantity || 1), 0).toLocaleString('ru-RU')} ₽)
           </Button>
         </Box>
       </Paper>
@@ -867,20 +964,24 @@ export default function OrthoWorkstation() {
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {prescriptions.map((p, idx) => (
-                      <TableRow key={idx}>
-                        <TableCell sx={{ fontSize: '0.82rem', fontWeight: 600 }}>{p.name}</TableCell>
-                        <TableCell align="center" sx={{ fontSize: '0.82rem' }}>{p.quantity || 1}</TableCell>
-                        <TableCell align="right" sx={{ fontSize: '0.82rem', fontWeight: 700 }}>
-                          {((p.price || 0) * (p.quantity || 1)).toLocaleString('ru-RU')} ₽
-                        </TableCell>
-                        <TableCell align="center">
-                          <IconButton size="small" color="error" onClick={() => handleRemovePrescription(idx)}>
-                            <DeleteIcon sx={{ fontSize: 18 }} />
-                          </IconButton>
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                    {prescriptions.map((p, idx) => {
+                      const itemPrice = Number(p.price ?? (p as any).unitPrice ?? (p as any).unit_price ?? 0);
+                      const itemQty = Number(p.quantity || 1);
+                      return (
+                        <TableRow key={idx}>
+                          <TableCell sx={{ fontSize: '0.82rem', fontWeight: 600 }}>{p.name || (p as any).title}</TableCell>
+                          <TableCell align="center" sx={{ fontSize: '0.82rem' }}>{itemQty}</TableCell>
+                          <TableCell align="right" sx={{ fontSize: '0.82rem', fontWeight: 700 }}>
+                            {(itemPrice * itemQty).toLocaleString('ru-RU')} ₽
+                          </TableCell>
+                          <TableCell align="center">
+                            <IconButton size="small" color="error" onClick={() => handleRemovePrescription(idx)}>
+                              <DeleteIcon sx={{ fontSize: 18 }} />
+                            </IconButton>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
                   </TableBody>
                 </Table>
               </TableContainer>

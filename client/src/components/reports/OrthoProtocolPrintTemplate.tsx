@@ -484,7 +484,7 @@ export const OrthoProtocolPrintTemplate = React.forwardRef<HTMLDivElement, Ortho
                           <TableCell sx={{ fontSize: '0.78rem', py: 0.5 }}>{pIdx + 1}</TableCell>
                           <TableCell sx={{ fontSize: '0.82rem', py: 0.5 }}>
                             <Typography variant="body2" sx={{ fontWeight: 600, fontSize: '0.82rem' }}>
-                              {presc.name}
+                              {presc.name || (presc as any).title || 'Медицинская услуга'}
                             </Typography>
                             {presc.dosage_notes && (
                               <Typography variant="caption" sx={{ color: '#64748B', display: 'block' }}>
@@ -496,7 +496,7 @@ export const OrthoProtocolPrintTemplate = React.forwardRef<HTMLDivElement, Ortho
                             {presc.quantity || 1}
                           </TableCell>
                           <TableCell align="right" sx={{ fontSize: '0.82rem', fontWeight: 600, py: 0.5 }}>
-                            {((presc.price || 0) * (presc.quantity || 1)).toLocaleString('ru-RU', {
+                            {(((presc.price ?? (presc as any).unitPrice ?? (presc as any).unit_price ?? 0)) * (presc.quantity || 1)).toLocaleString('ru-RU', {
                               minimumFractionDigits: 2,
                               maximumFractionDigits: 2
                             })}

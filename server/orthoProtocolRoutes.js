@@ -38,6 +38,100 @@ function computeSha256(content) {
   return crypto.createHash('sha256').update(content || '').digest('hex');
 }
 
+// Helper: Detect anatomical joint area and ICD-10 code from template title/content
+function detectJointAndMkb(title = '', content = '') {
+  const t = (title || '').toLowerCase();
+  const c = (content || '').toLowerCase();
+
+  const check = (str) => {
+    if (/гон|колен|мениск|patell|cruciat/.test(str)) return 'knee';
+    if (/кокс|тазобедр|вертлуж|trochanter/.test(str)) return 'hip';
+    if (/плеч|надостн|подостн|лопатк|ротатор|акромион/.test(str)) return 'shoulder';
+    if (/локт|эпикондил|олекранон/.test(str)) return 'elbow';
+    if (/кист|лучезап|запяст|ладьевид|фаланг|пальц|карпал|кервен/.test(str)) return 'wrist';
+    if (/стоп|голеностоп|пятк|плантар|фасци|ахилл|таран/.test(str)) return 'foot';
+    if (/позвоноч|шеин|грудн|пояснич|дорсопат|люмба|копчик|кокциг|спондил/.test(str)) return 'spine';
+    return '';
+  };
+
+  const joint_name = check(t) || check(c) || 'knee';
+
+  // Search MKB code in XML capt="Диагноз" or capt="Диагноз МКБ"
+  let mkb_code = '';
+  const diagMatch = (content || '').match(/capt="[^"]*?(?:диагноз|мкб)[^"]*"[^>]*>([^<]+)/i);
+  if (diagMatch) {
+    const codeMatch = diagMatch[1].match(/\b([A-ZА-Я][0-9]{2}(?:\.[0-9]{1,2})?)\b/);
+    if (codeMatch) mkb_code = codeMatch[1].toUpperCase();
+  }
+  if (!mkb_code) {
+    const generalMkb = (content || '').match(/\b([A-ZА-Я][0-9]{2}\.[0-9]{1,2})\b/);
+    if (generalMkb) mkb_code = generalMkb[1].toUpperCase();
+  }
+
+  return { joint_name, mkb_code };
+}
+
+// -----------------------------------------------------------------------------
+// 0. GET /api/ortho/templates - Unified clinical templates (ortho_templates + protdict)
+// -----------------------------------------------------------------------------
+router.get('/templates', (req, res) => {
+  const search = req.query.search ? String(req.query.search).trim() : '';
+  const joint = req.query.joint ? String(req.query.joint).trim() : '';
+
+  db.all(`SELECT id, title, joint_name, default_mkb_code, template_json, 'biomechanics' AS source FROM ortho_templates ORDER BY id ASC`, [], (oErr, orthoTemplates) => {
+    if (oErr) return res.status(500).json({ success: false, error: oErr.message });
+
+    let pSql = `SELECT id, name AS title, title AS full_title, content, kind, post, 'protdict' AS source FROM protdict WHERE hide_f = 0`;
+    const pParams = [];
+    if (search) {
+      pSql += ` AND (name LIKE ? OR title LIKE ?)`;
+      pParams.push(`%${search}%`, `%${search}%`);
+    }
+    pSql += ` ORDER BY name ASC`;
+
+    db.all(pSql, pParams, (pErr, protdictRows) => {
+      if (pErr) return res.status(500).json({ success: false, error: pErr.message });
+
+      const mappedOrtho = (orthoTemplates || []).map((ot) => ({
+        id: `ortho-${ot.id}`,
+        rawId: ot.id,
+        title: ot.title,
+        joint_name: ot.joint_name,
+        default_mkb_code: ot.default_mkb_code,
+        template_json: ot.template_json,
+        category: 'Биомеханика Neutral-0 ROM',
+        source: 'biomechanics'
+      }));
+
+      const mappedProtdict = (protdictRows || []).map((row) => {
+        const detected = detectJointAndMkb(row.title, row.content);
+        return {
+          id: `protdict-${row.id}`,
+          rawId: row.id,
+          title: row.title,
+          full_title: row.full_title,
+          content: row.content,
+          joint_name: detected.joint_name,
+          default_mkb_code: detected.mkb_code,
+          category: 'Клинические протоколы (Firebird)',
+          source: 'protdict'
+        };
+      });
+
+      let combined = [...mappedOrtho, ...mappedProtdict];
+      if (joint) {
+        combined = combined.filter((t) => !t.joint_name || t.joint_name.includes(joint) || joint.includes(t.joint_name));
+      }
+
+      res.json({
+        success: true,
+        total: combined.length,
+        templates: combined
+      });
+    });
+  });
+});
+
 // -----------------------------------------------------------------------------
 // 1. GET /api/ortho/registry - Paginated list of protocols with FTS5 search
 // -----------------------------------------------------------------------------
@@ -129,8 +223,20 @@ router.get('/registry', (req, res) => {
           pt.sphone AS patient_phone,
           (SELECT GROUP_CONCAT(mkb_code, ', ') FROM diagnoses WHERE pr_id = p.id) AS mkb_code,
           (SELECT GROUP_CONCAT(mkb_name, '; ') FROM diagnoses WHERE pr_id = p.id) AS mkb_name,
-          (SELECT COUNT(*) FROM ortho_treatment_prescriptions WHERE protocol_id = p.id) AS prescriptions_count,
-          (SELECT COALESCE(SUM(total_price), 0) FROM ortho_treatment_prescriptions WHERE protocol_id = p.id) AS total_prescriptions_amount
+          (
+            CASE 
+              WHEN (SELECT COUNT(*) FROM ortho_treatment_prescriptions WHERE protocol_id = p.id) > 0 
+              THEN (SELECT COUNT(*) FROM ortho_treatment_prescriptions WHERE protocol_id = p.id)
+              ELSE (SELECT COUNT(*) FROM servplan WHERE pr_id = p.id)
+            END
+          ) AS prescriptions_count,
+          (
+            CASE 
+              WHEN (SELECT COUNT(*) FROM ortho_treatment_prescriptions WHERE protocol_id = p.id) > 0 
+              THEN (SELECT COALESCE(SUM(total_price), 0) FROM ortho_treatment_prescriptions WHERE protocol_id = p.id)
+              ELSE (SELECT COALESCE(SUM(sd.price * sp.cnt), 0) FROM servplan sp JOIN servdict sd ON sd.id = sp.sd_id WHERE sp.pr_id = p.id)
+            END
+          ) AS total_prescriptions_amount
         FROM protocols_fts fts
         JOIN protocols p ON p.id = fts.protocol_id
         LEFT JOIN patients pt ON pt.id = p.pt_id
@@ -244,8 +350,20 @@ router.get('/registry', (req, res) => {
           pt.sphone AS patient_phone,
           (SELECT GROUP_CONCAT(mkb_code, ', ') FROM diagnoses WHERE pr_id = p.id) AS mkb_code,
           (SELECT GROUP_CONCAT(mkb_name, '; ') FROM diagnoses WHERE pr_id = p.id) AS mkb_name,
-          (SELECT COUNT(*) FROM ortho_treatment_prescriptions WHERE protocol_id = p.id) AS prescriptions_count,
-          (SELECT COALESCE(SUM(total_price), 0) FROM ortho_treatment_prescriptions WHERE protocol_id = p.id) AS total_prescriptions_amount
+          (
+            CASE 
+              WHEN (SELECT COUNT(*) FROM ortho_treatment_prescriptions WHERE protocol_id = p.id) > 0 
+              THEN (SELECT COUNT(*) FROM ortho_treatment_prescriptions WHERE protocol_id = p.id)
+              ELSE (SELECT COUNT(*) FROM servplan WHERE pr_id = p.id)
+            END
+          ) AS prescriptions_count,
+          (
+            CASE 
+              WHEN (SELECT COUNT(*) FROM ortho_treatment_prescriptions WHERE protocol_id = p.id) > 0 
+              THEN (SELECT COALESCE(SUM(total_price), 0) FROM ortho_treatment_prescriptions WHERE protocol_id = p.id)
+              ELSE (SELECT COALESCE(SUM(sd.price * sp.cnt), 0) FROM servplan sp JOIN servdict sd ON sd.id = sp.sd_id WHERE sp.pr_id = p.id)
+            END
+          ) AS total_prescriptions_amount
         FROM protocols p
         LEFT JOIN patients pt ON pt.id = p.pt_id
         WHERE ${whereStr}
@@ -443,11 +561,38 @@ router.get(['/context', '/context/:identifier'], (req, res) => {
                   ORDER BY id DESC LIMIT 10
                 `, [patientId], (bErr, biomechanicsHistory) => {
 
-                  // 7. Fetch active templates
-                  db.all(`SELECT id, title, joint_name, default_mkb_code, template_json FROM ortho_templates ORDER BY id ASC`, [], (tErr, templates) => {
+                  // 7. Fetch active templates (ortho_templates + protdict)
+                  db.all(`SELECT id, title, joint_name, default_mkb_code, template_json, 'biomechanics' AS source FROM ortho_templates ORDER BY id ASC`, [], (tErr, orthoTemplates) => {
+                    db.all(`SELECT id, name AS title, title AS full_title, content, kind, post, 'protdict' AS source FROM protdict WHERE hide_f = 0 ORDER BY name ASC`, [], (pdErr, protdictRows) => {
+                      const allTemplates = [
+                        ...(orthoTemplates || []).map((ot) => ({
+                          id: `ortho-${ot.id}`,
+                          rawId: ot.id,
+                          title: ot.title,
+                          joint_name: ot.joint_name,
+                          default_mkb_code: ot.default_mkb_code,
+                          template_json: ot.template_json,
+                          category: 'Биомеханика Neutral-0 ROM',
+                          source: 'biomechanics'
+                        })),
+                        ...(protdictRows || []).map((pr) => {
+                          const detected = detectJointAndMkb(pr.title, pr.content);
+                          return {
+                            id: `protdict-${pr.id}`,
+                            rawId: pr.id,
+                            title: pr.title,
+                            full_title: pr.full_title,
+                            content: pr.content,
+                            joint_name: detected.joint_name,
+                            default_mkb_code: detected.mkb_code,
+                            category: 'Клинические протоколы (Firebird)',
+                            source: 'protdict'
+                          };
+                        })
+                      ];
 
-                    // 8. Fetch medical services price list
-                    db.all(`SELECT id, code, name, price, kind FROM servdict WHERE group_f = 0 ORDER BY name ASC`, [], (sErr, servicesList) => {
+                      // 8. Fetch medical services price list
+                      db.all(`SELECT id, code, name, price, kind FROM servdict WHERE group_f = 0 ORDER BY name ASC`, [], (sErr, servicesList) => {
 
                       // If initialProtocol was preloaded (e.g. from protocolId), use it; otherwise search by appointment
                       const resolveCurrentProtocol = (doneProto) => {
@@ -473,7 +618,28 @@ router.get(['/context', '/context/:identifier'], (req, res) => {
                         const fetchCurrentPrescriptions = (donePresc) => {
                           if (!protocolIdToFetch) return donePresc([]);
                           db.all(`SELECT * FROM ortho_treatment_prescriptions WHERE protocol_id = ?`, [protocolIdToFetch], (prErr, prescRows) => {
-                            donePresc(prescRows || []);
+                            if (!prErr && prescRows && prescRows.length > 0) {
+                              return donePresc(prescRows);
+                            }
+                            // Fallback to legacy servplan table
+                            db.all(`
+                              SELECT 
+                                sp.id,
+                                sp.pr_id AS protocol_id,
+                                sp.cnt AS quantity,
+                                sp.sd_id AS service_id,
+                                sd.code AS service_code,
+                                sd.name AS title,
+                                sd.price AS unit_price,
+                                (sd.price * sp.cnt) AS total_price,
+                                COALESCE(sd.kind, 'service') AS category,
+                                '{}' AS details_json
+                              FROM servplan sp
+                              JOIN servdict sd ON sd.id = sp.sd_id
+                              WHERE sp.pr_id = ?
+                            `, [protocolIdToFetch], (spErr, legacyRows) => {
+                              donePresc(legacyRows || []);
+                            });
                           });
                         };
 
@@ -507,7 +673,7 @@ router.get(['/context', '/context/:identifier'], (req, res) => {
                             mediaAttachments: mediaAttachments || [],
                             legacyShots: legacyShots || [],
                             biomechanicsHistory: biomechanicsHistory || [],
-                            templates: templates || [],
+                            templates: allTemplates || [],
                             services: servicesList || [],
                             servicesList: servicesList || [],
                             durationMs
@@ -524,8 +690,43 @@ router.get(['/context', '/context/:identifier'], (req, res) => {
       });
     });
   });
+  });
 });
 
+
+// -----------------------------------------------------------------------------
+// 2.1 GET /api/ortho/prescriptions/:protocolId - Prescriptions for specific protocol
+// -----------------------------------------------------------------------------
+router.get('/prescriptions/:protocolId', (req, res) => {
+  const pId = Number(req.params.protocolId);
+  if (!pId) return res.status(400).json({ success: false, error: 'Invalid protocolId' });
+
+  db.all(`SELECT * FROM ortho_treatment_prescriptions WHERE protocol_id = ?`, [pId], (err, rows) => {
+    if (!err && rows && rows.length > 0) {
+      return res.json({ success: true, source: 'ortho_treatment_prescriptions', prescriptions: rows });
+    }
+    // Fallback to legacy servplan joined with servdict
+    db.all(`
+      SELECT 
+        sp.id,
+        sp.pr_id AS protocol_id,
+        sp.cnt AS quantity,
+        sp.sd_id AS service_id,
+        sd.code AS service_code,
+        sd.name AS title,
+        sd.price AS unit_price,
+        (sd.price * sp.cnt) AS total_price,
+        COALESCE(sd.kind, 'service') AS category,
+        '{}' AS details_json
+      FROM servplan sp
+      JOIN servdict sd ON sd.id = sp.sd_id
+      WHERE sp.pr_id = ?
+    `, [pId], (spErr, legacyRows) => {
+      if (spErr) return res.status(500).json({ success: false, error: spErr.message });
+      res.json({ success: true, source: 'servplan', prescriptions: legacyRows || [] });
+    });
+  });
+});
 
 // -----------------------------------------------------------------------------
 // 3. POST /api/ortho/save - Save draft or signed protocol with dual projection
@@ -664,7 +865,7 @@ router.post('/save', (req, res) => {
         });
       }
 
-      // 4. Sync prescriptions
+      // 4. Sync prescriptions to ortho_treatment_prescriptions and legacy servplan
       db.run(`DELETE FROM ortho_treatment_prescriptions WHERE protocol_id = ?`, [savedProtocolId], () => {
         if (Array.isArray(prescriptions) && prescriptions.length > 0) {
           const stmt = db.prepare(`
@@ -680,15 +881,28 @@ router.post('/save', (req, res) => {
               p.category || 'service',
               p.serviceId || null,
               p.serviceCode || null,
-              p.title,
+              p.title || p.name || 'Медицинская услуга',
               JSON.stringify(p.details || {}),
               p.quantity || 1,
-              p.unitPrice || 0,
-              (p.unitPrice || 0) * (p.quantity || 1)
+              p.unitPrice ?? p.price ?? 0,
+              (p.unitPrice ?? p.price ?? 0) * (p.quantity || 1)
             ]);
           });
           stmt.finalize();
         }
+
+        // Also sync to legacy servplan table
+        db.run(`DELETE FROM servplan WHERE pr_id = ?`, [savedProtocolId], () => {
+          if (Array.isArray(prescriptions) && prescriptions.length > 0) {
+            const spStmt = db.prepare(`INSERT INTO servplan (pr_id, sd_id, cnt) VALUES (?, ?, ?)`);
+            prescriptions.forEach((p) => {
+              if (p.serviceId) {
+                spStmt.run([savedProtocolId, p.serviceId, p.quantity || 1]);
+              }
+            });
+            spStmt.finalize();
+          }
+        });
       });
 
       // 5. Update patient clinical profile if provided
@@ -833,12 +1047,19 @@ router.post('/transfer-to-checkout', (req, res) => {
     protocolId,
     patientId,
     patientName,
-    items: items.map((it) => ({
-      name: it.title,
-      price: Number(it.unitPrice || it.price || 0),
-      quantity: Number(it.quantity || 1),
-      category: it.category || 'medical_service'
-    }))
+    items: items.map((it) => {
+      const pPrice = Number(it.unitPrice ?? it.price ?? it.unit_price ?? 0);
+      return {
+        name: it.name || it.title || 'Медицинская услуга',
+        title: it.title || it.name || 'Медицинская услуга',
+        price: pPrice,
+        unit_price: pPrice,
+        unitPrice: pPrice,
+        quantity: Number(it.quantity || 1),
+        code: it.code || it.service_code || '',
+        category: it.category || 'medical_service'
+      };
+    })
   };
 
   logOrthoAudit({

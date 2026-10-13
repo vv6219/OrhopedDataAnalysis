@@ -171,6 +171,45 @@ export default function ProtocolsRegistry() {
   // Drawer Inspector State
   const [selectedProtocol, setSelectedProtocol] = useState<ProtocolRow | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [drawerPrescriptions, setDrawerPrescriptions] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (!selectedProtocol) {
+      setDrawerPrescriptions([]);
+      return;
+    }
+    let parsedJson: any = null;
+    if (selectedProtocol.protocol_json) {
+      try {
+        parsedJson = JSON.parse(selectedProtocol.protocol_json);
+      } catch (e) {
+        // ignore
+      }
+    }
+    if (parsedJson?.prescriptions && parsedJson.prescriptions.length > 0) {
+      setDrawerPrescriptions(parsedJson.prescriptions);
+    } else {
+      fetch(`/api/ortho/prescriptions/${selectedProtocol.id}`)
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.success && Array.isArray(data.prescriptions)) {
+            setDrawerPrescriptions(
+              data.prescriptions.map((p: any) => ({
+                name: p.title || p.name || 'Медицинская услуга',
+                title: p.title || p.name || 'Медицинская услуга',
+                code: p.service_code || p.code,
+                quantity: p.quantity || 1,
+                price: p.unit_price ?? p.price ?? 0,
+                dosage_notes: p.category || ''
+              }))
+            );
+          } else {
+            setDrawerPrescriptions([]);
+          }
+        })
+        .catch(() => setDrawerPrescriptions([]));
+    }
+  }, [selectedProtocol]);
 
   // Revoke Dialog State
   const [revokeDialogOpen, setRevokeDialogOpen] = useState(false);
@@ -312,12 +351,12 @@ export default function ProtocolsRegistry() {
       icdName: selectedProtocol.mkb_name,
       clinicalDiagnosis: parsedJson.clinicalDiagnosis || parsedXml.diagnosis || (parsedXml.isXml ? '' : selectedProtocol.content),
       recommendations: parsedJson.recommendations || parsedXml.recommendations || (parsedXml.performed ? 'Выполнено:\n' + parsedXml.performed : ''),
-      prescriptions: parsedJson.prescriptions || [],
+      prescriptions: drawerPrescriptions,
       isSigned: selectedProtocol.status === 'signed',
       signedAt: selectedProtocol.signed_at,
       signatureHash: selectedProtocol.signature_hash
     };
-  }, [selectedProtocol]);
+  }, [selectedProtocol, drawerPrescriptions]);
 
   // Totals calculations for Footer (per grid-improvements)
   const totals = useMemo(() => {

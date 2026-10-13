@@ -121,6 +121,7 @@ function initOrthoSchema(db, callback) {
     )`);
     db.run("CREATE INDEX IF NOT EXISTS idx_otp_protocol ON ortho_treatment_prescriptions(protocol_id);");
     db.run("CREATE INDEX IF NOT EXISTS idx_otp_patient ON ortho_treatment_prescriptions(patient_id);");
+    db.run("CREATE INDEX IF NOT EXISTS idx_servplan_pr_id ON servplan(pr_id);");
 
     // -------------------------------------------------------------------------
     // 5. Joint Biomechanics History (Хронология ROM и боли ВАШ для трендов)

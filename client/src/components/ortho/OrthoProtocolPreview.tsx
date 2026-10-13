@@ -116,7 +116,7 @@ export default function OrthoProtocolPreview({
       lines.push('');
       lines.push('Назначенные манипуляции и услуги:');
       data.prescriptions.forEach((p, idx) => {
-        lines.push(`  ${idx + 1}. ${p.name} - ${p.quantity || 1} шт. (${p.price || 0} руб.)`);
+        lines.push(`  ${idx + 1}. ${p.name || (p as any).title || 'Медицинская услуга'} - ${p.quantity || 1} шт. (${p.price ?? (p as any).unitPrice ?? (p as any).unit_price ?? 0} руб.)`);
       });
     }
     
@@ -269,6 +269,18 @@ export default function OrthoProtocolPreview({
                 children: [new TextRun({ text: data.recommendations || 'Охранительный режим.' })],
                 spacing: { after: 140 }
               }),
+              ...(data.prescriptions && data.prescriptions.length > 0 ? [
+                new Paragraph({
+                  children: [new TextRun({ text: 'Назначенные манипуляции и услуги:', bold: true })],
+                  spacing: { before: 80, after: 60 }
+                }),
+                ...data.prescriptions.map((p, pIdx) => new Paragraph({
+                  children: [
+                    new TextRun({ text: `${pIdx + 1}. ${p.name || (p as any).title || 'Медицинская услуга'} — ${p.quantity || 1} шт. (${Number(p.price ?? (p as any).unitPrice ?? (p as any).unit_price ?? 0).toLocaleString('ru-RU')} руб.)` })
+                  ],
+                  spacing: { after: 40 }
+                }))
+              ] : []),
               // Signatures
               new Paragraph({
                 children: [
@@ -348,7 +360,7 @@ export default function OrthoProtocolPreview({
     }
   };
 
-  const totalCost = data.prescriptions?.reduce((sum, p) => sum + ((p.price || 0) * (p.quantity || 1)), 0) || 0;
+  const totalCost = data.prescriptions?.reduce((sum, p) => sum + (((p.price ?? (p as any).unitPrice ?? (p as any).unit_price) || 0) * (p.quantity || 1)), 0) || 0;
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', bgcolor: '#F8FAFC' }}>
