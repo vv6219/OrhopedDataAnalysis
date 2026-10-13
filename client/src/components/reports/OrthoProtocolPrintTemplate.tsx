@@ -15,8 +15,11 @@ import type { JointExamState } from '../ortho/JointExamCard';
 import { parseProtocolContent } from '../../utils/protocolXmlParser';
 
 export interface OrthoPrescriptionItem {
+  id?: string | number;
+  serviceId?: number;
   code?: string;
   name: string;
+  title?: string;
   category?: string;
   quantity?: number;
   price?: number;

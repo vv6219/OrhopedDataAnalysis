@@ -1035,7 +1035,7 @@ router.post('/revoke', (req, res) => {
 // 5. POST /api/ortho/transfer-to-checkout - Transfer services to cashier
 // -----------------------------------------------------------------------------
 router.post('/transfer-to-checkout', (req, res) => {
-  const { appointmentId, protocolId, patientId, patientName, items = [] } = req.body;
+  const { appointmentId, protocolId, patientId, patientName, doctorId, doctorName, items = [] } = req.body;
 
   if (protocolId) {
     db.run(`UPDATE ortho_treatment_prescriptions SET is_transferred_to_cashier = 1 WHERE protocol_id = ?`, [protocolId]);
@@ -1047,9 +1047,13 @@ router.post('/transfer-to-checkout', (req, res) => {
     protocolId,
     patientId,
     patientName,
+    doctorId,
+    doctorName,
     items: items.map((it) => {
       const pPrice = Number(it.unitPrice ?? it.price ?? it.unit_price ?? 0);
       return {
+        id: it.id || it.serviceId || it.service_id,
+        serviceId: it.serviceId || it.id || it.service_id,
         name: it.name || it.title || 'Медицинская услуга',
         title: it.title || it.name || 'Медицинская услуга',
         price: pPrice,

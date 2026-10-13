@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { API_BASE_URL } from '../config/apiConfig';
 import { 
   Typography, Box, Paper, Button, Stepper, Step, StepLabel, 
@@ -90,7 +91,9 @@ interface MaterialRow extends VisitReportMaterial {
 }
 
 export default function CheckoutWizard() {
+  const [searchParams] = useSearchParams();
   const [activeStep, setActiveStep] = useState(0);
+  const hasAppliedPrefillRef = useRef(false);
 
   // Visit Date State
   const [visitDate, setVisitDate] = useState(() => new Date().toISOString().slice(0, 10));
@@ -313,11 +316,12 @@ export default function CheckoutWizard() {
           setDefaultPatients(loadedPatients);
         }
 
+        let loadedStaff: any[] = [];
         if (staffRes.ok) {
-          const staffData = await staffRes.json();
-          setStaffList(staffData);
-          const doc = staffData.find((s: StaffItem) => s.role.toLowerCase().includes('врач') || s.role.toLowerCase().includes('ортопед')) || staffData[0];
-          const nurse = staffData.find((s: StaffItem) => s.role.toLowerCase().includes('медсестра') || s.role.toLowerCase().includes('сестра')) || staffData[1];
+          loadedStaff = await staffRes.json();
+          setStaffList(loadedStaff);
+          const doc = loadedStaff.find((s: StaffItem) => s.role.toLowerCase().includes('врач') || s.role.toLowerCase().includes('ортопед')) || loadedStaff[0];
+          const nurse = loadedStaff.find((s: StaffItem) => s.role.toLowerCase().includes('медсестра') || s.role.toLowerCase().includes('сестра')) || loadedStaff[1];
           if (doc) setSelectedDoctor(doc);
           if (nurse) setSelectedNurse(nurse);
         }
@@ -327,56 +331,183 @@ export default function CheckoutWizard() {
           setWarehouseMaterials(matData);
         }
 
-        // Check for prefill from Ortho Workstation
+        // Check for prefill from Ortho Workstation via sessionStorage or URL params
         const prefillStr = sessionStorage.getItem('ortho_checkout_prefill');
-        let prefillApplied = false;
-
+        let prefill: any = null;
         if (prefillStr) {
           try {
-            const prefill = JSON.parse(prefillStr);
-            if (prefill.patientId) {
-              const matchPt = loadedPatients.find((p: any) => p.id === prefill.patientId);
-              if (matchPt) {
-                setSelectedPatient(matchPt);
-                const contact = matchPt.phone || matchPt.sphone || matchPt.contact_phone || matchPt.email || '';
-                if (contact) setPatientContact(contact);
-              } else if (prefill.patientName) {
-                setSelectedPatient({ id: prefill.patientId, full_name: prefill.patientName, surname: prefill.patientName });
-              }
-            }
-            if (prefill.items && Array.isArray(prefill.items) && prefill.items.length > 0) {
-              const mapped = prefill.items.map((it: any, i: number) => {
-                const itemPrice = Number(it.price ?? it.unitPrice ?? it.unit_price ?? 0);
-                const itemQty = Number(it.quantity || 1);
-                return {
-                  id: it.id || (99000 + i),
-                  name: it.name || it.title || 'Медицинская услуга',
-                  code: it.code || '',
-                  price: itemPrice,
-                  unit_price: itemPrice,
-                  quantity: itemQty,
-                  subtotal: itemPrice * itemQty
-                };
-              });
-              setSelectedOperations(mapped);
-              prefillApplied = true;
-            }
-            sessionStorage.removeItem('ortho_checkout_prefill');
+            prefill = JSON.parse(prefillStr);
           } catch (e) {
-            console.error('Error applying ortho prefill:', e);
+            console.error('Error parsing ortho_checkout_prefill:', e);
           }
         }
 
-        // Default fallbacks only if no prefill was applied
-        if (!prefillApplied) {
-          if (loadedOps.length > 0) {
-            setSelectedOperations([
-              { ...loadedOps[0], quantity: 1, unit_price: loadedOps[0].price, subtotal: loadedOps[0].price }
-            ]);
+        const urlPatientId = searchParams.get('patientId');
+        const urlPatientName = searchParams.get('patientName');
+        const urlProtocolId = searchParams.get('protocolId');
+        const urlAppointmentId = searchParams.get('appointmentId');
+
+        // Multi-source recovery: If prefill is empty or has no items, try loading prescriptions from backend
+        if ((!prefill || !prefill.items || prefill.items.length === 0) && (urlProtocolId || urlAppointmentId)) {
+          try {
+            if (urlProtocolId) {
+              const prescRes = await fetch(`${API_BASE_URL}/api/ortho/prescriptions/${urlProtocolId}`);
+              if (prescRes.ok) {
+                const prescData = await prescRes.json();
+                if (prescData.prescriptions && prescData.prescriptions.length > 0) {
+                  prefill = {
+                    ...(prefill || {}),
+                    protocolId: urlProtocolId,
+                    items: prescData.prescriptions
+                  };
+                }
+              }
+            } else if (urlAppointmentId) {
+              const ctxRes = await fetch(`${API_BASE_URL}/api/ortho/context?appointmentId=${urlAppointmentId}`);
+              if (ctxRes.ok) {
+                const ctxData = await ctxRes.json();
+                if (ctxData.currentPrescriptions && ctxData.currentPrescriptions.length > 0) {
+                  prefill = {
+                    ...(prefill || {}),
+                    appointmentId: urlAppointmentId,
+                    patientId: ctxData.patient?.id,
+                    patientName: ctxData.patient?.full_name,
+                    doctorId: ctxData.doctor?.id,
+                    items: ctxData.currentPrescriptions
+                  };
+                }
+              }
+            }
+          } catch (recoveryErr) {
+            console.warn('Could not auto-recover prescriptions from protocol API:', recoveryErr);
           }
-          if (loadedPatients.length > 0) {
-            setSelectedPatient(loadedPatients[0]);
+        }
+
+        const targetPatientId = prefill?.patientId || (urlPatientId ? Number(urlPatientId) : null);
+        const targetPatientName = prefill?.patientName || urlPatientName;
+
+        let patientPrefillApplied = false;
+        let operationsPrefillApplied = false;
+
+        if (targetPatientId) {
+          let matchPt = loadedPatients.find((p: any) => p.id === Number(targetPatientId));
+          if (!matchPt) {
+            try {
+              const ptRes = await fetch(`${API_BASE_URL}/api/patients/${targetPatientId}`);
+              if (ptRes.ok) {
+                matchPt = await ptRes.json();
+              }
+            } catch (err) {
+              console.error('Error fetching patient by target ID:', err);
+            }
           }
+
+          if (matchPt) {
+            setSelectedPatient(matchPt);
+            // Ensure this target patient is prominently placed at index 0 of all options lists
+            setPatientsList(prev => [matchPt, ...prev.filter(p => p.id !== matchPt.id)]);
+            setDefaultPatients(prev => [matchPt, ...prev.filter(p => p.id !== matchPt.id)]);
+            const contact = matchPt.phone || matchPt.sphone || matchPt.contact_phone || matchPt.email || '';
+            if (contact) setPatientContact(contact);
+            patientPrefillApplied = true;
+          } else if (targetPatientName) {
+            const stubPt: PatientItem = {
+              id: Number(targetPatientId),
+              full_name: targetPatientName,
+              surname: targetPatientName
+            };
+            setSelectedPatient(stubPt);
+            setPatientsList(prev => [stubPt, ...prev]);
+            setDefaultPatients(prev => [stubPt, ...prev]);
+            patientPrefillApplied = true;
+          }
+        }
+
+        const candidateItems = (prefill?.items && Array.isArray(prefill.items) && prefill.items.length > 0)
+          ? prefill.items
+          : null;
+
+        if (candidateItems && candidateItems.length > 0) {
+          const normalize = (s: string) => (s || '').toLowerCase().replace(/[\s\(\)\-_.,\/]/g, '');
+          const mapped = candidateItems.map((it: any, i: number) => {
+            const itemPrice = Number(it.price ?? it.unitPrice ?? it.unit_price ?? 0);
+            const itemQty = Number(it.quantity || 1);
+            const itName = (it.name || it.title || '').trim();
+            const itCode = (it.code || it.service_code || it.serviceCode || '').trim();
+            const rawId = it.id || it.serviceId || it.service_id;
+
+            // Match against loadedOps to link real materials (BOM), margin, and official service id
+            let matchedOp: any = null;
+            if (rawId && loadedOps.some((o: any) => o.id === Number(rawId))) {
+              matchedOp = loadedOps.find((o: any) => o.id === Number(rawId));
+            } else if (itCode && loadedOps.some((o: any) => o.code && String(o.code).trim() === itCode)) {
+              matchedOp = loadedOps.find((o: any) => o.code && String(o.code).trim() === itCode);
+            } else if (itName) {
+              const normIt = normalize(itName);
+              const exactMatches = loadedOps.filter((o: any) => normalize(o.name || '') === normIt);
+              if (exactMatches.length === 1) {
+                matchedOp = exactMatches[0];
+              } else if (exactMatches.length > 1) {
+                matchedOp = exactMatches.find((o: any) => Number(o.price) === itemPrice) || exactMatches[0];
+              } else {
+                const partialMatches = loadedOps.filter((o: any) => {
+                  const normO = normalize(o.name || '');
+                  return (normO.length > 3 && normIt.length > 3) && (normO.includes(normIt) || normIt.includes(normO));
+                });
+                if (partialMatches.length > 0) {
+                  matchedOp = partialMatches.find((o: any) => Number(o.price) === itemPrice) || partialMatches[0];
+                }
+              }
+            }
+
+            if (matchedOp) {
+              const finalPrice = itemPrice > 0 ? itemPrice : Number(matchedOp.price || 0);
+              return {
+                id: matchedOp.id,
+                name: matchedOp.name,
+                code: matchedOp.code || itCode || '',
+                price: finalPrice,
+                unit_price: finalPrice,
+                quantity: itemQty,
+                subtotal: finalPrice * itemQty,
+                materials_count: matchedOp.materials_count,
+                margin: matchedOp.margin
+              };
+            }
+
+            return {
+              id: rawId ? Number(rawId) : (99000 + i),
+              name: itName || 'Медицинская услуга',
+              code: itCode,
+              price: itemPrice,
+              unit_price: itemPrice,
+              quantity: itemQty,
+              subtotal: itemPrice * itemQty
+            };
+          });
+
+          setSelectedOperations(mapped);
+          operationsPrefillApplied = true;
+          hasAppliedPrefillRef.current = true;
+        }
+
+        const targetDoctorId = prefill?.doctorId || searchParams.get('doctorId');
+        if (targetDoctorId && loadedStaff.length > 0) {
+          const matchedDoc = loadedStaff.find((s: StaffItem) => s.id === Number(targetDoctorId));
+          if (matchedDoc) {
+            setSelectedDoctor(matchedDoc);
+          }
+        }
+
+        // Only fall back to defaults if respective item was NOT prefilled and state is empty
+        if (!patientPrefillApplied && loadedPatients.length > 0) {
+          setSelectedPatient(prev => prev || loadedPatients[0]);
+        }
+
+        if (!operationsPrefillApplied && !hasAppliedPrefillRef.current && loadedOps.length > 0) {
+          setSelectedOperations(prev => (prev.length > 0 ? prev : [
+            { ...loadedOps[0], quantity: 1, unit_price: loadedOps[0].price, subtotal: loadedOps[0].price }
+          ]));
         }
       } catch (err) {
         console.error('Error fetching master data for wizard', err);
@@ -386,7 +517,7 @@ export default function CheckoutWizard() {
     };
 
     fetchMasterData();
-  }, []);
+  }, [searchParams]);
 
   // Multi-operation management handlers
   const handleAddOperation = (op: OperationItem) => {
@@ -723,6 +854,8 @@ export default function CheckoutWizard() {
         }
         setSavedTransactionResult(result);
         setActiveStep(steps.length);
+        hasAppliedPrefillRef.current = false;
+        sessionStorage.removeItem('ortho_checkout_prefill');
       } else {
         const err = await res.json();
         alert('Ошибка при сохранении визита: ' + (err.error || 'Ошибка сервера'));
@@ -737,6 +870,8 @@ export default function CheckoutWizard() {
   const handleReset = () => {
     setActiveStep(0);
     setVisitDate(new Date().toISOString().slice(0, 10));
+    hasAppliedPrefillRef.current = false;
+    sessionStorage.removeItem('ortho_checkout_prefill');
     setSelectedOperations(operationsList.length > 0 ? [{ ...operationsList[0], quantity: 1, unit_price: operationsList[0].price, subtotal: operationsList[0].price }] : []);
     setActualMaterials([]);
     setSavedTransactionResult(null);
@@ -830,6 +965,47 @@ export default function CheckoutWizard() {
                   />
                 )}
               />
+
+              {/* Informative Selected Patient Confirmation Card */}
+              {selectedPatient && (
+                <Paper
+                  elevation={0}
+                  sx={{
+                    p: 2,
+                    mt: 2,
+                    bgcolor: '#F0F9FF',
+                    border: '1px solid #BAE6FD',
+                    borderRadius: 2,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    flexWrap: 'wrap',
+                    gap: 1.5
+                  }}
+                >
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                    <PersonIcon sx={{ color: '#0284C7', fontSize: 32 }} />
+                    <Box>
+                      <Typography variant="subtitle2" sx={{ fontWeight: 800, color: '#0369A1' }}>
+                        {selectedPatient.full_name || `${selectedPatient.surname || ''} ${selectedPatient.name || ''}`.trim() || 'Пациент'}
+                      </Typography>
+                      <Typography variant="caption" sx={{ color: '#0284C7', display: 'block' }}>
+                        {selectedPatient.mednum ? `ЭМК №${selectedPatient.mednum} • ` : ''}
+                        📞 {selectedPatient.phone || selectedPatient.sphone || selectedPatient.contact_phone || 'Телефон не указан'}
+                        {selectedPatient.city ? ` • 📍 ${selectedPatient.city}` : ''}
+                        {selectedPatient.bdate ? ` • 🎂 ${selectedPatient.bdate}` : ''}
+                      </Typography>
+                    </Box>
+                  </Box>
+                  <Chip
+                    size="small"
+                    label="Пациент выбран"
+                    color="primary"
+                    variant="filled"
+                    sx={{ fontWeight: 700, bgcolor: '#0284C7' }}
+                  />
+                </Paper>
+              )}
 
               <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: selectedPatient ? '1fr' : '2fr 1fr' }, gap: 2, mt: 2 }}>
                 {!selectedPatient && (

@@ -561,9 +561,11 @@ export default function OrthoWorkstation() {
       }
 
       setToastMessage(status === 'signed' ? '✔ Протокол осмотра успешно подписан ЭЦП' : 'Черновик протокола сохранён');
+      return data.protocolId;
     } catch (err: any) {
       console.error('Error saving protocol:', err);
       setToastMessage(`Ошибка сохранения: ${err.message}`);
+      return null;
     } finally {
       setSaving(false);
     }
@@ -573,29 +575,44 @@ export default function OrthoWorkstation() {
   const handleTransferToCashier = async () => {
     try {
       setSaving(true);
+      let currentProtocolId = protocolId;
       if (!isSigned) {
-        await handleSaveProtocol('draft');
+        const savedId = await handleSaveProtocol('draft');
+        if (savedId) {
+          currentProtocolId = savedId;
+        }
       }
+
+      const targetPt = contextData?.patient;
+      const targetDoctor = contextData?.doctor || contextData?.appointment?.doctor;
+
+      const itemsToTransfer = prescriptions.map((p) => {
+        const itemPrice = Number(p.price ?? (p as any).unitPrice ?? (p as any).unit_price ?? 0);
+        const pAny = p as any;
+        const itemQty = Number(p.quantity || 1);
+        const rawId = pAny.serviceId || (typeof pAny.id === 'number' ? pAny.id : (typeof pAny.id === 'string' && pAny.id.startsWith('serv-') ? Number(pAny.id.replace('serv-', '')) : undefined));
+        return {
+          id: rawId && !isNaN(rawId) ? Number(rawId) : undefined,
+          serviceId: rawId && !isNaN(rawId) ? Number(rawId) : undefined,
+          title: p.name || (p as any).title || 'Медицинская услуга',
+          name: p.name || (p as any).title || 'Медицинская услуга',
+          price: itemPrice,
+          unitPrice: itemPrice,
+          unit_price: itemPrice,
+          quantity: itemQty,
+          code: p.code || (p as any).serviceCode || '',
+          category: p.category || 'Ортопедия'
+        };
+      });
 
       const payload = {
         appointmentId: contextData?.appointment?.id,
-        protocolId,
-        patientId: contextData?.patient?.id,
-        patientName: contextData?.patient?.full_name,
-        items: prescriptions.map((p) => {
-          const itemPrice = Number(p.price ?? (p as any).unitPrice ?? (p as any).unit_price ?? 0);
-          const itemQty = Number(p.quantity || 1);
-          return {
-            title: p.name || (p as any).title || 'Медицинская услуга',
-            name: p.name || (p as any).title || 'Медицинская услуга',
-            price: itemPrice,
-            unitPrice: itemPrice,
-            unit_price: itemPrice,
-            quantity: itemQty,
-            code: p.code || (p as any).serviceCode || '',
-            category: p.category || 'Ортопедия'
-          };
-        })
+        protocolId: currentProtocolId,
+        patientId: targetPt?.id,
+        patientName: targetPt?.full_name || [targetPt?.surname, targetPt?.name, targetPt?.patron].filter(Boolean).join(' ') || 'Пациент',
+        doctorId: targetDoctor?.id || contextData?.appointment?.doctor_id,
+        doctorName: targetDoctor?.full_name,
+        items: itemsToTransfer
       };
 
       const res = await fetch(`${API_BASE_URL}/api/ortho/transfer-to-checkout`, {
@@ -607,10 +624,15 @@ export default function OrthoWorkstation() {
       const data = await res.json();
       if (data.success && data.checkoutPrefill) {
         sessionStorage.setItem('ortho_checkout_prefill', JSON.stringify(data.checkoutPrefill));
-        setToastMessage('Назначения переданы в кассу! Переход в модуль оплаты...');
+        setToastMessage('Назначения переданы в кассу! Переход в оформление визита...');
+        const qParams = new URLSearchParams();
+        if (payload.patientId) qParams.set('patientId', String(payload.patientId));
+        if (payload.appointmentId) qParams.set('appointmentId', String(payload.appointmentId));
+        if (currentProtocolId) qParams.set('protocolId', String(currentProtocolId));
+        const redirectUrl = qParams.toString() ? `/checkout?${qParams.toString()}` : '/checkout';
         setTimeout(() => {
-          navigate('/checkout');
-        }, 600);
+          navigate(redirectUrl);
+        }, 300);
       } else {
         throw new Error(data.error || 'Не удалось передать в кассу');
       }
