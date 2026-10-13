@@ -18,6 +18,7 @@ import MeetingRoomIcon from '@mui/icons-material/MeetingRoom';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import HowToRegIcon from '@mui/icons-material/HowToReg';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
+import MedicalServicesIcon from '@mui/icons-material/MedicalServices';
 import { useNavigate } from 'react-router-dom';
 import type { Appointment, AppointmentStatus } from './SchedulingTypes';
 
@@ -217,6 +218,17 @@ export default function LiveQueueMonitor({ appointments, onRefresh }: LiveQueueM
                       >
                         Пригласить в кабинет
                       </Button>
+                      <Tooltip title="Открыть АРМ врача-ортопеда" arrow>
+                        <Button
+                          variant="outlined"
+                          color="primary"
+                          size="small"
+                          onClick={() => navigate(`/ortho-workstation/${app.id}`)}
+                          sx={{ minWidth: 42, px: 1 }}
+                        >
+                          <MedicalServicesIcon sx={{ fontSize: 18 }} />
+                        </Button>
+                      </Tooltip>
                     </Box>
                   </Paper>
                 );
@@ -289,6 +301,16 @@ export default function LiveQueueMonitor({ appointments, onRefresh }: LiveQueueM
                   <Box sx={{ display: 'flex', gap: 1, mt: 0.5 }}>
                     <Button
                       variant="contained"
+                      color="primary"
+                      size="small"
+                      startIcon={<MedicalServicesIcon sx={{ fontSize: 18 }} />}
+                      onClick={() => navigate(`/ortho-workstation/${app.id}`)}
+                      sx={{ fontWeight: 700, textTransform: 'none', px: 1.5 }}
+                    >
+                      АРМ
+                    </Button>
+                    <Button
+                      variant="contained"
                       color="success"
                       size="small"
                       fullWidth
@@ -303,7 +325,7 @@ export default function LiveQueueMonitor({ appointments, onRefresh }: LiveQueueM
                       onClick={() => handleStatusChange(app.id, 'completed')}
                       sx={{ fontWeight: 700, textTransform: 'none' }}
                     >
-                      Завершить приём
+                      Завершить
                     </Button>
                     <Tooltip title="Оформить списание материалов и чек на кассе" arrow>
                       <Button

@@ -331,6 +331,36 @@ export default function CheckoutWizard() {
           const matData = await matRes.json();
           setWarehouseMaterials(matData);
         }
+
+        // Check for prefill from Ortho Workstation
+        const prefillStr = sessionStorage.getItem('ortho_checkout_prefill');
+        if (prefillStr) {
+          try {
+            const prefill = JSON.parse(prefillStr);
+            if (prefill.patientId && patientsRes.ok) {
+              const patientsData = await patientsRes.clone().json();
+              const matchPt = patientsData.find((p: any) => p.id === prefill.patientId);
+              if (matchPt) setSelectedPatient(matchPt);
+              else if (prefill.patientName) {
+                setSelectedPatient({ id: prefill.patientId, full_name: prefill.patientName });
+              }
+            }
+            if (prefill.items && prefill.items.length > 0) {
+              const mapped = prefill.items.map((it: any, i: number) => ({
+                id: it.id || (99000 + i),
+                name: it.name,
+                price: it.price,
+                unit_price: it.price,
+                quantity: it.quantity || 1,
+                subtotal: it.price * (it.quantity || 1)
+              }));
+              setSelectedOperations(mapped);
+            }
+            sessionStorage.removeItem('ortho_checkout_prefill');
+          } catch (e) {
+            console.error('Error applying ortho prefill:', e);
+          }
+        }
       } catch (err) {
         console.error('Error fetching master data for wizard', err);
       } finally {

@@ -411,6 +411,14 @@ const db = new sqlite3.Database(dbPath, (err) => {
       } catch (err) {
         console.error('Error initializing POS Acquiring schema:', err.message);
       }
+
+      // Initialize Orthopedic Workstation 2.0 schema, FTS5 index, and Serilog Audit
+      try {
+        const { initOrthoSchema } = require('./initOrthoSchema');
+        initOrthoSchema(db);
+      } catch (err) {
+        console.error('Error initializing Orthopedic schema:', err.message);
+      }
     });
   }
 });

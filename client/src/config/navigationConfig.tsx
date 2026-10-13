@@ -29,6 +29,8 @@ import DnsIcon from '@mui/icons-material/Dns';
 import ScienceIcon from '@mui/icons-material/Science';
 import UsbIcon from '@mui/icons-material/Usb';
 import CreditCardIcon from '@mui/icons-material/CreditCard';
+import MedicalServicesIcon from '@mui/icons-material/MedicalServices';
+import DescriptionIcon from '@mui/icons-material/Description';
 
 export interface NavItem {
   text: string;
@@ -57,6 +59,18 @@ export const navigationGroups: NavGroup[] = [
     defaultOpen: true,
     tooltip: 'Операционные процессы: оформление визитов, расписание врачей, кассовые смены, выплаты зарплат и отчетность',
     items: [
+      {
+        text: 'АРМ врача-ортопеда',
+        path: '/ortho-workstation',
+        icon: <MedicalServicesIcon sx={{ fontSize: 20, color: '#0F3C64' }} />,
+        tooltip: 'Рабочее место травматолога-ортопеда: интерактивный 2D-гомункулус, углометрия Neutral-0 ROM, клинические тесты, медиатека снимков и live-протокол (PDF/DOCX/RTF/TXT)'
+      },
+      {
+        text: 'Реестр протоколов',
+        path: '/protocols-registry',
+        icon: <DescriptionIcon sx={{ fontSize: 20, color: '#0F3C64' }} />,
+        tooltip: 'Электронный архив протоколов: полнотекстовый поиск FTS5 по 32 881 записям, фильтры по суставам и статусам, аналитика назначений и верификация ЭЦП'
+      },
       {
         text: 'Оформление визита (Wizard)',
         path: '/checkout',
