@@ -11,7 +11,10 @@ import {
   Card,
   CardContent,
   Tooltip,
-  Grid
+  Grid,
+  Switch,
+  FormControlLabel,
+  Snackbar
 } from '@mui/material';
 import { API_BASE_URL } from '../config/apiConfig';
 
@@ -24,6 +27,7 @@ import ErrorIcon from '@mui/icons-material/Error';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import StorageIcon from '@mui/icons-material/Storage';
 import PointOfSaleIcon from '@mui/icons-material/PointOfSale';
+import CreditCardIcon from '@mui/icons-material/CreditCard';
 import CodeIcon from '@mui/icons-material/Code';
 import BackupIcon from '@mui/icons-material/Backup';
 import SpeedIcon from '@mui/icons-material/Speed';
@@ -31,6 +35,9 @@ import MemoryIcon from '@mui/icons-material/Memory';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import TerminalIcon from '@mui/icons-material/Terminal';
 import SyncAltIcon from '@mui/icons-material/SyncAlt';
+import RestartAltIcon from '@mui/icons-material/RestartAlt';
+import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
+import BuildCircleIcon from '@mui/icons-material/BuildCircle';
 
 export interface ServiceDetail {
   id: string;
@@ -64,6 +71,10 @@ export default function ServerHealth() {
   const [data, setData] = useState<ServicesStatusResponse | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [testing, setTesting] = useState<boolean>(false);
+  const [repairingId, setRepairingId] = useState<string | null>(null);
+  const [repairingAll, setRepairingAll] = useState<boolean>(false);
+  const [autoRepair, setAutoRepair] = useState<boolean>(false);
+  const [successFeedback, setSuccessFeedback] = useState<string | null>(null);
   const [logs, setLogs] = useState<Array<{ timestamp: string; level: string; message: string }>>([]);
   const [error, setError] = useState<string | null>(null);
   const hasTriggeredParam = useRef<boolean>(false);
@@ -82,19 +93,24 @@ export default function ServerHealth() {
         setLogs(json.logs);
       }
     } catch (err: any) {
-      setError(err.message || 'Ошибка загрузки статуса служб бэкенда');
+      const msg = err.message === 'Failed to fetch'
+        ? 'Не удалось связаться с сервером (Failed to fetch). Убедитесь, что веб-приложение открыто по адресу http://localhost:5173 или http://localhost:5000'
+        : (err.message || 'Ошибка загрузки статуса служб бэкенда');
+      setError(msg);
     } finally {
       setLoading(false);
     }
   };
 
-  // Run deep diagnostic test on all backend services
+  // Run deep diagnostic test on all backend services (optionally with autoRepair)
   const runDeepTests = async () => {
     setTesting(true);
     setError(null);
     try {
       const res = await fetch(`${API_BASE_URL}/api/admin/services/test-all`, {
-        method: 'POST'
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ autoRepair })
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
       const json: ServicesStatusResponse = await res.json();
@@ -102,10 +118,64 @@ export default function ServerHealth() {
       if (json.logs) {
         setLogs(json.logs);
       }
+      if (autoRepair) {
+        setSuccessFeedback('Тестирование с автоматическим устранением сбоев завершено.');
+      }
     } catch (err: any) {
-      setError(err.message || 'Ошибка выполнения тестов доступности служб');
+      const msg = err.message === 'Failed to fetch'
+        ? 'Не удалось связаться с сервером (Failed to fetch). Убедитесь, что веб-приложение открыто по адресу http://localhost:5173 или http://localhost:5000'
+        : (err.message || 'Ошибка выполнения тестов доступности служб');
+      setError(msg);
     } finally {
       setTesting(false);
+    }
+  };
+
+  // Repair or restart individual service
+  const handleRepairService = async (serviceId: string) => {
+    setRepairingId(serviceId);
+    setError(null);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/admin/services/${serviceId}/repair`, {
+        method: 'POST'
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        throw new Error(json.error || `Ошибка при перезапуске/восстановлении службы [${serviceId}]`);
+      }
+      if (json.logs && json.logs.length > 0) {
+        setLogs(prev => [...prev, ...json.logs]);
+      }
+      setSuccessFeedback(json.message || `Служба ${serviceId} успешно восстановлена!`);
+      await fetchStatus();
+    } catch (err: any) {
+      setError(err.message || `Не удалось восстановить службу ${serviceId}`);
+    } finally {
+      setRepairingId(null);
+    }
+  };
+
+  // Batch repair all failing/degraded services
+  const handleRepairAll = async () => {
+    setRepairingAll(true);
+    setError(null);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/admin/services/repair-all`, {
+        method: 'POST'
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        throw new Error(json.error || 'Ошибка при пакетном восстановлении служб');
+      }
+      if (json.logs && json.logs.length > 0) {
+        setLogs(prev => [...prev, ...json.logs]);
+      }
+      setSuccessFeedback(json.message || 'Пакетное восстановление служб выполнено');
+      await fetchStatus();
+    } catch (err: any) {
+      setError(err.message || 'Ошибка запуска авто-восстановления');
+    } finally {
+      setRepairingAll(false);
     }
   };
 
@@ -138,6 +208,8 @@ export default function ServerHealth() {
         return <StorageIcon sx={{ fontSize: 28, color: '#16A34A' }} />;
       case 'fiscal':
         return <PointOfSaleIcon sx={{ fontSize: 28, color: '#9333EA' }} />;
+      case 'pos':
+        return <CreditCardIcon sx={{ fontSize: 28, color: '#D97706' }} />;
       case 'firebird':
         return <SyncAltIcon sx={{ fontSize: 28, color: '#EA580C' }} />;
       case 'swagger':
@@ -219,15 +291,43 @@ export default function ServerHealth() {
           </Box>
         </Box>
 
-        <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
+        <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center', flexWrap: 'wrap' }}>
+          <FormControlLabel
+            control={
+              <Switch
+                size="small"
+                checked={autoRepair}
+                onChange={(e) => setAutoRepair(e.target.checked)}
+                color="primary"
+              />
+            }
+            label={
+              <Typography variant="body2" sx={{ fontWeight: 600, color: '#0F3C64', userSelect: 'none' }}>
+                Авто-исправление сбоев
+              </Typography>
+            }
+            sx={{ m: 0 }}
+          />
+
           <Button
             variant="outlined"
             startIcon={<RefreshIcon />}
             onClick={fetchStatus}
-            disabled={loading || testing}
+            disabled={loading || testing || repairingAll}
             sx={{ borderColor: '#CBD5E1', color: '#0F3C64', fontWeight: 600 }}
           >
             {loading ? 'Опрос...' : 'Обновить статус'}
+          </Button>
+
+          <Button
+            variant="outlined"
+            color="warning"
+            startIcon={repairingAll ? <CircularProgress size={16} color="inherit" /> : <RestartAltIcon />}
+            onClick={handleRepairAll}
+            disabled={loading || testing || repairingAll}
+            sx={{ fontWeight: 700, borderColor: '#F59E0B', color: '#B45309' }}
+          >
+            {repairingAll ? 'Восстановление...' : 'Перезапустить сбойные'}
           </Button>
 
           <Button
@@ -235,7 +335,7 @@ export default function ServerHealth() {
             color="primary"
             startIcon={testing ? <CircularProgress size={18} color="inherit" /> : <PlayCircleFilledWhiteIcon />}
             onClick={runDeepTests}
-            disabled={loading || testing}
+            disabled={loading || testing || repairingAll}
             sx={{
               fontWeight: 700,
               bgcolor: '#0284C7',
@@ -296,13 +396,26 @@ export default function ServerHealth() {
               </Typography>
               <Typography variant="body2" sx={{ color: data.summary.isSystemHealthy ? '#15803D' : '#B91C1C' }}>
                 {data.summary.isSystemHealthy
-                  ? `Успешно верифицировано ${data.summary.online} из ${data.summary.total} компонентов бэкенда (Express, SQLite, Fiscal Daemon, Firebird, Swagger, Backups).`
+                  ? `Успешно верифицировано ${data.summary.online} из ${data.summary.total} компонентов бэкенда (Express, SQLite, Fiscal Daemon, Firebird, Swagger, Backups, POS).`
                   : `В сети: ${data.summary.online} из ${data.summary.total}, ошибок/недоступно: ${data.summary.offline + data.summary.degraded}. Проверьте конфигурацию.`}
               </Typography>
             </Box>
           </Box>
 
           <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+            {!data.summary.isSystemHealthy && (
+              <Button
+                variant="contained"
+                color="error"
+                size="small"
+                startIcon={repairingAll ? <CircularProgress size={16} color="inherit" /> : <AutoFixHighIcon />}
+                onClick={handleRepairAll}
+                disabled={repairingAll || testing}
+                sx={{ fontWeight: 700, borderRadius: 1.5, px: 2 }}
+              >
+                {repairingAll ? 'Восстановление...' : 'Устранить все сбои'}
+              </Button>
+            )}
             <Box sx={{ textAlign: 'right' }}>
               <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
                 Последняя проверка
@@ -591,6 +704,23 @@ export default function ServerHealth() {
                     </>
                   )}
 
+                  {svc.id === 'pos' && svc.details && (
+                    <>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <Typography variant="caption" sx={{ color: 'text.secondary' }}>Драйвер эквайринга:</Typography>
+                        <Typography variant="caption" sx={{ fontWeight: 600 }}>{svc.details.driverType} ({svc.details.isMockMode})</Typography>
+                      </Box>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <Typography variant="caption" sx={{ color: 'text.secondary' }}>Профиль / Подключение:</Typography>
+                        <Typography variant="caption" sx={{ fontWeight: 600 }}>{svc.details.connection}</Typography>
+                      </Box>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <Typography variant="caption" sx={{ color: 'text.secondary' }}>ID Терминала / Служба:</Typography>
+                        <Typography variant="caption" sx={{ fontWeight: 600 }}>{svc.details.terminalId} ({svc.details.serviceStatus})</Typography>
+                      </Box>
+                    </>
+                  )}
+
                   {/* Error if present */}
                   {svc.error && (
                     <Box sx={{ bgcolor: '#FEF2F2', p: 1, borderRadius: 1, border: '1px solid #FECACA', mt: 0.5 }}>
@@ -603,60 +733,165 @@ export default function ServerHealth() {
               </CardContent>
 
               {/* Bottom Card Action */}
-              <Box sx={{ p: 1.5, pt: 0, display: 'flex', gap: 1 }}>
-                {svc.id === 'swagger' ? (
+              <Box sx={{ p: 1.5, pt: 0, display: 'flex', flexDirection: 'column', gap: 1 }}>
+                {svc.status !== 'ONLINE' && (
                   <Button
                     size="small"
-                    variant="outlined"
+                    variant="contained"
+                    color="warning"
                     fullWidth
-                    endIcon={<OpenInNewIcon sx={{ fontSize: 16 }} />}
-                    onClick={() => window.open(`${API_BASE_URL}/api-docs`, '_blank', 'noopener,noreferrer')}
-                    sx={{ textTransform: 'none', fontWeight: 600, borderColor: '#CBD5E1', color: '#2563EB' }}
+                    startIcon={repairingId === svc.id ? <CircularProgress size={16} color="inherit" /> : <RestartAltIcon sx={{ fontSize: 18 }} />}
+                    onClick={() => handleRepairService(svc.id)}
+                    disabled={repairingId === svc.id || repairingAll || testing}
+                    sx={{
+                      textTransform: 'none',
+                      fontWeight: 700,
+                      bgcolor: '#D97706',
+                      '&:hover': { bgcolor: '#B45309' },
+                      borderRadius: 1.5
+                    }}
                   >
-                    Открыть Swagger UI
-                  </Button>
-                ) : svc.id === 'sqlite' ? (
-                  <Button
-                    size="small"
-                    variant="outlined"
-                    fullWidth
-                    onClick={() => navigate('/sqlite-studio')}
-                    sx={{ textTransform: 'none', fontWeight: 600, borderColor: '#CBD5E1', color: '#0F3C64' }}
-                  >
-                    SQLite Studio (БД)
-                  </Button>
-                ) : svc.id === 'fiscal' ? (
-                  <Button
-                    size="small"
-                    variant="outlined"
-                    fullWidth
-                    onClick={() => navigate('/admin/fiscal-test-wizard')}
-                    sx={{ textTransform: 'none', fontWeight: 600, borderColor: '#CBD5E1', color: '#0F3C64' }}
-                  >
-                    Мастер тестов ККТ
-                  </Button>
-                ) : svc.id === 'firebird' ? (
-                  <Button
-                    size="small"
-                    variant="outlined"
-                    fullWidth
-                    onClick={() => navigate('/admin/firebird-sync')}
-                    sx={{ textTransform: 'none', fontWeight: 600, borderColor: '#CBD5E1', color: '#0F3C64' }}
-                  >
-                    FireBird Sync
-                  </Button>
-                ) : (
-                  <Button
-                    size="small"
-                    variant="outlined"
-                    fullWidth
-                    onClick={runDeepTests}
-                    disabled={testing}
-                    sx={{ textTransform: 'none', fontWeight: 600, borderColor: '#CBD5E1', color: '#0F3C64' }}
-                  >
-                    Повторить проверку
+                    {repairingId === svc.id ? 'Восстановление...' : 'Восстановить / Перезапустить'}
                   </Button>
                 )}
+
+                <Box sx={{ display: 'flex', gap: 1 }}>
+                  {svc.id === 'swagger' ? (
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      fullWidth
+                      endIcon={<OpenInNewIcon sx={{ fontSize: 16 }} />}
+                      onClick={() => window.open(`${API_BASE_URL}/api-docs`, '_blank', 'noopener,noreferrer')}
+                      sx={{ textTransform: 'none', fontWeight: 600, borderColor: '#CBD5E1', color: '#2563EB' }}
+                    >
+                      Открыть Swagger UI
+                    </Button>
+                  ) : svc.id === 'sqlite' ? (
+                    <>
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        fullWidth
+                        onClick={() => navigate('/sqlite-studio')}
+                        sx={{ textTransform: 'none', fontWeight: 600, borderColor: '#CBD5E1', color: '#0F3C64' }}
+                      >
+                        SQLite Studio (БД)
+                      </Button>
+                      {svc.status === 'ONLINE' && (
+                        <Tooltip title="Очистить WAL и проверить целостность">
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            onClick={() => handleRepairService('sqlite')}
+                            disabled={repairingId === 'sqlite' || repairingAll}
+                            sx={{ minWidth: 40, px: 1, borderColor: '#CBD5E1', color: '#16A34A' }}
+                          >
+                            {repairingId === 'sqlite' ? <CircularProgress size={14} /> : <BuildCircleIcon sx={{ fontSize: 18 }} />}
+                          </Button>
+                        </Tooltip>
+                      )}
+                    </>
+                  ) : svc.id === 'fiscal' ? (
+                    <>
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        fullWidth
+                        onClick={() => navigate('/admin/fiscal-test-wizard')}
+                        sx={{ textTransform: 'none', fontWeight: 600, borderColor: '#CBD5E1', color: '#0F3C64' }}
+                      >
+                        Мастер тестов ККТ
+                      </Button>
+                      {svc.status === 'ONLINE' && (
+                        <Tooltip title="Перезапустить службу OrthoErp.FiscalService">
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            onClick={() => handleRepairService('fiscal')}
+                            disabled={repairingId === 'fiscal' || repairingAll}
+                            sx={{ minWidth: 40, px: 1, borderColor: '#CBD5E1', color: '#9333EA' }}
+                          >
+                            {repairingId === 'fiscal' ? <CircularProgress size={14} /> : <RestartAltIcon sx={{ fontSize: 18 }} />}
+                          </Button>
+                        </Tooltip>
+                      )}
+                    </>
+                  ) : svc.id === 'pos' ? (
+                    <>
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        fullWidth
+                        onClick={() => navigate('/pos-settlement')}
+                        sx={{ textTransform: 'none', fontWeight: 600, borderColor: '#CBD5E1', color: '#0F3C64' }}
+                      >
+                        Сверка итогов / POS
+                      </Button>
+                      {svc.status === 'ONLINE' && (
+                        <Tooltip title="Перезапустить службу DualConnector">
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            onClick={() => handleRepairService('pos')}
+                            disabled={repairingId === 'pos' || repairingAll}
+                            sx={{ minWidth: 40, px: 1, borderColor: '#CBD5E1', color: '#D97706' }}
+                          >
+                            {repairingId === 'pos' ? <CircularProgress size={14} /> : <RestartAltIcon sx={{ fontSize: 18 }} />}
+                          </Button>
+                        </Tooltip>
+                      )}
+                    </>
+                  ) : svc.id === 'firebird' ? (
+                    <>
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        fullWidth
+                        onClick={() => navigate('/admin/firebird-sync')}
+                        sx={{ textTransform: 'none', fontWeight: 600, borderColor: '#CBD5E1', color: '#0F3C64' }}
+                      >
+                        FireBird Sync
+                      </Button>
+                      {svc.status === 'ONLINE' && (
+                        <Tooltip title="Переподключить базу Firebird">
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            onClick={() => handleRepairService('firebird')}
+                            disabled={repairingId === 'firebird' || repairingAll}
+                            sx={{ minWidth: 40, px: 1, borderColor: '#CBD5E1', color: '#EA580C' }}
+                          >
+                            {repairingId === 'firebird' ? <CircularProgress size={14} /> : <RestartAltIcon sx={{ fontSize: 18 }} />}
+                          </Button>
+                        </Tooltip>
+                      )}
+                    </>
+                  ) : svc.id === 'backup' ? (
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      fullWidth
+                      startIcon={repairingId === 'backup' ? <CircularProgress size={14} color="inherit" /> : <BackupIcon sx={{ fontSize: 18 }} />}
+                      onClick={() => handleRepairService('backup')}
+                      disabled={repairingId === 'backup' || repairingAll}
+                      sx={{ textTransform: 'none', fontWeight: 600, borderColor: '#CBD5E1', color: '#0D9488' }}
+                    >
+                      {repairingId === 'backup' ? 'Создание снимка...' : 'Создать снимок БД'}
+                    </Button>
+                  ) : (
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      fullWidth
+                      onClick={runDeepTests}
+                      disabled={testing}
+                      sx={{ textTransform: 'none', fontWeight: 600, borderColor: '#CBD5E1', color: '#0F3C64' }}
+                    >
+                      Повторить проверку
+                    </Button>
+                  )}
+                </Box>
               </Box>
             </Card>
           </Grid>
@@ -742,6 +977,23 @@ export default function ServerHealth() {
           )}
         </Box>
       </Paper>
+
+      {/* Snackbar feedback */}
+      <Snackbar
+        open={Boolean(successFeedback)}
+        autoHideDuration={5000}
+        onClose={() => setSuccessFeedback(null)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert
+          onClose={() => setSuccessFeedback(null)}
+          severity="success"
+          variant="filled"
+          sx={{ width: '100%', fontWeight: 600, borderRadius: 2 }}
+        >
+          {successFeedback}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 }

@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const fs = require('fs');
 const path = require('path');
-const { exec } = require('child_process');
+const { exec, spawn } = require('child_process');
 const db = require('./database');
 const { getAppSettings, getSqliteDbPath, getFirebirdConfig, getFiscalConfig, getBackupConfig } = require('./config');
 
@@ -386,21 +386,200 @@ async function checkBackupService() {
 }
 
 /**
+ * Check Acquiring POS Terminal & Service
+ */
+async function checkPosService() {
+  const start = Date.now();
+  try {
+    const { posService } = require('./posService');
+    const status = await posService.getStatus();
+    const isOnline = status.status === 'Ready' || status.isMockMode;
+    const latencyMs = Date.now() - start;
+
+    return {
+      id: 'pos',
+      name: `POS-эквайринг «${status.bankName || 'Альфа-Банк'}» (${status.driverType || 'Arcus-2'})`,
+      category: 'Card Acquiring / POS Driver',
+      status: isOnline ? 'ONLINE' : 'DEGRADED',
+      latencyMs,
+      url: status.driverType === 'INPAS' ? `tcp://${status.ipAddress || '127.0.0.1'}:${status.ipPort || 8888}` : status.port,
+      description: status.driverType === 'INPAS'
+        ? `XML-протокол DualConnector (Служба: ${status.serviceName || 'DualConnectorService'})`
+        : `Драйвер Arcus-2 (${status.driverExecutablePath || 'pos.exe'})`,
+      details: {
+        driverType: status.driverType,
+        isMockMode: status.isMockMode ? 'Включена (Эмуляция)' : 'Выключена (Физический POS)',
+        terminalId: status.terminalId,
+        merchantId: status.merchantId,
+        activeProfile: status.profileName,
+        connection: status.driverType === 'INPAS' ? `TCP ${status.ipAddress}:${status.ipPort}` : `${status.port} (${status.baudRate} бод)`,
+        serviceStatus: status.serviceStatus ? status.serviceStatus.status : (status.isMockMode ? 'Эмуляция' : 'Не найдена')
+      }
+    };
+  } catch (err) {
+    return {
+      id: 'pos',
+      name: 'POS-эквайринг (Альфа-Банк)',
+      category: 'Card Acquiring / POS Driver',
+      status: 'ERROR',
+      latencyMs: Date.now() - start,
+      description: 'Модуль банковского эквайринга',
+      error: err.message
+    };
+  }
+}
+
+/**
+ * Checks all 7 system components
+ */
+async function checkAllServices() {
+  const [expressSvc, sqliteSvc, fiscalSvc, firebirdSvc, swaggerSvc, backupSvc, posSvc] = await Promise.all([
+    checkExpressService(),
+    checkSqliteService(),
+    checkFiscalService(),
+    checkFirebirdService(),
+    checkSwaggerService(),
+    checkBackupService(),
+    checkPosService()
+  ]);
+  return [expressSvc, sqliteSvc, fiscalSvc, firebirdSvc, swaggerSvc, backupSvc, posSvc];
+}
+
+/**
+ * Repair / Restart individual service
+ */
+async function repairService(serviceId, addLog = () => {}) {
+  addLog(`Начало восстановления службы: ${serviceId}...`, 'INFO');
+  switch (serviceId) {
+    case 'fiscal': {
+      addLog('Попытка запуска/перезапуска OrthoErp.FiscalService на порту 5050...', 'INFO');
+      const pubExe = path.resolve(__dirname, 'fiscal_service/OrthoErp.FiscalService/publish/OrthoErp.FiscalService.exe');
+      if (!fs.existsSync(pubExe)) {
+        throw new Error(`Исполняемый файл службы не найден: ${pubExe}`);
+      }
+
+      // Stop any hung process
+      await new Promise(r => exec('powershell -Command "Get-Process OrthoErp.FiscalService -ErrorAction SilentlyContinue | Stop-Process -Force"', () => r()));
+      addLog('Остановлены старые процессы OrthoErp.FiscalService', 'INFO');
+
+      // Start detached daemon
+      const child = spawn(pubExe, ['--urls=http://localhost:5050'], {
+        detached: true,
+        stdio: 'ignore',
+        cwd: path.dirname(pubExe),
+        windowsHide: true
+      });
+      child.unref();
+      addLog('Запущен новый процесс OrthoErp.FiscalService.exe на порту 5050', 'INFO');
+
+      // Poll up to 6 seconds
+      let isUp = false;
+      for (let i = 0; i < 6; i++) {
+        await new Promise(r => setTimeout(r, 1000));
+        try {
+          const res = await fetch('http://localhost:5050/api/fiscal/status');
+          if (res.ok) { isUp = true; break; }
+        } catch (e) {}
+      }
+
+      if (!isUp) {
+        throw new Error('Фискальный сервис запущен, но не ответил на порту 5050 за 6 секунд.');
+      }
+      addLog('Фискальный сервис успешно ответил HTTP 200 на порту 5050', 'INFO');
+      return { success: true, message: 'Фискальный сервис ККТ АТОЛ успешно запущен и готов к работе.' };
+    }
+
+    case 'pos': {
+      addLog('Восстановление и переинициализация сервиса эквайринга...', 'INFO');
+      const { posService } = require('./posService');
+      const { restartWindowsService } = require('./winServiceHelper');
+      await posService.refreshFromDb();
+      let msg = '';
+      if (posService.driverType === 'INPAS') {
+        const sName = posService.serviceName || 'DualConnectorService';
+        addLog(`Перезапуск Windows-службы ${sName}...`, 'INFO');
+        const svcRes = await restartWindowsService(sName);
+        msg = svcRes.message || 'Служба DualConnector перезапущена';
+      }
+      await posService.refreshFromDb();
+      addLog('Профиль эквайринга перезагружен из базы данных', 'INFO');
+      return { success: true, message: msg || 'Модуль эквайринга переинициализирован и готов к приёму карт.' };
+    }
+
+    case 'sqlite': {
+      addLog('Очистка WAL-журнала и проверка структуры SQLite...', 'INFO');
+      await querySqlite('PRAGMA wal_checkpoint(TRUNCATE)');
+      const check = await querySqlite('PRAGMA integrity_check');
+      const isOk = check && (check.integrity_check === 'ok' || check.quick_check === 'ok');
+      if (!isOk) {
+        throw new Error(`Ошибка целостности базы данных: ${JSON.stringify(check)}`);
+      }
+      addLog('PRAGMA integrity_check вернул OK', 'INFO');
+      return { success: true, message: 'База данных проверена: WAL усечён, целостность подтверждена (OK).' };
+    }
+
+    case 'backup': {
+      addLog('Создание внеочередного снимка базы данных SQLite (VACUUM INTO)...', 'INFO');
+      const backupCfg = getBackupConfig();
+      const backupDirRel = backupCfg.BackupDirectory || '../backups';
+      const backupDir = path.isAbsolute(backupDirRel) ? backupDirRel : path.resolve(__dirname, backupDirRel);
+      if (!fs.existsSync(backupDir)) {
+        fs.mkdirSync(backupDir, { recursive: true });
+        addLog(`Создан каталог резервных копий: ${backupDir}`, 'INFO');
+      }
+
+      const now = new Date();
+      const pad = (n) => String(n).padStart(2, '0');
+      const ts = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+      const filename = `orthopedic_backup_${ts}.sqlite`;
+      const fullPath = path.join(backupDir, filename).replace(/\\/g, '/');
+
+      const sqlite3 = require('sqlite3').verbose();
+      const sourceDbPath = getSqliteDbPath();
+      await new Promise((resolve, reject) => {
+        const snap = new sqlite3.Database(sourceDbPath, sqlite3.OPEN_READONLY, (err) => {
+          if (err) return reject(err);
+          snap.run(`VACUUM INTO '${fullPath}'`, (vacErr) => {
+            snap.close();
+            if (vacErr) return reject(vacErr);
+            resolve();
+          });
+        });
+      });
+
+      addLog(`Резервная копия успешно создана: ${filename}`, 'INFO');
+      return { success: true, message: `Подсистема бэкапа восстановлена. Создан снимок базы: ${filename}` };
+    }
+
+    case 'firebird': {
+      addLog('Попытка восстановления связи с сервером Firebird...', 'INFO');
+      if (process.platform === 'win32') {
+        await new Promise(r => exec('net start FirebirdServerDefaultInstance', () => r()));
+      }
+      const check = await checkFirebirdService();
+      if (check.status !== 'ONLINE') {
+        throw new Error(check.error || 'Не удалось установить связь с сервером Firebird.');
+      }
+      addLog('Связь с Firebird подтверждена', 'INFO');
+      return { success: true, message: 'Подключение к базе Firebird MEDICAL.FDB успешно восстановлено.' };
+    }
+
+    case 'express':
+    case 'swagger':
+      return { success: true, message: 'Служба работает штатно.' };
+
+    default:
+      throw new Error(`Неизвестная служба: ${serviceId}`);
+  }
+}
+
+/**
  * GET /api/admin/services/status
  * Quick health check across all services
  */
 router.get('/status', async (req, res) => {
   try {
-    const [expressSvc, sqliteSvc, fiscalSvc, firebirdSvc, swaggerSvc, backupSvc] = await Promise.all([
-      checkExpressService(),
-      checkSqliteService(),
-      checkFiscalService(),
-      checkFirebirdService(),
-      checkSwaggerService(),
-      checkBackupService()
-    ]);
-
-    const services = [expressSvc, sqliteSvc, fiscalSvc, firebirdSvc, swaggerSvc, backupSvc];
+    const services = await checkAllServices();
     const onlineCount = services.filter(s => s.status === 'ONLINE').length;
     const totalCount = services.length;
     const allHealthy = onlineCount === totalCount;
@@ -424,9 +603,11 @@ router.get('/status', async (req, res) => {
 
 /**
  * POST /api/admin/services/test-all
- * Deep diagnostic test of all services with detailed timing and execution log
+ * Deep diagnostic test of all services with detailed timing and execution log.
+ * Supports autoRepair: true in body to automatically fix any failed services.
  */
 router.post('/test-all', async (req, res) => {
+  const { autoRepair = false } = req.body || {};
   const executionLogs = [];
   const addLog = (msg, level = 'INFO') => {
     executionLogs.push({
@@ -436,72 +617,41 @@ router.post('/test-all', async (req, res) => {
     });
   };
 
-  addLog('Запуск комплексной сквозной проверки всех серверных служб...');
+  addLog(`Запуск комплексной сквозной проверки всех серверных служб${autoRepair ? ' (с авто-восстановлением)' : ''}...`);
 
   const results = [];
 
-  // 1. Express
-  try {
-    addLog('Проверка Express REST API Gateway (порт 5000)...');
-    const resExpress = await checkExpressService();
-    results.push(resExpress);
-    addLog(`[Express] Статус: ${resExpress.status}, RAM RSS: ${resExpress.details.memoryRssMb}MB, задержка: ${resExpress.latencyMs}мс`);
-  } catch (e) {
-    addLog(`[Express] Ошибка: ${e.message}`, 'ERROR');
+  // Helper check runner
+  async function runCheck(name, checkFn) {
+    try {
+      addLog(`Проверка ${name}...`);
+      let svc = await checkFn();
+      if (svc.status !== 'ONLINE' && autoRepair) {
+        addLog(`Обнаружен сбой службы [${svc.id}] (${svc.status}). Запуск авто-восстановления...`, 'WARN');
+        try {
+          const repRes = await repairService(svc.id, addLog);
+          addLog(`[${svc.id}] Результат восстановления: ${repRes.message}`, 'INFO');
+          svc = await checkFn(); // re-check after repair
+        } catch (repErr) {
+          addLog(`[${svc.id}] Сбой при попытке восстановления: ${repErr.message}`, 'ERROR');
+        }
+      }
+      results.push(svc);
+      addLog(`[${svc.id}] Статус: ${svc.status}, задержка: ${svc.latencyMs}мс`);
+    } catch (e) {
+      addLog(`[${name}] Ошибка выполнения теста: ${e.message}`, 'ERROR');
+    }
   }
 
-  // 2. SQLite
-  try {
-    addLog('Проверка основного хранилища SQLite (orthopedic_data_center.sqlite)...');
-    const resSqlite = await checkSqliteService();
-    results.push(resSqlite);
-    addLog(`[SQLite] Статус: ${resSqlite.status}, Таблиц: ${resSqlite.details?.tableCount}, Режим: ${resSqlite.details?.journalMode}, задержка: ${resSqlite.latencyMs}мс`);
-  } catch (e) {
-    addLog(`[SQLite] Ошибка: ${e.message}`, 'ERROR');
-  }
+  await runCheck('Express REST API Gateway (порт 5000)', checkExpressService);
+  await runCheck('SQLite Database (orthopedic_data_center.sqlite)', checkSqliteService);
+  await runCheck('Fiscal Service (.NET Daemon порт 5050)', checkFiscalService);
+  await runCheck('Firebird SQL Server (MEDICAL.FDB порт 3050)', checkFirebirdService);
+  await runCheck('OpenAPI Swagger UI (порт 5000)', checkSwaggerService);
+  await runCheck('SQLite Hot Backup Subsystem', checkBackupService);
+  await runCheck('POS Acquiring & PIN-pad (INPAS/Arcus)', checkPosService);
 
-  // 3. Fiscal Service (.NET)
-  try {
-    addLog('Проверка фискального сервиса OrthoErp.FiscalService (порт 5050)...');
-    const resFiscal = await checkFiscalService();
-    results.push(resFiscal);
-    addLog(`[FiscalService] Статус: ${resFiscal.status}, Модель: ${resFiscal.details?.deviceModel || 'N/A'}, Смена: ${resFiscal.details?.isShiftOpen || 'N/A'}, задержка: ${resFiscal.latencyMs}мс`);
-  } catch (e) {
-    addLog(`[FiscalService] Ошибка: ${e.message}`, 'ERROR');
-  }
-
-  // 4. Firebird
-  try {
-    addLog('Проверка медицинской базы данных Firebird SQL (MEDICAL.FDB, порт 3050)...');
-    const resFirebird = await checkFirebirdService();
-    results.push(resFirebird);
-    const pts = resFirebird.details?.records?.patients;
-    addLog(`[Firebird] Статус: ${resFirebird.status}, Пациентов в МИС: ${pts !== undefined ? pts.toLocaleString() : 'N/A'}, задержка: ${resFirebird.latencyMs}мс`);
-  } catch (e) {
-    addLog(`[Firebird] Ошибка: ${e.message}`, 'ERROR');
-  }
-
-  // 5. OpenAPI Swagger
-  try {
-    addLog('Проверка доступности спецификации OpenAPI 3.0 / Swagger UI...');
-    const resSwagger = await checkSwaggerService();
-    results.push(resSwagger);
-    addLog(`[Swagger] Статус: ${resSwagger.status}, задержка: ${resSwagger.latencyMs}мс`);
-  } catch (e) {
-    addLog(`[Swagger] Ошибка: ${e.message}`, 'ERROR');
-  }
-
-  // 6. Backups
-  try {
-    addLog('Проверка подсистемы горячего резервного копирования...');
-    const resBackup = await checkBackupService();
-    results.push(resBackup);
-    addLog(`[Backup] Статус: ${resBackup.status}, Найдено снимков: ${resBackup.details?.totalBackupsCount}, задержка: ${resBackup.latencyMs}мс`);
-  } catch (e) {
-    addLog(`[Backup] Ошибка: ${e.message}`, 'ERROR');
-  }
-
-  addLog('Все проверки серверных служб успешно завершены.');
+  addLog('Все проверки серверных служб завершены.');
 
   const onlineCount = results.filter(s => s.status === 'ONLINE').length;
   const isHealthy = onlineCount === results.length;
@@ -519,6 +669,112 @@ router.post('/test-all', async (req, res) => {
     services: results,
     logs: executionLogs
   });
+});
+
+/**
+ * POST /api/admin/services/:id/repair (or /restart)
+ * Repairs or restarts a single service
+ */
+router.post(['/:id/repair', '/:id/restart'], async (req, res) => {
+  const serviceId = req.params.id;
+  const logs = [];
+  const addLog = (msg, level = 'INFO') => logs.push({ timestamp: new Date().toISOString(), level, message: msg });
+
+  try {
+    const result = await repairService(serviceId, addLog);
+    
+    // Get updated status for this service
+    let updatedService = null;
+    switch (serviceId) {
+      case 'express': updatedService = await checkExpressService(); break;
+      case 'sqlite': updatedService = await checkSqliteService(); break;
+      case 'fiscal': updatedService = await checkFiscalService(); break;
+      case 'firebird': updatedService = await checkFirebirdService(); break;
+      case 'swagger': updatedService = await checkSwaggerService(); break;
+      case 'backup': updatedService = await checkBackupService(); break;
+      case 'pos': updatedService = await checkPosService(); break;
+    }
+
+    res.json({
+      success: true,
+      serviceId,
+      message: result.message,
+      service: updatedService,
+      logs
+    });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      serviceId,
+      error: err.message,
+      logs
+    });
+  }
+});
+
+/**
+ * POST /api/admin/services/repair-all
+ * Scans and repairs all failing/degraded services in one click
+ */
+router.post('/repair-all', async (req, res) => {
+  const executionLogs = [];
+  const addLog = (msg, level = 'INFO') => {
+    executionLogs.push({
+      timestamp: new Date().toISOString(),
+      level,
+      message: msg
+    });
+  };
+
+  addLog('Запуск пакетного восстановления сбойных служб бэкенда...');
+
+  try {
+    const currentServices = await checkAllServices();
+    const failing = currentServices.filter(s => s.status !== 'ONLINE');
+
+    if (failing.length === 0) {
+      addLog('Все службы уже находятся в состоянии ONLINE. Восстановление не требуется.', 'INFO');
+      return res.json({
+        success: true,
+        message: 'Все службы в сети (ONLINE), вмешательство не требуется.',
+        repairedCount: 0,
+        services: currentServices,
+        logs: executionLogs
+      });
+    }
+
+    addLog(`Обнаружено сбойных служб: ${failing.length} (${failing.map(s => s.id).join(', ')}). Выполнение восстановления...`, 'WARN');
+
+    const repairResults = [];
+    for (const svc of failing) {
+      try {
+        const rep = await repairService(svc.id, addLog);
+        repairResults.push({ id: svc.id, success: true, message: rep.message });
+      } catch (repErr) {
+        addLog(`Ошибка при восстановлении [${svc.id}]: ${repErr.message}`, 'ERROR');
+        repairResults.push({ id: svc.id, success: false, error: repErr.message });
+      }
+    }
+
+    addLog('Повторный опрос состояния всех служб после восстановления...');
+    const updatedServices = await checkAllServices();
+    const onlineCount = updatedServices.filter(s => s.status === 'ONLINE').length;
+
+    res.json({
+      success: true,
+      message: `Восстановление завершено. В сети: ${onlineCount} из ${updatedServices.length}.`,
+      repairedCount: repairResults.filter(r => r.success).length,
+      repairDetails: repairResults,
+      services: updatedServices,
+      logs: executionLogs
+    });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      error: err.message,
+      logs: executionLogs
+    });
+  }
 });
 
 module.exports = router;

@@ -3730,39 +3730,60 @@ app.post('/api/admin/config', (req, res) => {
  *       200:
  *         description: Статус базы данных
  */
-app.get('/api/admin/firebird/status', (req, res) => {
-  const stats = {};
-  const fbConfig = getFirebirdConfig();
-  const sqliteConfig = getSqliteConfig();
-  const sqliteDbPath = getSqliteDbPath();
-  const settings = getAppSettings();
+app.get('/api/admin/firebird/status', async (req, res) => {
+  try {
+    const stats = {};
+    const fbConfig = getFirebirdConfig();
+    const sqliteConfig = getSqliteConfig();
+    const sqliteDbPath = getSqliteDbPath();
+    const settings = getAppSettings();
 
-  db.get("SELECT COUNT(*) as count FROM patients", (err, r1) => {
-    stats.patientsCount = r1 ? r1.count : 0;
-    db.get("SELECT COUNT(*) as count FROM patient_visits", (err, r2) => {
-      stats.visitsCount = r2 ? r2.count : 0;
-      db.get("SELECT COUNT(*) as count FROM channels", (err, r3) => {
-        stats.channelsCount = r3 ? r3.count : 0;
-        db.get("SELECT COUNT(*) as count FROM insurers", (err, r4) => {
-          stats.insurersCount = r4 ? r4.count : 0;
-          db.get("SELECT COUNT(*) as count FROM dms_cards", (err, r5) => {
-            stats.dmsCardsCount = r5 ? r5.count : 0;
-            res.json({
-              success: true,
-              source: 'appsettings.json',
-              defaultFbPath: fbConfig.DatabasePath,
-              defaultUser: fbConfig.User,
-              firebirdConfig: fbConfig,
-              sqliteConfig: sqliteConfig,
-              resolvedSqlitePath: sqliteDbPath,
-              appsettings: settings,
-              sqliteStats: stats
-            });
-          });
+    const tableKeys = [
+      { key: 'patientsCount', table: 'patients' },
+      { key: 'visitsCount', table: 'patient_visits' },
+      { key: 'channelsCount', table: 'channels' },
+      { key: 'insurersCount', table: 'insurers' },
+      { key: 'dmsCardsCount', table: 'dms_cards' },
+      { key: 'protdictCount', table: 'protdict' },
+      { key: 'protocolsCount', table: 'protocols' },
+      { key: 'protshotsCount', table: 'protshots' },
+      { key: 'mkbCount', table: 'mkb' },
+      { key: 'diagnosesCount', table: 'diagnoses' },
+      { key: 'labdictCount', table: 'labdict' },
+      { key: 'labpdfCount', table: 'labpdf' },
+      { key: 'labplanCount', table: 'labplan' },
+      { key: 'servdictCount', table: 'servdict' },
+      { key: 'servicesCount', table: 'services' },
+      { key: 'servpricesCount', table: 'servprices' },
+      { key: 'servplanCount', table: 'servplan' },
+      { key: 'discountsCount', table: 'discounts' },
+      { key: 'scheduleCount', table: 'schedule' },
+      { key: 'templatesCount', table: 'templates' }
+    ];
+
+    await Promise.all(tableKeys.map(({ key, table }) => {
+      return new Promise((resolve) => {
+        db.get(`SELECT COUNT(*) as count FROM [${table}]`, (err, row) => {
+          stats[key] = (row && !err) ? row.count : 0;
+          resolve();
         });
       });
+    }));
+
+    res.json({
+      success: true,
+      source: 'appsettings.json',
+      defaultFbPath: fbConfig.DatabasePath,
+      defaultUser: fbConfig.User,
+      firebirdConfig: fbConfig,
+      sqliteConfig: sqliteConfig,
+      resolvedSqlitePath: sqliteDbPath,
+      appsettings: settings,
+      sqliteStats: stats
     });
-  });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 /**
@@ -3825,7 +3846,7 @@ app.post('/api/admin/firebird/test', (req, res) => {
  * @swagger
  * /api/admin/firebird/sync:
  *   post:
- *     summary: Запустить процедуру полной синхронизации из Firebird в SQLite (динамические параметры)
+ *     summary: Запустить процедуру синхронизации из Firebird в SQLite (с поддержкой выбора таблиц)
  *     tags: [Administrator & Firebird Sync]
  *     requestBody:
  *       required: false
@@ -3846,13 +3867,19 @@ app.post('/api/admin/firebird/test', (req, res) => {
  *                 type: integer
  *               charset:
  *                 type: string
+ *               tables:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *               includeShotsBlob:
+ *                 type: boolean
  *     responses:
  *       200:
  *         description: Результаты синхронизации и консольный лог
  */
 app.post('/api/admin/firebird/sync', (req, res) => {
   const fbConfig = getFirebirdConfig();
-  const { dbPath, user, password, host, port, charset } = req.body || {};
+  const { dbPath, user, password, host, port, charset, tables, includeShotsBlob } = req.body || {};
   const targetDb = dbPath || fbConfig.DatabasePath || "C:\\Users\\vladimir\\source\\DB\\Export\\MEDICAL.FDB";
   const targetUser = user || fbConfig.User || "SYSDBA";
   const targetPass = password || fbConfig.Password || "masterkey";
@@ -3862,10 +3889,16 @@ app.post('/api/admin/firebird/sync', (req, res) => {
   const targetSqlite = getSqliteDbPath();
 
   const scriptPath = path.resolve(__dirname, 'sync_patients_firebird.py');
-  const cmd = `python "${scriptPath}" "${targetDb}" "${targetUser}" "${targetPass}" "${targetHost}" "${targetPort}" "${targetCharset}" "${targetSqlite}"`;
+  
+  const tablesArg = (Array.isArray(tables) && tables.length > 0)
+    ? `--tables=${tables.join(',')}`
+    : '--tables=all';
+  const blobArg = includeShotsBlob ? '--include-shots-blob=1' : '--include-shots-blob=0';
+
+  const cmd = `python "${scriptPath}" "${targetDb}" "${targetUser}" "${targetPass}" "${targetHost}" "${targetPort}" "${targetCharset}" "${targetSqlite}" "${tablesArg}" "${blobArg}"`;
 
   const startTime = Date.now();
-  exec(cmd, { encoding: 'utf-8', maxBuffer: 20 * 1024 * 1024 }, (err, stdout, stderr) => {
+  exec(cmd, { encoding: 'utf-8', maxBuffer: 50 * 1024 * 1024 }, (err, stdout, stderr) => {
     const elapsedSeconds = ((Date.now() - startTime) / 1000).toFixed(2);
     if (err) {
       return res.status(500).json({

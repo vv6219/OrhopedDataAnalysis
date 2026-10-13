@@ -12,6 +12,7 @@ distributive/
 installer_output/
 backups/
 *.zip
+**/*.sqlite
 **/*.sqlite-wal
 **/*.sqlite-shm
 MEDICAL/
