@@ -297,10 +297,13 @@ export default function OrthoTemplatesManager() {
   const handleCreateNew = () => {
     const targetClusterId = selectedClusterFilter !== 'all' ? selectedClusterFilter : 'cluster_knee';
     const foundCluster = MASTER_CLUSTERS.find(c => c.id === targetClusterId);
+    const defaultJoint = foundCluster && foundCluster.joint_affinity !== 'all' && foundCluster.joint_affinity !== 'general'
+      ? foundCluster.joint_affinity
+      : 'knee';
 
     const newTpl: FullTemplate = {
       title: 'Новый клинический шаблон',
-      joint_name: selectedJointFilter !== 'all' ? selectedJointFilter : (foundCluster?.joint_affinity !== 'all' && foundCluster?.joint_affinity !== 'general' ? foundCluster.joint_affinity : 'knee'),
+      joint_name: selectedJointFilter !== 'all' ? selectedJointFilter : defaultJoint,
       default_mkb_code: 'M17.1',
       category: 'Дегенеративно-дистрофические заболевания',
       cluster_id: targetClusterId,
