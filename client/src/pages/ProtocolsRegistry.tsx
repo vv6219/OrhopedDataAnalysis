@@ -50,6 +50,7 @@ import { parseProtocolContent, stripProtocolXml } from '../utils/protocolXmlPars
 export interface ProtocolRow {
   id: number;
   docn?: number;
+  doctor_name?: string;
   pt_id: number;
   vdate: string;
   title: string;
@@ -326,7 +327,7 @@ export default function ProtocolsRegistry() {
     return {
       protocolNumber: selectedProtocol.id,
       visitDate: selectedProtocol.vdate,
-      doctorName: 'Добрушкин В.И.',
+      doctorName: selectedProtocol.doctor_name || 'Добрушкин Александр Моисеевич',
       patient: {
         id: selectedProtocol.pt_id,
         fullName: selectedProtocol.patient_name,

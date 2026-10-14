@@ -1,3 +1,4 @@
+import { useState, useEffect, useMemo } from 'react';
 import {
   Box,
   Typography,
@@ -9,12 +10,17 @@ import {
   ToggleButtonGroup,
   FormControlLabel,
   Switch,
-  Divider
+  Divider,
+  IconButton,
+  Tooltip
 } from '@mui/material';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import GoniometerInput from './GoniometerInput';
 import type { RomValues } from './GoniometerInput';
 import type { JointAreaId } from './BodyHomunculus';
+import OrthoTestGuidanceModal from './OrthoTestGuidanceModal';
+import { API_BASE_URL } from '../../config/apiConfig';
 
 export type { RomValues };
 
@@ -27,6 +33,8 @@ export interface JointExamState {
   tests: Record<string, 'negative' | 'positive' | 'positive_medial' | 'positive_lateral' | string>;
   isNormPreset?: boolean;
 }
+
+export type JointCategory = 'knee' | 'shoulder' | 'elbow' | 'hip' | 'ankle' | 'wrist' | 'spine';
 
 interface JointExamCardProps {
   jointArea: JointAreaId;
@@ -45,16 +53,32 @@ export default function JointExamCard({
   onChange,
   previousVisitDelta
 }: JointExamCardProps) {
-  const getJointCategory = (id: JointAreaId): 'knee' | 'shoulder' | 'hip' | 'ankle' | 'spine' => {
+  const getJointCategory = (id: JointAreaId): JointCategory => {
     if (id.startsWith('knee')) return 'knee';
     if (id.startsWith('shoulder')) return 'shoulder';
+    if (id.startsWith('elbow')) return 'elbow';
     if (id.startsWith('hip')) return 'hip';
+    if (id.startsWith('wrist')) return 'wrist';
     if (id.startsWith('foot')) return 'ankle';
     if (id.startsWith('spine')) return 'spine';
     return 'knee';
   };
 
   const category = getJointCategory(jointArea);
+
+  const getCategoryTitle = (cat: JointCategory, id: JointAreaId) => {
+    const side = id.endsWith('_l') ? ' (левый)' : id.endsWith('_r') ? ' (правый)' : '';
+    switch (cat) {
+      case 'elbow': return `Локтевой сустав${side}`;
+      case 'knee': return `Коленный сустав${side}`;
+      case 'shoulder': return `Плечевой сустав${side}`;
+      case 'hip': return `Тазобедренный сустав${side}`;
+      case 'ankle': return `Сустав стопы / голеностоп${side}`;
+      case 'wrist': return `Лучезапястный сустав и кисть${side}`;
+      case 'spine': return 'Позвоночник';
+      default: return 'Сустав';
+    }
+  };
 
   // Quick "Norm by default"
   const handleSetNorm = () => {
@@ -72,6 +96,16 @@ export default function JointExamCard({
         appley: 'negative',
         patella_ballottement: 'negative'
       };
+    } else if (category === 'elbow') {
+      defaultRom = { flexion_active: 145, flexion_passive: 150, extension_deficit: 0, rotation_ext: 85, rotation_int: 85 };
+      defaultTests = {
+        cozen: 'negative',
+        mill: 'negative',
+        golfer: 'negative',
+        tinel_cubital: 'negative',
+        valgus_stress_elbow: 'negative',
+        varus_stress_elbow: 'negative'
+      };
     } else if (category === 'shoulder') {
       defaultRom = { flexion_active: 170, flexion_passive: 170, extension_deficit: 0, rotation_ext: 60, rotation_int: 60 };
       defaultTests = {
@@ -80,6 +114,22 @@ export default function JointExamCard({
         empty_can_jobe: 'negative',
         drop_arm: 'negative',
         apprehension: 'negative'
+      };
+    } else if (category === 'hip') {
+      defaultRom = { flexion_active: 120, flexion_passive: 125, extension_deficit: 0, rotation_ext: 45, rotation_int: 40 };
+      defaultTests = {
+        faber: 'negative',
+        fadir: 'negative',
+        thomas: 'negative',
+        trendelenburg: 'negative'
+      };
+    } else if (category === 'wrist') {
+      defaultRom = { flexion_active: 75, flexion_passive: 80, extension_deficit: 0 };
+      defaultTests = {
+        phalen: 'negative',
+        tinel_wrist: 'negative',
+        finkelstein: 'negative',
+        piano_key: 'negative'
       };
     } else if (category === 'ankle') {
       defaultRom = { flexion_active: 45, flexion_passive: 45, extension_deficit: 0 };
@@ -109,6 +159,29 @@ export default function JointExamCard({
     });
   };
 
+  // Test Catalog State & Methodology Dialog
+  const [testCatalog, setTestCatalog] = useState<Record<string, any>>({});
+  const [selectedTestDetail, setSelectedTestDetail] = useState<any | null>(null);
+
+  useEffect(() => {
+    fetch(`${API_BASE_URL}/api/ortho/tests/catalog`)
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.success && Array.isArray(d.tests)) {
+          const map: Record<string, any> = {};
+          d.tests.forEach((t: any) => {
+            map[t.code] = t;
+          });
+          setTestCatalog(map);
+        }
+      })
+      .catch((err) => console.error('Failed to load test catalog in JointExamCard:', err));
+  }, []);
+
+  const jointCatalogTests = useMemo(() => {
+    return Object.values(testCatalog).filter((t: any) => t.target_joint === category);
+  }, [testCatalog, category]);
+
   const handleTestToggle = (testKey: string) => {
     const currentVal = state.tests[testKey] || 'negative';
     const nextVal = currentVal === 'negative' ? 'positive' : 'negative';
@@ -116,6 +189,63 @@ export default function JointExamCard({
       ...state,
       tests: { ...state.tests, [testKey]: nextVal }
     });
+  };
+
+  const renderTestItem = (testKey: string, defaultLabel: string) => {
+    const catItem = testCatalog[testKey];
+    const isPositive = state.tests[testKey] === 'positive' || state.tests[testKey] === 'positive_medial' || state.tests[testKey] === 'positive_lateral';
+    const displayName = catItem ? catItem.name : defaultLabel;
+
+    return (
+      <Grid size={{ xs: 12, sm: 6 }} key={testKey}>
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            p: 1,
+            borderRadius: 1.5,
+            border: '1px solid',
+            borderColor: isPositive ? '#FCA5A5' : '#E2E8F0',
+            bgcolor: isPositive ? '#FEF2F2' : '#FFFFFF',
+            transition: 'all 0.15s ease'
+          }}
+        >
+          <FormControlLabel
+            sx={{ mr: 0.5, flex: 1, m: 0 }}
+            control={
+              <Switch
+                size="small"
+                checked={isPositive}
+                onChange={() => handleTestToggle(testKey)}
+                color="error"
+              />
+            }
+            label={
+              <Box sx={{ ml: 0.5 }}>
+                <Typography sx={{ fontSize: '0.82rem', fontWeight: 600, color: isPositive ? '#991B1B' : '#1E293B', lineHeight: 1.25 }}>
+                  {displayName}
+                </Typography>
+                <Typography sx={{ fontSize: '0.72rem', color: isPositive ? '#DC2626' : '#64748B', fontWeight: isPositive ? 700 : 500 }}>
+                  {isPositive ? 'Положительный (+)' : 'Отрицательный (-)'}
+                </Typography>
+              </Box>
+            }
+          />
+          {catItem && (
+            <Tooltip title="Методика теста, анатомический субстрат, чувствительность и специфичность">
+              <IconButton
+                size="small"
+                onClick={() => setSelectedTestDetail(catItem)}
+                sx={{ color: '#0284C7', p: 0.5, '&:hover': { bgcolor: '#E0F2FE' } }}
+              >
+                <InfoOutlinedIcon sx={{ fontSize: 18 }} />
+              </IconButton>
+            </Tooltip>
+          )}
+        </Box>
+      </Grid>
+    );
   };
 
   return (
@@ -132,7 +262,7 @@ export default function JointExamCard({
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2, flexWrap: 'wrap', gap: 1 }}>
         <Box>
           <Typography variant="h6" sx={{ fontWeight: 700, color: '#0F3C64', fontSize: '1.05rem' }}>
-            Локальный статус: {category === 'knee' ? 'Коленный сустав' : category === 'shoulder' ? 'Плечевой сустав' : category === 'spine' ? 'Позвоночник' : 'Сустав стопы / голеностоп'}
+            Локальный статус: {getCategoryTitle(category, jointArea)}
           </Typography>
           <Typography variant="caption" sx={{ color: '#64748B' }}>
             Осмотр, пальпация, гониометрия и клинические тесты
@@ -216,210 +346,112 @@ export default function JointExamCard({
 
       <Divider sx={{ my: 2 }} />
 
-      {/* Section 3: Specialized Clinical Tests */}
+      {/* Section 3: Specialized Clinical Tests (Dynamic from Knowledge Base 2.0 Catalog) */}
       <Box>
-        <Typography variant="subtitle2" sx={{ fontWeight: 700, color: '#0F3C64', mb: 1.5 }}>
-          Специальные ортопедические тесты (Клинические пробы):
-        </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5, flexWrap: 'wrap', gap: 1 }}>
+          <Typography variant="subtitle2" sx={{ fontWeight: 700, color: '#0F3C64' }}>
+            Специальные ортопедические тесты (Клинические пробы):
+          </Typography>
+          <Typography variant="caption" sx={{ color: '#64748B' }}>
+            Нажмите <b>(i)</b> для просмотра методики и чувствительности
+          </Typography>
+        </Box>
 
         <Grid container spacing={1.5}>
-          {category === 'knee' && (
+          {jointCatalogTests.length > 0 ? (
+            jointCatalogTests.map((t: any) => renderTestItem(t.code, t.name))
+          ) : (
+            // Fallback hardcoded list if catalog is loading
             <>
-              <Grid size={{ xs: 12, sm: 6 }}>
-                <FormControlLabel
-                  control={
-                    <Switch
-                      checked={state.tests.lachman === 'positive'}
-                      onChange={() => handleTestToggle('lachman')}
-                      color="error"
-                    />
-                  }
-                  label={
-                    <Typography sx={{ fontSize: '0.82rem', fontWeight: 600 }}>
-                      Тест Лахмана (Lachman test): {state.tests.lachman === 'positive' ? 'Положительный (+)' : 'Отрицательный (-)'}
-                    </Typography>
-                  }
-                />
-              </Grid>
-              <Grid size={{ xs: 12, sm: 6 }}>
-                <FormControlLabel
-                  control={
-                    <Switch
-                      checked={state.tests.anterior_drawer === 'positive'}
-                      onChange={() => handleTestToggle('anterior_drawer')}
-                      color="error"
-                    />
-                  }
-                  label={
-                    <Typography sx={{ fontSize: '0.82rem', fontWeight: 600 }}>
-                      Передний «выдвижной ящик»: {state.tests.anterior_drawer === 'positive' ? 'Положительный (+)' : 'Отрицательный (-)'}
-                    </Typography>
-                  }
-                />
-              </Grid>
-              <Grid size={{ xs: 12, sm: 6 }}>
-                <FormControlLabel
-                  control={
-                    <Switch
-                      checked={state.tests.mcmurray === 'positive'}
-                      onChange={() => handleTestToggle('mcmurray')}
-                      color="error"
-                    />
-                  }
-                  label={
-                    <Typography sx={{ fontSize: '0.82rem', fontWeight: 600 }}>
-                      Тест Мак-Мюррея (мениски): {state.tests.mcmurray === 'positive' ? 'Положительный (+)' : 'Отрицательный (-)'}
-                    </Typography>
-                  }
-                />
-              </Grid>
-              <Grid size={{ xs: 12, sm: 6 }}>
-                <FormControlLabel
-                  control={
-                    <Switch
-                      checked={state.tests.patella_ballottement === 'positive'}
-                      onChange={() => handleTestToggle('patella_ballottement')}
-                      color="error"
-                    />
-                  }
-                  label={
-                    <Typography sx={{ fontSize: '0.82rem', fontWeight: 600 }}>
-                      Баллотирование надколенника: {state.tests.patella_ballottement === 'positive' ? 'Положительное (+)' : 'Отрицательное (-)'}
-                    </Typography>
-                  }
-                />
-              </Grid>
-            </>
-          )}
-
-          {category === 'shoulder' && (
-            <>
-              <Grid size={{ xs: 12, sm: 6 }}>
-                <FormControlLabel
-                  control={
-                    <Switch
-                      checked={state.tests.neer === 'positive'}
-                      onChange={() => handleTestToggle('neer')}
-                      color="error"
-                    />
-                  }
-                  label={
-                    <Typography sx={{ fontSize: '0.82rem', fontWeight: 600 }}>
-                      Импиджмент-тест Нира (Neer): {state.tests.neer === 'positive' ? 'Положительный (+)' : 'Отрицательный (-)'}
-                    </Typography>
-                  }
-                />
-              </Grid>
-              <Grid size={{ xs: 12, sm: 6 }}>
-                <FormControlLabel
-                  control={
-                    <Switch
-                      checked={state.tests.hawkins === 'positive'}
-                      onChange={() => handleTestToggle('hawkins')}
-                      color="error"
-                    />
-                  }
-                  label={
-                    <Typography sx={{ fontSize: '0.82rem', fontWeight: 600 }}>
-                      Тест Хокинса-Кеннеди: {state.tests.hawkins === 'positive' ? 'Положительный (+)' : 'Отрицательный (-)'}
-                    </Typography>
-                  }
-                />
-              </Grid>
-              <Grid size={{ xs: 12, sm: 6 }}>
-                <FormControlLabel
-                  control={
-                    <Switch
-                      checked={state.tests.empty_can_jobe === 'positive'}
-                      onChange={() => handleTestToggle('empty_can_jobe')}
-                      color="error"
-                    />
-                  }
-                  label={
-                    <Typography sx={{ fontSize: '0.82rem', fontWeight: 600 }}>
-                      Тест Джобса (надостная м.): {state.tests.empty_can_jobe === 'positive' ? 'Положительный (+)' : 'Отрицательный (-)'}
-                    </Typography>
-                  }
-                />
-              </Grid>
-            </>
-          )}
-
-          {category === 'spine' && (
-            <>
-              <Grid size={{ xs: 12, sm: 6 }}>
-                <FormControlLabel
-                  control={
-                    <Switch
-                      checked={state.tests.lasegue === 'positive'}
-                      onChange={() => handleTestToggle('lasegue')}
-                      color="error"
-                    />
-                  }
-                  label={
-                    <Typography sx={{ fontSize: '0.82rem', fontWeight: 600 }}>
-                      Симптом Ласега (Lasegue): {state.tests.lasegue === 'positive' ? 'Положительный (+)' : 'Отрицательный (-)'}
-                    </Typography>
-                  }
-                />
-              </Grid>
-              <Grid size={{ xs: 12, sm: 6 }}>
-                <FormControlLabel
-                  control={
-                    <Switch
-                      checked={state.tests.adams === 'positive'}
-                      onChange={() => handleTestToggle('adams')}
-                      color="error"
-                    />
-                  }
-                  label={
-                    <Typography sx={{ fontSize: '0.82rem', fontWeight: 600 }}>
-                      Проба Адамса (сколиоз): {state.tests.adams === 'positive' ? 'Положительная (+)' : 'Отрицательная (-)'}
-                    </Typography>
-                  }
-                />
-              </Grid>
-            </>
-          )}
-
-          {category === 'ankle' && (
-            <>
-              <Grid size={{ xs: 12, sm: 6 }}>
-                <FormControlLabel
-                  control={
-                    <Switch
-                      checked={state.tests.windlass === 'positive'}
-                      onChange={() => handleTestToggle('windlass')}
-                      color="error"
-                    />
-                  }
-                  label={
-                    <Typography sx={{ fontSize: '0.82rem', fontWeight: 600 }}>
-                      Тест Уиндласса (фасциит): {state.tests.windlass === 'positive' ? 'Положительный (+)' : 'Отрицательный (-)'}
-                    </Typography>
-                  }
-                />
-              </Grid>
-              <Grid size={{ xs: 12, sm: 6 }}>
-                <FormControlLabel
-                  control={
-                    <Switch
-                      checked={state.tests.thompson === 'positive'}
-                      onChange={() => handleTestToggle('thompson')}
-                      color="error"
-                    />
-                  }
-                  label={
-                    <Typography sx={{ fontSize: '0.82rem', fontWeight: 600 }}>
-                      Тест Томпсона (ахилл): {state.tests.thompson === 'positive' ? 'Разрыв (+)' : 'Интактен (-)'}
-                    </Typography>
-                  }
-                />
-              </Grid>
+              {category === 'knee' && (
+                <>
+                  {renderTestItem('lachman', 'Тест Лахмана (Lachman test)')}
+                  {renderTestItem('anterior_drawer', 'Передний «выдвижной ящик»')}
+                  {renderTestItem('posterior_drawer', 'Задний «выдвижной ящик»')}
+                  {renderTestItem('pivot_shift', 'Pivot-shift тест')}
+                  {renderTestItem('mcmurray', 'Тест Мак-Мюррея (мениски)')}
+                  {renderTestItem('appley', 'Тест Эпли (компрессионный)')}
+                  {renderTestItem('patella_ballottement', 'Баллотирование надколенника')}
+                  {renderTestItem('clarke_patellar_grind', 'Тест Кларка (пателлофеморальный)')}
+                </>
+              )}
+              {category === 'elbow' && (
+                <>
+                  {renderTestItem('cozen', 'Тест Козена (латеральный эпикондилит)')}
+                  {renderTestItem('mill', 'Тест Милля (растяжение разгибателей)')}
+                  {renderTestItem('golfer', 'Тест «локтя гольфиста» (медиальный эпикондилит)')}
+                  {renderTestItem('tinel_cubital', 'Симптом Тиннеля (кубитальный канал)')}
+                  {renderTestItem('valgus_stress_elbow', 'Вальгус-стресс тест локтя (MCL)')}
+                  {renderTestItem('varus_stress_elbow', 'Варус-стресс тест локтя (LCL)')}
+                </>
+              )}
+              {category === 'shoulder' && (
+                <>
+                  {renderTestItem('neer', 'Импиджмент-тест Нира (Neer)')}
+                  {renderTestItem('hawkins', 'Тест Хокинса-Кеннеди')}
+                  {renderTestItem('empty_can_jobe', 'Тест Джобса (надостная м.)')}
+                  {renderTestItem('speed_biceps', 'Тест Спида (длинная головка бицепса)')}
+                  {renderTestItem('yergason', 'Тест Яргасона (супинация предплечья)')}
+                  {renderTestItem('apprehension_relocation', 'Тест предчувствия вывиха')}
+                  {renderTestItem('lift_off_gerber', 'Тест Гербера (подлопаточная м.)')}
+                  {renderTestItem('drop_arm', 'Тест падающей руки (массивный разрыв)')}
+                </>
+              )}
+              {category === 'hip' && (
+                <>
+                  {renderTestItem('faber', 'Тест FABER / Патрика (ТБС / КПС)')}
+                  {renderTestItem('fadir', 'Тест FADIR (импинджмент / вертлужная губа)')}
+                  {renderTestItem('thomas', 'Тест Томаса (сгибательная контрактура)')}
+                  {renderTestItem('trendelenburg', 'Симптом Тренделенбурга')}
+                  {renderTestItem('scour', 'Тест Scour (квадрант-тест ТБС)')}
+                </>
+              )}
+              {category === 'wrist' && (
+                <>
+                  {renderTestItem('phalen', 'Тест Фалена (карпальный канал)')}
+                  {renderTestItem('tinel_wrist', 'Симптом Тиннеля на запястье')}
+                  {renderTestItem('finkelstein', 'Тест Финкельштейна (болезнь де Кервена)')}
+                  {renderTestItem('piano_key', 'Симптом «клавиши пианино» (DRUJ)')}
+                </>
+              )}
+              {category === 'spine' && (
+                <>
+                  {renderTestItem('lasegue', 'Симптом Ласега (Lasegue test)')}
+                  {renderTestItem('bragard', 'Тест Брагарда (дифференциация радикулопатии)')}
+                  {renderTestItem('slump', 'Slump-тест (нейродинамическое натяжение)')}
+                  {renderTestItem('adams', 'Проба Адамса (структурный сколиоз)')}
+                  {renderTestItem('schober', 'Тест Шобера (подвижность поясничного отдела)')}
+                </>
+              )}
+              {category === 'ankle' && (
+                <>
+                  {renderTestItem('anterior_drawer_ankle', 'Передний выдвижной ящик голеностопа')}
+                  {renderTestItem('talar_tilt', 'Тест наклона таранной кости')}
+                  {renderTestItem('thompson', 'Тест Томпсона (разрыв ахиллова сухожилия)')}
+                  {renderTestItem('windlass', 'Тест Уиндласса (плантарный фасциит)')}
+                  {renderTestItem('kleiger', 'Тест Клейгера (синдесмоз голеностопа)')}
+                </>
+              )}
             </>
           )}
         </Grid>
       </Box>
+
+      {/* ON-SCREEN CLINICAL TEST GUIDANCE MODAL */}
+      <OrthoTestGuidanceModal
+        open={Boolean(selectedTestDetail)}
+        onClose={() => setSelectedTestDetail(null)}
+        test={selectedTestDetail}
+        currentResult={selectedTestDetail ? (state.tests[selectedTestDetail.code] || 'negative') : 'negative'}
+        onSetResult={(newResult) => {
+          if (selectedTestDetail) {
+            onChange({
+              ...state,
+              tests: { ...state.tests, [selectedTestDetail.code]: newResult }
+            });
+          }
+        }}
+      />
     </Paper>
   );
 }

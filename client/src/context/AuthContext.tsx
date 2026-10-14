@@ -109,7 +109,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         body: JSON.stringify({ password, username: 'Администратор' })
       });
 
-      const data = await res.json();
+      let data: any = {};
+      try {
+        data = await res.json();
+      } catch {
+        return {
+          success: false,
+          error: `Сервер API недоступен (HTTP ${res.status}). Проверьте, запущен ли бэкенд на порту 5000.`
+        };
+      }
+
       if (res.ok && data.success && data.token) {
         localStorage.setItem('ortho_auth_token', data.token);
         localStorage.setItem('ortho_auth_user', data.user || 'Администратор');
@@ -121,7 +130,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return { success: false, error: data.error || 'Неверный пароль' };
       }
     } catch (err: any) {
-      return { success: false, error: err.message || 'Ошибка подключения к серверу авторизации' };
+      return { success: false, error: 'Не удалось связаться с сервером. Убедитесь, что сервер запущен.' };
     }
   }, []);
 

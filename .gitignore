@@ -25,3 +25,4 @@ obj/
 **/logs/
 **/publish/
 *.log
+scratch/

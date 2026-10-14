@@ -78,7 +78,7 @@ export default function OrthoProtocolPreview({
     lines.push(`Пациент: ${data.patient.fullName}`);
     if (data.patient.birthDate) lines.push(`Дата рождения: ${data.patient.birthDate} (${data.patient.gender || ''})`);
     if (data.patient.phone) lines.push(`Телефон: ${data.patient.phone}`);
-    lines.push(`Лечащий врач: ${data.doctorName || 'Добрушкин В.И.'}`);
+    lines.push(`Лечащий врач: ${data.doctorName || 'Добрушкин Александр Моисеевич'}`);
     lines.push('----------------------------------------------------------------');
     lines.push('1. ЖАЛОБЫ:');
     lines.push(data.complaints || 'Жалоб активно не предъявляет.');
@@ -127,7 +127,7 @@ export default function OrthoProtocolPreview({
     
     lines.push('');
     lines.push('----------------------------------------------------------------');
-    lines.push(`Врач травматолог-ортопед: ________________ / ${data.doctorName || 'Добрушкин В.И.'} /`);
+    lines.push(`Врач травматолог-ортопед: ________________ / ${data.doctorName || 'Добрушкин Александр Моисеевич'} /`);
     lines.push(`Пациент: ________________ / ${data.patient.fullName} /`);
     if (data.isSigned) {
       lines.push(`[ЭЦП валидна: ${data.signedAt || ''} | ${data.signatureHash || ''}]`);
@@ -201,7 +201,7 @@ export default function OrthoProtocolPreview({
               new Paragraph({
                 children: [
                   new TextRun({ text: 'Лечащий врач: ', bold: true }),
-                  new TextRun({ text: `${data.doctorName || 'Добрушкин В.И.'}, к.м.н., врач травматолог-ортопед` })
+                  new TextRun({ text: `${data.doctorName || 'Добрушкин Александр Моисеевич'}, к.м.н., врач травматолог-ортопед` })
                 ],
                 spacing: { after: 200 }
               }),
@@ -284,7 +284,7 @@ export default function OrthoProtocolPreview({
               // Signatures
               new Paragraph({
                 children: [
-                  new TextRun({ text: `Врач травматолог-ортопед: _________________ / ${data.doctorName || 'Добрушкин В.И.'} /`, bold: true })
+                  new TextRun({ text: `Врач травматолог-ортопед: _________________ / ${data.doctorName || 'Добрушкин Александр Моисеевич'} /`, bold: true })
                 ],
                 spacing: { before: 300, after: 120 }
               }),

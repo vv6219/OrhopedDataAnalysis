@@ -147,7 +147,7 @@ function initOrthoSchema(db, callback) {
     db.run("CREATE INDEX IF NOT EXISTS idx_jbh_patient ON joint_biomechanics_history(patient_id, joint_name, side);");
 
     // -------------------------------------------------------------------------
-    // 6. Orthopedic Clinical Fast-Fill Templates (Шаблоны приёма врача)
+    // 6. Orthopedic Clinical Fast-Fill Templates & Knowledge Base Catalogs
     // -------------------------------------------------------------------------
     db.run(`CREATE TABLE IF NOT EXISTS ortho_templates (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -156,84 +156,178 @@ function initOrthoSchema(db, callback) {
       joint_name TEXT NOT NULL,
       template_json TEXT NOT NULL,
       default_mkb_code TEXT,
+      category TEXT,
+      default_side TEXT DEFAULT 'right',
+      complaints_template TEXT,
+      anamnesis_template TEXT,
+      objective_template TEXT,
+      rom_norm_preset TEXT,
+      recommendations_template TEXT,
+      is_active INTEGER DEFAULT 1,
+      sort_order INTEGER DEFAULT 0,
       created_at TEXT DEFAULT (datetime('now', 'localtime'))
     )`);
 
-    // Seed default standard clinic templates if empty
-    db.get("SELECT COUNT(*) AS cnt FROM ortho_templates", (err, row) => {
-      if (!err && row && row.cnt === 0) {
-        const seedTemplates = [
-          {
-            title: 'Первичный гонартроз II стадии с умеренным выпотом',
-            joint_name: 'knee',
-            default_mkb_code: 'M17.1',
-            template_json: JSON.stringify({
-              complaints: 'Умеренная боль в коленном суставе при физической нагрузке, спуске по лестнице и начале ходьбы (стартовые боли).',
-              vas_score: 4,
-              pain_triggers: ['load', 'start'],
-              joint_area: 'knee_r',
-              side: 'right',
-              axis: 'norm',
-              effusion: 2,
-              rom: { flexion_active: 110, flexion_passive: 120, extension_deficit: -5 },
-              tests: { lachman: 'negative', anterior_drawer: 'negative', posterior_drawer: 'negative', pivot_shift: 'negative', mcmurray: 'positive_medial', appley: 'negative', patella_ballottement: 'positive' },
-              diagnosis: { mkb_code: 'M17.1', mkb_name: 'Первичный гонартроз прочий односторонний', side: 'right', stage: 'Kellgren-Lawrence II' },
-              prescriptions: [
-                { category: 'manipulation', title: 'Пункция коленного сустава с эвакуацией выпота и введением гиалуроновой кислоты', unit_price: 3500, quantity: 1 },
-                { category: 'orthotics', title: 'Индивидуальные ортопедические стельки (термоформовка)', unit_price: 4500, quantity: 1 },
-                { category: 'physio', title: 'Высокоинтенсивная магнитотерапия SIS №5', unit_price: 7500, quantity: 1 }
-              ]
-            })
-          },
-          {
-            title: 'Повреждение вращательной манжеты плеча (импиджмент)',
-            joint_name: 'shoulder',
-            default_mkb_code: 'M75.1',
-            template_json: JSON.stringify({
-              complaints: 'Ноющая боль в плечевом суставе при отведении руки выше 90°, дискомфорт при сне на больной стороне.',
-              vas_score: 5,
-              pain_triggers: ['load', 'night'],
-              joint_area: 'shoulder_r',
-              side: 'right',
-              axis: 'norm',
-              effusion: 0,
-              rom: { abduction: 80, flexion_active: 100, rotation_ext: 40, rotation_int: 50 },
-              tests: { neer: 'positive', hawkins: 'positive', empty_can_jobe: 'positive', drop_arm: 'negative', apprehension: 'negative' },
-              diagnosis: { mkb_code: 'M75.1', mkb_name: 'Синдром сдавления ротатора плеча', side: 'right', stage: 'Субакромиальный импиджмент' },
-              prescriptions: [
-                { category: 'manipulation', title: 'Субакромиальная лечебно-медикаментозная блокада', unit_price: 3000, quantity: 1 },
-                { category: 'physio', title: 'Радиальная ударно-волновая терапия УВТ №4', unit_price: 6000, quantity: 1 }
-              ]
-            })
-          },
-          {
-            title: 'Плантарный фасциит (пяточная шпора)',
-            joint_name: 'ankle',
-            default_mkb_code: 'M77.3',
-            template_json: JSON.stringify({
-              complaints: 'Острая жгучая боль в области пятки при первых утренних шагах, уменьшающаяся после расхаживания.',
-              vas_score: 6,
-              pain_triggers: ['start', 'load'],
-              joint_area: 'foot_r',
-              side: 'right',
-              axis: 'norm',
-              effusion: 0,
-              rom: { dorsiflexion: 15, plantarflexion: 40 },
-              tests: { windlass: 'positive', talar_tilt: 'negative', anterior_drawer_ankle: 'negative', thompson: 'negative' },
-              diagnosis: { mkb_code: 'M77.3', mkb_name: 'Пяточная шпора', side: 'right', stage: 'Плантарный фасциит' },
-              prescriptions: [
-                { category: 'physio', title: 'Фокусированная ударно-волновая терапия (УВТ) пяточной зоны №5', unit_price: 7500, quantity: 1 },
-                { category: 'orthotics', title: 'Индивидуальные ортопедические стельки с разгрузкой пятки', unit_price: 4500, quantity: 1 }
-              ]
-            })
-          }
+    // Column migrations for existing ortho_templates
+    const tmplCols = [
+      "ALTER TABLE ortho_templates ADD COLUMN category TEXT",
+      "ALTER TABLE ortho_templates ADD COLUMN default_side TEXT DEFAULT 'right'",
+      "ALTER TABLE ortho_templates ADD COLUMN complaints_template TEXT",
+      "ALTER TABLE ortho_templates ADD COLUMN anamnesis_template TEXT",
+      "ALTER TABLE ortho_templates ADD COLUMN objective_template TEXT",
+      "ALTER TABLE ortho_templates ADD COLUMN rom_norm_preset TEXT",
+      "ALTER TABLE ortho_templates ADD COLUMN recommendations_template TEXT",
+      "ALTER TABLE ortho_templates ADD COLUMN is_active INTEGER DEFAULT 1",
+      "ALTER TABLE ortho_templates ADD COLUMN sort_order INTEGER DEFAULT 0",
+      "ALTER TABLE ortho_templates ADD COLUMN cluster_id TEXT",
+      "ALTER TABLE ortho_templates ADD COLUMN cluster_name TEXT",
+      "ALTER TABLE ortho_templates ADD COLUMN stage_or_severity TEXT",
+      "ALTER TABLE ortho_templates ADD COLUMN clinical_tags TEXT"
+    ];
+    tmplCols.forEach((colSql) => {
+      db.run(colSql, () => {});
+    });
+    db.run("CREATE INDEX IF NOT EXISTS idx_ot_cluster_id ON ortho_templates(cluster_id);");
+
+    // 6.0. Clinical Clusters Classification (10 Master Clusters)
+    db.run(`CREATE TABLE IF NOT EXISTS ortho_clusters (
+      id TEXT PRIMARY KEY,
+      code TEXT NOT NULL UNIQUE,
+      name_ru TEXT NOT NULL,
+      joint_affinity TEXT NOT NULL,
+      description TEXT,
+      badge_color TEXT DEFAULT '#0F3C64',
+      icon_name TEXT DEFAULT 'Healing',
+      sort_order INTEGER DEFAULT 0,
+      is_active INTEGER DEFAULT 1
+    )`);
+    db.run("CREATE INDEX IF NOT EXISTS idx_oc_joint ON ortho_clusters(joint_affinity);");
+    db.run("CREATE INDEX IF NOT EXISTS idx_oc_active ON ortho_clusters(is_active);");
+
+    // Seed 10 Default Master Clusters if empty
+    db.get("SELECT COUNT(*) as count FROM ortho_clusters", (err, row) => {
+      if (!err && row && row.count === 0) {
+        const defaultClusters = [
+          { id: 'cluster_knee', code: 'KNEE', name_ru: 'Коленный сустав: артрозы, связки и мениски', joint_affinity: 'knee', description: 'Гонартроз, повреждения менисков, ПКС, ЗКС, связок, киста Бейкера, пателлофеморальный артроз', badge_color: '#0284C7', icon_name: 'Healing', sort_order: 10 },
+          { id: 'cluster_shoulder', code: 'SHOULDER', name_ru: 'Плечевой сустав и пояс: манжета, импинджмент, вывихи', joint_affinity: 'shoulder', description: 'Субакромиальный импинджмент, разрывы ротаторной манжеты, адгезивный капсулит, SLAP, вывихи, АКС', badge_color: '#9333EA', icon_name: 'AccessibilityNew', sort_order: 20 },
+          { id: 'cluster_hip_pelvis', code: 'HIP_PELVIS', name_ru: 'Тазобедренный сустав, таз и КПС: коксартроз, FAI, сакроилеит', joint_affinity: 'hip', description: 'Коксартроз I-III ст., вертлужный трохантерит, FAI-импинджмент, АНГБК, синдром грушевидной мышцы, сакроилеит', badge_color: '#16A34A', icon_name: 'DirectionsWalk', sort_order: 30 },
+          { id: 'cluster_foot_ankle', code: 'FOOT_ANKLE', name_ru: 'Стопа и голеностоп: деформации, связки, плантарная фасция', joint_affinity: 'ankle', description: 'Плантарный фасциит, разрывы связок голеностопа, ахиллодиния, Hallux Valgus, неврома Мортона, PTTD', badge_color: '#0D9488', icon_name: 'RunCircle', sort_order: 40 },
+          { id: 'cluster_elbow', code: 'ELBOW', name_ru: 'Локтевой сустав: эпикондилиты, бурситы, туннели', joint_affinity: 'elbow', description: 'Латеральный и медиальный эпикондилит, бурсит олекранона, синдром кубитального канала, травмы бицепса', badge_color: '#EA580C', icon_name: 'FitnessCenter', sort_order: 50 },
+          { id: 'cluster_wrist_hand', code: 'WRIST_HAND', name_ru: 'Лучезапястный сустав и кисть: карпальный канал, связки, переломы', joint_affinity: 'wrist', description: 'Синдром запястного канала, болезнь де Кервена, ризартроз, TFCC, щелкающий палец, контрактура Дюпюитрена', badge_color: '#DB2777', icon_name: 'PanTool', sort_order: 60 },
+          { id: 'cluster_spine', code: 'SPINE', name_ru: 'Позвоночник и торакс: радикулопатии, деформации, стеноз', joint_affinity: 'spine', description: 'Люмбалгия с ишиасом, цервикобрахиалгия, торакалгия, сколиоз, спондилолистез, стеноз, синдром Титце', badge_color: '#475569', icon_name: 'AirlineSeatReclineNormal', sort_order: 70 },
+          { id: 'cluster_pediatric', code: 'PEDIATRIC', name_ru: 'Остеохондропатии и ювенильная ортопедия', joint_affinity: 'general', description: 'Болезнь Осгуда-Шлаттера, болезнь Севера, Келлера I и II, дисплазия ТБС по Graf', badge_color: '#D97706', icon_name: 'ChildCare', sort_order: 80 },
+          { id: 'cluster_systemic', code: 'SYSTEMIC', name_ru: 'Системные, метаболические и нейродистрофические синдромы', joint_affinity: 'general', description: 'Системный остеопороз (DEXA), подагра, ревматоидный полиартрит, шкала Бейтона, КРБС (Зудек)', badge_color: '#4F46E5', icon_name: 'Biotech', sort_order: 90 },
+          { id: 'cluster_postop', code: 'POSTOP', name_ru: 'Амбулаторный контроль эндопротезирования и остеосинтеза', joint_affinity: 'general', description: 'Наблюдение после эндопротезирования ТБС, коленного и плечевого суставов, удаление металлоконструкций', badge_color: '#059669', icon_name: 'LocalHospital', sort_order: 100 }
         ];
 
-        const stmt = db.prepare("INSERT INTO ortho_templates (title, joint_name, default_mkb_code, template_json) VALUES (?, ?, ?, ?)");
-        seedTemplates.forEach((tpl) => {
-          stmt.run([tpl.title, tpl.joint_name, tpl.default_mkb_code, tpl.template_json]);
+        const stmt = db.prepare("INSERT INTO ortho_clusters (id, code, name_ru, joint_affinity, description, badge_color, icon_name, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+        defaultClusters.forEach(c => {
+          stmt.run([c.id, c.code, c.name_ru, c.joint_affinity, c.description, c.badge_color, c.icon_name, c.sort_order]);
         });
         stmt.finalize();
+        console.log('Seeded 10 master orthopedic clusters.');
+      }
+    });
+
+    // 6.1. Validated Orthopedic Tests Catalog
+    db.run(`CREATE TABLE IF NOT EXISTS ortho_test_catalog (
+      code TEXT PRIMARY KEY,
+      name_ru TEXT NOT NULL,
+      name_lat TEXT NOT NULL,
+      joint_category TEXT NOT NULL,
+      target_structure TEXT NOT NULL,
+      methodology TEXT NOT NULL,
+      positive_criteria TEXT NOT NULL,
+      sensitivity_specificity TEXT,
+      icon_type TEXT DEFAULT 'joint_stress',
+      is_active INTEGER DEFAULT 1,
+      sort_order INTEGER DEFAULT 0
+    )`);
+    db.run("CREATE INDEX IF NOT EXISTS idx_otc_joint ON ortho_test_catalog(joint_category);");
+    db.run("CREATE INDEX IF NOT EXISTS idx_otc_active ON ortho_test_catalog(is_active);");
+
+    const testCols = [
+      "ALTER TABLE ortho_test_catalog ADD COLUMN sensitivity_pct REAL",
+      "ALTER TABLE ortho_test_catalog ADD COLUMN specificity_pct REAL",
+      "ALTER TABLE ortho_test_catalog ADD COLUMN evidence_level TEXT DEFAULT 'B'",
+      "ALTER TABLE ortho_test_catalog ADD COLUMN patient_position TEXT",
+      "ALTER TABLE ortho_test_catalog ADD COLUMN doctor_hand_placement TEXT",
+      "ALTER TABLE ortho_test_catalog ADD COLUMN applied_force_direction TEXT",
+      "ALTER TABLE ortho_test_catalog ADD COLUMN false_positive_factors TEXT",
+      "ALTER TABLE ortho_test_catalog ADD COLUMN clinical_interpretation TEXT",
+      "ALTER TABLE ortho_test_catalog ADD COLUMN illustration_key TEXT DEFAULT 'default_joint'"
+    ];
+    testCols.forEach((colSql) => {
+      db.run(colSql, () => {});
+    });
+
+    db.all("SELECT code, sensitivity_specificity FROM ortho_test_catalog WHERE sensitivity_pct IS NULL AND sensitivity_specificity IS NOT NULL", (err, rows) => {
+      if (!err && rows && rows.length > 0) {
+        rows.forEach(r => {
+          const seMatch = (r.sensitivity_specificity || '').match(/Se:\s*(\d+)/i);
+          const spMatch = (r.sensitivity_specificity || '').match(/Sp:\s*(\d+)/i);
+          const se = seMatch ? Number(seMatch[1]) : null;
+          const sp = spMatch ? Number(spMatch[1]) : null;
+          if (se !== null || sp !== null) {
+            db.run("UPDATE ortho_test_catalog SET sensitivity_pct = ?, specificity_pct = ?, evidence_level = 'B' WHERE code = ?", [se, sp, r.code], () => {});
+          }
+        });
+      }
+    });
+
+    // 6.2. Diagnostic and Laboratory Methods Catalog
+    db.run(`CREATE TABLE IF NOT EXISTS diagnostic_methods_catalog (
+      code TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      modality TEXT NOT NULL,
+      target_joint TEXT NOT NULL,
+      servdict_id INTEGER,
+      clinical_indications TEXT,
+      protocol_phrase TEXT NOT NULL,
+      priority_level TEXT DEFAULT 'primary',
+      is_active INTEGER DEFAULT 1,
+      sort_order INTEGER DEFAULT 0,
+      FOREIGN KEY(servdict_id) REFERENCES servdict(id) ON DELETE SET NULL
+    )`);
+    db.run("CREATE INDEX IF NOT EXISTS idx_dmc_joint ON diagnostic_methods_catalog(target_joint);");
+    db.run("CREATE INDEX IF NOT EXISTS idx_dmc_serv ON diagnostic_methods_catalog(servdict_id);");
+
+    // 6.3. Template -> Orthopedic Tests Relation
+    db.run(`CREATE TABLE IF NOT EXISTS ortho_template_tests (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      template_id INTEGER NOT NULL,
+      test_code TEXT NOT NULL,
+      expected_result TEXT DEFAULT 'positive',
+      is_mandatory INTEGER DEFAULT 1,
+      sort_order INTEGER DEFAULT 0,
+      FOREIGN KEY(template_id) REFERENCES ortho_templates(id) ON DELETE CASCADE,
+      FOREIGN KEY(test_code) REFERENCES ortho_test_catalog(code) ON DELETE CASCADE
+    )`);
+    db.run("CREATE INDEX IF NOT EXISTS idx_ott_tmpl ON ortho_template_tests(template_id);");
+
+    // 6.4. Template -> Diagnostic Methods Relation
+    db.run(`CREATE TABLE IF NOT EXISTS ortho_template_diagnostics (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      template_id INTEGER NOT NULL,
+      diagnostic_code TEXT NOT NULL,
+      urgency TEXT DEFAULT 'routine',
+      default_side TEXT DEFAULT 'affected',
+      is_primary INTEGER DEFAULT 1,
+      sort_order INTEGER DEFAULT 0,
+      FOREIGN KEY(template_id) REFERENCES ortho_templates(id) ON DELETE CASCADE,
+      FOREIGN KEY(diagnostic_code) REFERENCES diagnostic_methods_catalog(code) ON DELETE CASCADE
+    )`);
+    db.run("CREATE INDEX IF NOT EXISTS idx_otd_tmpl ON ortho_template_diagnostics(template_id);");
+
+    // Seed/sync 100 master clinical templates across 10 clusters if not already populated
+    db.get("SELECT COUNT(*) AS count FROM ortho_templates", (cntErr, row) => {
+      if (!cntErr && (!row || row.count < 100)) {
+        try {
+          const { seedAll100OrthoTemplates } = require('./seedAll100OrthoTemplates');
+          seedAll100OrthoTemplates(db);
+        } catch (e) {
+          console.warn('[OrthoSchema] 100 Templates seeder warning:', e.message);
+        }
       }
     });
 

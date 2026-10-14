@@ -97,18 +97,33 @@ export const OrthoProtocolPrintTemplate = React.forwardRef<HTMLDivElement, Ortho
 
     const getJointTitle = (jointArea: string) => {
       const map: Record<string, string> = {
+        'knee_r': 'Правый коленный сустав',
+        'knee_l': 'Левый коленный сустав',
         'knee_right': 'Правый коленный сустав',
         'knee_left': 'Левый коленный сустав',
+        'hip_r': 'Правый тазобедренный сустав',
+        'hip_l': 'Левый тазобедренный сустав',
         'hip_right': 'Правый тазобедренный сустав',
         'hip_left': 'Левый тазобедренный сустав',
+        'shoulder_r': 'Правый плечевой сустав',
+        'shoulder_l': 'Левый плечевой сустав',
         'shoulder_right': 'Правый плечевой сустав',
         'shoulder_left': 'Левый плечевой сустав',
+        'elbow_r': 'Правый локтевой сустав',
+        'elbow_l': 'Левый локтевой сустав',
         'elbow_right': 'Правый локтевой сустав',
         'elbow_left': 'Левый локтевой сустав',
-        'wrist_right': 'Правый лучезапястный сустав',
-        'wrist_left': 'Левый лучезапястный сустав',
+        'wrist_r': 'Правый лучезапястный сустав и кисть',
+        'wrist_l': 'Левый лучезапястный сустав и кисть',
+        'wrist_right': 'Правый лучезапястный сустав и кисть',
+        'wrist_left': 'Левый лучезапястный сустав и кисть',
+        'foot_r': 'Правая стопа и голеностоп',
+        'foot_l': 'Левая стопа и голеностоп',
         'foot_right': 'Правый голеностопный сустав и стопа',
         'foot_left': 'Левый голеностопный сустав и стопа',
+        'spine_c': 'Шейный отдел позвоночника',
+        'spine_th': 'Грудной отдел позвоночника',
+        'spine_l': 'Пояснично-крестцовый отдел позвоночника',
         'spine_cervical': 'Шейный отдел позвоночника',
         'spine_thoracic': 'Грудной отдел позвоночника',
         'spine_lumbar': 'Пояснично-крестцовый отдел позвоночника'
@@ -118,28 +133,52 @@ export const OrthoProtocolPrintTemplate = React.forwardRef<HTMLDivElement, Ortho
 
     const getTestLabel = (testKey: string, result: string) => {
       const names: Record<string, string> = {
+        // Knee
         lachman: 'Тест Лахмана (Lachman)',
         anterior_drawer: 'Передний выдвижной ящик',
         posterior_drawer: 'Задний выдвижной ящик',
         pivot_shift: 'Pivot-Shift тест',
         mcmurray: 'Тест МакМюррея (McMurray)',
         appley: 'Тест Эпли (Apley)',
+        patella_ballottement: 'Баллотирование надколенника',
         patella_grind: 'Симптом скольжения надколенника',
         patella_apprehension: 'Тест тревоги надколенника',
+        // Elbow
+        cozen: 'Тест Козена (латеральный эпикондилит)',
+        mill: 'Тест Милля (натяжение разгибателей)',
+        golfer: 'Тест локтя гольфиста (медиальный эпикондилит)',
+        tinel_cubital: 'Симптом Тиннеля (кубитальный канал)',
+        valgus_stress_elbow: 'Вальгус-стресс тест локтя (UCL)',
+        varus_stress_elbow: 'Варус-стресс тест локтя (LCL)',
+        // Shoulder
         neer: 'Тест Нира (Neer)',
         hawkins: 'Тест Хокинса (Hawkins)',
         speed: 'Тест Спида (Speed)',
         yergason: 'Тест Йергасона (Yergason)',
         empty_can: 'Тест "Пустой банки" (Jobe)',
+        empty_can_jobe: 'Тест Джобса (Jobe)',
+        drop_arm: 'Тест падающей руки (Drop arm)',
+        apprehension: 'Тест предчувствия вывиха (Apprehension)',
+        // Hip
         faber: 'Тест FABER (Патрика)',
         fadir: 'Тест FADIR',
         thomas: 'Тест Томаса',
         trendelenburg: 'Симптом Тренделенбурга',
+        // Wrist
+        phalen: 'Тест Фалена (карпальный канал)',
+        tinel_wrist: 'Симптом Тиннеля на запястье',
+        finkelstein: 'Тест Финкельштейна (де Кервен)',
+        piano_key: 'Симптом клавиши пианино (DRUJ)',
+        // Ankle
         anterior_drawer_ankle: 'Передний ящик голеностопа',
         talar_tilt: 'Наклон таранной кости',
         thompson: 'Тест Томпсона (ахилл)',
         windlass: 'Тест Виндласса (плантарная фасция)',
+        // Spine
         lasegue: 'Симптом Ласега (Lasegue)',
+        wassermann: 'Симптом Вассермана',
+        adams: 'Проба Адамса (сколиоз)',
+        radicular: 'Корешковый синдром',
         spurling: 'Тест Сперлинга (Spurling)',
         schober: 'Тест Шобера'
       };
@@ -291,7 +330,7 @@ export const OrthoProtocolPrintTemplate = React.forwardRef<HTMLDivElement, Ortho
               <Typography variant="body2" sx={{ fontSize: '0.86rem' }}>
                 <Box component="span" sx={{ fontWeight: 700, color: '#475569' }}>Врач: </Box>
                 <Box component="span" sx={{ fontWeight: 700, color: '#0F3C64' }}>
-                  {data.doctorName || 'Добрушкин В.И.'}
+                  {data.doctorName || 'Добрушкин Александр Моисеевич'}
                 </Box>
               </Typography>
               <Typography variant="caption" sx={{ color: '#64748B', display: 'block', mt: 0.3 }}>
@@ -550,7 +589,7 @@ export const OrthoProtocolPrintTemplate = React.forwardRef<HTMLDivElement, Ortho
               </Typography>
               <Box sx={{ borderBottom: '1px solid #1A2027', pb: 0.2, display: 'flex', justifyContent: 'space-between' }}>
                 <Typography variant="caption" sx={{ color: '#475569' }}>
-                  / {data.doctorName || 'Добрушкин В.И.'} /
+                  / {data.doctorName || 'Добрушкин Александр Моисеевич'} /
                 </Typography>
                 <Typography variant="caption" sx={{ color: '#94A3B8' }}>
                   подпись

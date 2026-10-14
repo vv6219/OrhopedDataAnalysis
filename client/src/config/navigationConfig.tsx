@@ -72,6 +72,12 @@ export const navigationGroups: NavGroup[] = [
         tooltip: 'Электронный архив протоколов: полнотекстовый поиск FTS5 по 32 881 записям, фильтры по суставам и статусам, аналитика назначений и верификация ЭЦП'
       },
       {
+        text: 'Справочник шаблонов 2.0',
+        path: '/ortho-templates-manager',
+        icon: <ScienceIcon sx={{ fontSize: 20, color: '#0F3C64' }} />,
+        tooltip: 'Справочник клинических шаблонов, 39 ортопедических тестов, 26 методов аппаратной диагностики и Neutral-0 ROM пресетов'
+      },
+      {
         text: 'Оформление визита (Wizard)',
         path: '/checkout',
         icon: <LocalHospitalIcon sx={{ fontSize: 20 }} />,

@@ -272,7 +272,7 @@ export const PosFiscalManualPrintTemplate = React.forwardRef<HTMLDivElement, Pos
           </Box>
           <Box sx={{ mt: 2, textAlign: 'center' }}>
             <Typography variant="caption" sx={{ color: '#A0AEC0', fontSize: '7pt' }}>
-              Официальный документ МИС «ОртоERP» v1.4.2 • Экземпляр кассира • Центр Ортопедии и Травматологии доктора Добрушкина
+              Официальный документ МИС «ОртоERP» v1.4.3 • Экземпляр кассира • Центр Ортопедии и Травматологии доктора Добрушкина
             </Typography>
           </Box>
         </Box>

@@ -216,6 +216,7 @@ router.get('/registry', (req, res) => {
           p.signed_at,
           p.signature_hash,
           p.revocation_reason,
+          COALESCE(st.full_name, 'Добрушкин Александр Моисеевич') AS doctor_name,
           pt.full_name AS patient_name,
           pt.bdate AS patient_bdate,
           pt.age AS patient_age,
@@ -239,6 +240,7 @@ router.get('/registry', (req, res) => {
           ) AS total_prescriptions_amount
         FROM protocols_fts fts
         JOIN protocols p ON p.id = fts.protocol_id
+        LEFT JOIN staff st ON st.id = p.docn
         LEFT JOIN patients pt ON pt.id = p.pt_id
         WHERE protocols_fts MATCH ?
       `;
@@ -343,6 +345,7 @@ router.get('/registry', (req, res) => {
           p.signed_at,
           p.signature_hash,
           p.revocation_reason,
+          COALESCE(st.full_name, 'Добрушкин Александр Моисеевич') AS doctor_name,
           pt.full_name AS patient_name,
           pt.bdate AS patient_bdate,
           pt.age AS patient_age,
@@ -365,6 +368,7 @@ router.get('/registry', (req, res) => {
             END
           ) AS total_prescriptions_amount
         FROM protocols p
+        LEFT JOIN staff st ON st.id = p.docn
         LEFT JOIN patients pt ON pt.id = p.pt_id
         WHERE ${whereStr}
         ORDER BY p.${safeSortCol} ${safeSortDir}
@@ -509,18 +513,26 @@ router.get(['/context', '/context/:identifier'], (req, res) => {
               id: appointmentId,
               patient_id: patientId,
               appointment_date: new Date().toISOString().slice(0, 10),
-              doctor_name: 'Добрушкин В.И.'
+              doctor_name: 'Добрушкин Александр Моисеевич'
             };
             doneAppt();
           });
         } else {
-          appointment = {
-            id: initialProtocol ? initialProtocol.id : null,
-            patient_id: patientId,
-            appointment_date: initialProtocol ? initialProtocol.vdate : new Date().toISOString().slice(0, 10),
-            doctor_name: 'Добрушкин В.И.'
-          };
-          doneAppt();
+          db.get(`
+            SELECT a.*, d.full_name AS doctor_name, d.specialization AS doctor_specialization
+            FROM appointments a
+            LEFT JOIN staff d ON d.id = a.doctor_id
+            WHERE a.patient_id = ?
+            ORDER BY a.appointment_date DESC, a.id DESC LIMIT 1
+          `, [patientId], (aErr, loadedAppt) => {
+            appointment = loadedAppt || {
+              id: initialProtocol ? initialProtocol.id : null,
+              patient_id: patientId,
+              appointment_date: initialProtocol ? initialProtocol.vdate : new Date().toISOString().slice(0, 10),
+              doctor_name: 'Добрушкин Александр Моисеевич'
+            };
+            doneAppt();
+          });
         }
       };
 
@@ -594,21 +606,39 @@ router.get(['/context', '/context/:identifier'], (req, res) => {
                       // 8. Fetch medical services price list
                       db.all(`SELECT id, code, name, price, kind FROM servdict WHERE group_f = 0 ORDER BY name ASC`, [], (sErr, servicesList) => {
 
-                      // If initialProtocol was preloaded (e.g. from protocolId), use it; otherwise search by appointment
+                      // If initialProtocol was preloaded (e.g. from protocolId), use it; otherwise search by appointment or patient
                       const resolveCurrentProtocol = (doneProto) => {
                         if (initialProtocol) return doneProto(initialProtocol);
-                        if (appointmentId) {
+                        const apptIdToSearch = appointmentId || (appointment ? appointment.id : null);
+                        if (apptIdToSearch) {
                           db.get(`
                             SELECT p.*, d.mkb_code, d.mkb_name
                             FROM protocols p
                             LEFT JOIN diagnoses d ON d.pr_id = p.id
                             WHERE p.appointment_id = ?
                             ORDER BY p.id DESC LIMIT 1
-                          `, [appointmentId], (curErr, curP) => {
-                            doneProto(curP || null);
+                          `, [apptIdToSearch], (curErr, curP) => {
+                            if (!curErr && curP) return doneProto(curP);
+                            db.get(`
+                              SELECT p.*, d.mkb_code, d.mkb_name
+                              FROM protocols p
+                              LEFT JOIN diagnoses d ON d.pr_id = p.id
+                              WHERE p.pt_id = ?
+                              ORDER BY p.vdate DESC, p.id DESC LIMIT 1
+                            `, [patientId], (ptErr, ptP) => {
+                              doneProto(ptP || null);
+                            });
                           });
                         } else {
-                          doneProto(null);
+                          db.get(`
+                            SELECT p.*, d.mkb_code, d.mkb_name
+                            FROM protocols p
+                            LEFT JOIN diagnoses d ON d.pr_id = p.id
+                            WHERE p.pt_id = ?
+                            ORDER BY p.vdate DESC, p.id DESC LIMIT 1
+                          `, [patientId], (curErr, curP) => {
+                            doneProto(curP || null);
+                          });
                         }
                       };
 
@@ -1207,21 +1237,788 @@ router.delete('/media/:mediaId', (req, res) => {
 });
 
 // -----------------------------------------------------------------------------
-// 9. GET /api/ortho/templates - Fast fill clinical templates
+// 9. KNOWLEDGE BASE 2.0 REST API: Tests, Diagnostics, Templates CRUD
 // -----------------------------------------------------------------------------
-router.get('/templates', (req, res) => {
-  const { joint } = req.query;
-  let sql = `SELECT * FROM ortho_templates`;
-  const params = [];
-  if (joint) {
-    sql += ` WHERE joint_name = ?`;
+
+// 9.1. GET /api/ortho/tests/catalog - List all validated clinical tests with search, filter, counts, and aliases
+router.get('/tests/catalog', (req, res) => {
+  const { joint, search, includeInactive } = req.query;
+  const allowInactive = includeInactive === 'true' || includeInactive === '1' ? 1 : 0;
+
+  let sql = `
+    SELECT t.*,
+           t.name_ru AS name,
+           t.methodology AS technique_description,
+           t.positive_criteria AS positive_criterion,
+           t.joint_category AS target_joint,
+           (SELECT COUNT(*) FROM ortho_template_tests WHERE test_code = t.code) AS templates_count
+    FROM ortho_test_catalog t
+    WHERE (t.is_active = 1 OR ? = 1)
+  `;
+  const params = [allowInactive];
+
+  if (joint && joint !== 'all') {
+    sql += ` AND t.joint_category = ?`;
     params.push(joint);
   }
-  sql += ` ORDER BY id ASC`;
+
+  if (search) {
+    const term = `%${String(search).trim()}%`;
+    sql += ` AND (t.name_ru LIKE ? OR t.name_lat LIKE ? OR t.target_structure LIKE ? OR t.code LIKE ? OR t.methodology LIKE ? OR t.clinical_interpretation LIKE ? OR t.false_positive_factors LIKE ?)`;
+    params.push(term, term, term, term, term, term, term);
+  }
+
+  sql += ` ORDER BY t.sort_order ASC, t.name_ru ASC`;
 
   db.all(sql, params, (err, rows) => {
     if (err) return res.status(500).json({ success: false, error: err.message });
-    res.json({ success: true, templates: rows || [] });
+    res.json({ success: true, total: (rows || []).length, tests: rows || [] });
+  });
+});
+
+// 9.1.1. POST /api/ortho/tests/catalog - Create a new validated orthopedic test
+router.post('/tests/catalog', (req, res) => {
+  const {
+    code,
+    name_ru,
+    name_lat,
+    joint_category,
+    target_structure,
+    methodology,
+    technique_description,
+    positive_criteria,
+    positive_criterion,
+    sensitivity_specificity,
+    sensitivity_pct,
+    specificity_pct,
+    evidence_level,
+    patient_position,
+    doctor_hand_placement,
+    applied_force_direction,
+    false_positive_factors,
+    clinical_interpretation,
+    illustration_key,
+    icon_type,
+    sort_order
+  } = req.body;
+
+  const cleanCode = code ? String(code).trim().toLowerCase().replace(/[^a-z0-9_-]/g, '_') : '';
+  const finalNameRu = (name_ru || '').trim();
+  const finalMethodology = (methodology || technique_description || '').trim();
+  const finalPositive = (positive_criteria || positive_criterion || '').trim();
+  const finalJoint = (joint_category || 'knee').trim();
+
+  if (!cleanCode || !finalNameRu || !finalMethodology || !finalPositive) {
+    return res.status(400).json({
+      success: false,
+      error: 'Обязательные поля: код теста, русское наименование, методика проведения и критерий положительного результата.'
+    });
+  }
+
+  // Format sensitivity_specificity string if not provided
+  let sensSpecStr = sensitivity_specificity;
+  if (!sensSpecStr && (sensitivity_pct !== undefined || specificity_pct !== undefined)) {
+    sensSpecStr = `Se: ${sensitivity_pct ?? '?'}%, Sp: ${specificity_pct ?? '?'}%`;
+  }
+
+  db.run(`
+    INSERT INTO ortho_test_catalog (
+      code, name_ru, name_lat, joint_category, target_structure,
+      methodology, positive_criteria, sensitivity_specificity,
+      sensitivity_pct, specificity_pct, evidence_level,
+      patient_position, doctor_hand_placement, applied_force_direction,
+      false_positive_factors, clinical_interpretation, illustration_key,
+      icon_type, is_active, sort_order
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+  `, [
+    cleanCode,
+    finalNameRu,
+    (name_lat || '').trim(),
+    finalJoint,
+    (target_structure || '').trim(),
+    finalMethodology,
+    finalPositive,
+    sensSpecStr || null,
+    sensitivity_pct !== undefined && sensitivity_pct !== '' ? Number(sensitivity_pct) : null,
+    specificity_pct !== undefined && specificity_pct !== '' ? Number(specificity_pct) : null,
+    evidence_level || 'B',
+    patient_position !== undefined ? (patient_position || '').trim() : null,
+    doctor_hand_placement !== undefined ? (doctor_hand_placement || '').trim() : null,
+    applied_force_direction !== undefined ? (applied_force_direction || '').trim() : null,
+    false_positive_factors !== undefined ? (false_positive_factors || '').trim() : null,
+    clinical_interpretation !== undefined ? (clinical_interpretation || '').trim() : null,
+    illustration_key || 'default_joint',
+    icon_type || 'joint_stress',
+    sort_order !== undefined && sort_order !== '' ? Number(sort_order) : 50
+  ], function(err) {
+    if (err) {
+      if (err.message && err.message.includes('UNIQUE constraint failed')) {
+        return res.status(409).json({ success: false, error: `Тест с кодом "${cleanCode}" уже существует в справочнике.` });
+      }
+      return res.status(500).json({ success: false, error: err.message });
+    }
+    res.json({ success: true, code: cleanCode, message: 'Ортопедический тест успешно добавлен в справочник.' });
+  });
+});
+
+// 9.1.2. PUT /api/ortho/tests/catalog/:code - Update orthopedic test
+router.put('/tests/catalog/:code', (req, res) => {
+  const targetCode = req.params.code;
+  const {
+    name_ru,
+    name_lat,
+    joint_category,
+    target_structure,
+    methodology,
+    technique_description,
+    positive_criteria,
+    positive_criterion,
+    sensitivity_specificity,
+    sensitivity_pct,
+    specificity_pct,
+    evidence_level,
+    patient_position,
+    doctor_hand_placement,
+    applied_force_direction,
+    false_positive_factors,
+    clinical_interpretation,
+    illustration_key,
+    icon_type,
+    is_active,
+    sort_order
+  } = req.body;
+
+  const finalMethodology = methodology !== undefined ? methodology : technique_description;
+  const finalPositive = positive_criteria !== undefined ? positive_criteria : positive_criterion;
+
+  // Recalculate sensSpecStr if pct provided
+  let sensSpecStr = sensitivity_specificity;
+  if (!sensSpecStr && (sensitivity_pct !== undefined && specificity_pct !== undefined)) {
+    sensSpecStr = `Se: ${sensitivity_pct}%, Sp: ${specificity_pct}%`;
+  }
+
+  db.run(`
+    UPDATE ortho_test_catalog
+    SET name_ru = COALESCE(?, name_ru),
+        name_lat = COALESCE(?, name_lat),
+        joint_category = COALESCE(?, joint_category),
+        target_structure = COALESCE(?, target_structure),
+        methodology = COALESCE(?, methodology),
+        positive_criteria = COALESCE(?, positive_criteria),
+        sensitivity_specificity = COALESCE(?, sensitivity_specificity),
+        sensitivity_pct = ?,
+        specificity_pct = ?,
+        evidence_level = COALESCE(?, evidence_level),
+        patient_position = COALESCE(?, patient_position),
+        doctor_hand_placement = COALESCE(?, doctor_hand_placement),
+        applied_force_direction = COALESCE(?, applied_force_direction),
+        false_positive_factors = COALESCE(?, false_positive_factors),
+        clinical_interpretation = COALESCE(?, clinical_interpretation),
+        illustration_key = COALESCE(?, illustration_key),
+        icon_type = COALESCE(?, icon_type),
+        is_active = COALESCE(?, is_active),
+        sort_order = COALESCE(?, sort_order)
+    WHERE code = ?
+  `, [
+    name_ru ? name_ru.trim() : null,
+    name_lat !== undefined ? name_lat.trim() : null,
+    joint_category || null,
+    target_structure !== undefined ? target_structure.trim() : null,
+    finalMethodology !== undefined ? finalMethodology.trim() : null,
+    finalPositive !== undefined ? finalPositive.trim() : null,
+    sensSpecStr || null,
+    sensitivity_pct !== undefined && sensitivity_pct !== '' ? Number(sensitivity_pct) : null,
+    specificity_pct !== undefined && specificity_pct !== '' ? Number(specificity_pct) : null,
+    evidence_level || null,
+    patient_position !== undefined ? patient_position.trim() : null,
+    doctor_hand_placement !== undefined ? doctor_hand_placement.trim() : null,
+    applied_force_direction !== undefined ? applied_force_direction.trim() : null,
+    false_positive_factors !== undefined ? false_positive_factors.trim() : null,
+    clinical_interpretation !== undefined ? clinical_interpretation.trim() : null,
+    illustration_key || null,
+    icon_type || null,
+    is_active !== undefined ? (is_active ? 1 : 0) : null,
+    sort_order !== undefined && sort_order !== '' ? Number(sort_order) : null,
+    targetCode
+  ], function(err) {
+    if (err) return res.status(500).json({ success: false, error: err.message });
+    if (this.changes === 0) return res.status(404).json({ success: false, error: 'Тест не найден.' });
+    res.json({ success: true, message: 'Ортопедический тест успешно обновлен.' });
+  });
+});
+
+// 9.1.3. DELETE /api/ortho/tests/catalog/:code - Delete or deactivate orthopedic test
+router.delete('/tests/catalog/:code', (req, res) => {
+  const targetCode = req.params.code;
+  db.get(`SELECT COUNT(*) AS cnt FROM ortho_template_tests WHERE test_code = ?`, [targetCode], (cntErr, row) => {
+    if (cntErr) return res.status(500).json({ success: false, error: cntErr.message });
+    const count = row ? row.cnt : 0;
+    if (count > 0 && req.query.force !== 'true') {
+      // Soft deactivate
+      db.run(`UPDATE ortho_test_catalog SET is_active = 0 WHERE code = ?`, [targetCode], (uErr) => {
+        if (uErr) return res.status(500).json({ success: false, error: uErr.message });
+        return res.json({
+          success: true,
+          softDeleted: true,
+          message: `Тест деактивирован, так как привязан к ${count} шаблонам. Для полного удаления передайте ?force=true.`
+        });
+      });
+      return;
+    }
+
+    db.run(`DELETE FROM ortho_template_tests WHERE test_code = ?`, [targetCode], () => {
+      db.run(`DELETE FROM ortho_test_catalog WHERE code = ?`, [targetCode], function(err) {
+        if (err) return res.status(500).json({ success: false, error: err.message });
+        res.json({ success: true, message: 'Ортопедический тест успешно удален из справочника.' });
+      });
+    });
+  });
+});
+
+
+// 9.2. Clinic Services Search from servdict
+router.get('/services', (req, res) => {
+  const search = req.query.search ? String(req.query.search).trim() : '';
+  let sql = `SELECT id, code, name, price, kind FROM servdict WHERE group_f = 0`;
+  const params = [];
+  if (search) {
+    sql += ` AND (name LIKE ? OR code LIKE ?)`;
+    params.push(`%${search}%`, `%${search}%`);
+  }
+  sql += ` ORDER BY name ASC LIMIT 150`;
+  db.all(sql, params, (err, rows) => {
+    if (err) return res.status(500).json({ success: false, error: err.message });
+    res.json({ success: true, services: rows || [] });
+  });
+});
+
+// 9.2.1. GET /api/ortho/diagnostics/catalog - List diagnostic & lab methods with servdict details & usage count
+router.get('/diagnostics/catalog', (req, res) => {
+  const { joint, modality, search, includeInactive } = req.query;
+  const allowInactive = includeInactive === 'true' || includeInactive === '1' ? 1 : 0;
+  
+  let sql = `
+    SELECT d.*, 
+           sd.name AS servdict_name, 
+           sd.price AS servdict_price,
+           sd.code AS servdict_code,
+           (SELECT COUNT(*) FROM ortho_template_diagnostics WHERE diagnostic_code = d.code) AS templates_count
+    FROM diagnostic_methods_catalog d
+    LEFT JOIN servdict sd ON sd.id = d.servdict_id
+    WHERE (d.is_active = 1 OR ? = 1)
+  `;
+  const params = [allowInactive];
+
+  if (joint && joint !== 'all') {
+    sql += ` AND (d.target_joint = ? OR d.target_joint = 'general')`;
+    params.push(joint);
+  }
+  if (modality && modality !== 'all') {
+    sql += ` AND d.modality = ?`;
+    params.push(modality);
+  }
+  if (search && search.trim()) {
+    sql += ` AND (d.name LIKE ? OR d.code LIKE ? OR d.protocol_phrase LIKE ?)`;
+    params.push(`%${search.trim()}%`, `%${search.trim()}%`, `%${search.trim()}%`);
+  }
+
+  sql += ` ORDER BY d.sort_order ASC, d.name ASC`;
+  db.all(sql, params, (err, rows) => {
+    if (err) return res.status(500).json({ success: false, error: err.message });
+    res.json({ success: true, total: (rows || []).length, diagnostics: rows || [] });
+  });
+});
+
+// 9.2.2. POST /api/ortho/diagnostics/catalog - Create diagnostic method
+router.post('/diagnostics/catalog', (req, res) => {
+  const {
+    code, name, modality, target_joint, servdict_id,
+    clinical_indications, protocol_phrase, priority_level = 'primary',
+    is_active = 1, sort_order = 0
+  } = req.body;
+
+  if (!code || !name || !modality || !target_joint || !protocol_phrase) {
+    return res.status(400).json({ success: false, error: 'Код, наименование, модальность, сустав и текст направления обязательны' });
+  }
+
+  const cleanCode = code.trim().toLowerCase().replace(/\s+/g, '_');
+
+  db.run(`
+    INSERT INTO diagnostic_methods_catalog (
+      code, name, modality, target_joint, servdict_id,
+      clinical_indications, protocol_phrase, priority_level, is_active, sort_order
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `, [
+    cleanCode, name.trim(), modality, target_joint,
+    servdict_id ? Number(servdict_id) : null,
+    clinical_indications || null, protocol_phrase.trim(),
+    priority_level, is_active ? 1 : 0, Number(sort_order) || 0
+  ], function(err) {
+    if (err) {
+      if (err.message.includes('UNIQUE') || err.message.includes('PRIMARY')) {
+        return res.status(409).json({ success: false, error: `Метод с кодом «${cleanCode}» уже существует` });
+      }
+      return res.status(500).json({ success: false, error: err.message });
+    }
+    res.json({ success: true, code: cleanCode, message: 'Метод диагностики успешно добавлен в справочник' });
+  });
+});
+
+// 9.2.3. PUT /api/ortho/diagnostics/catalog/:code - Update diagnostic method
+router.put('/diagnostics/catalog/:code', (req, res) => {
+  const targetCode = req.params.code;
+  const {
+    name, modality, target_joint, servdict_id,
+    clinical_indications, protocol_phrase, priority_level,
+    is_active, sort_order
+  } = req.body;
+
+  db.run(`
+    UPDATE diagnostic_methods_catalog
+    SET name = COALESCE(?, name),
+        modality = COALESCE(?, modality),
+        target_joint = COALESCE(?, target_joint),
+        servdict_id = ?,
+        clinical_indications = ?,
+        protocol_phrase = COALESCE(?, protocol_phrase),
+        priority_level = COALESCE(?, priority_level),
+        is_active = COALESCE(?, is_active),
+        sort_order = COALESCE(?, sort_order)
+    WHERE code = ?
+  `, [
+    name ? name.trim() : null,
+    modality || null,
+    target_joint || null,
+    servdict_id !== undefined ? (servdict_id ? Number(servdict_id) : null) : null,
+    clinical_indications !== undefined ? clinical_indications : null,
+    protocol_phrase ? protocol_phrase.trim() : null,
+    priority_level || null,
+    is_active !== undefined ? (is_active ? 1 : 0) : null,
+    sort_order !== undefined ? Number(sort_order) : null,
+    targetCode
+  ], function(err) {
+    if (err) return res.status(500).json({ success: false, error: err.message });
+    if (this.changes === 0) return res.status(404).json({ success: false, error: 'Метод диагностики не найден' });
+    res.json({ success: true, message: 'Метод диагностики успешно обновлен' });
+  });
+});
+
+// 9.2.4. DELETE /api/ortho/diagnostics/catalog/:code - Delete or deactivate diagnostic method
+router.delete('/diagnostics/catalog/:code', (req, res) => {
+  const targetCode = req.params.code;
+  db.get(`SELECT COUNT(*) AS cnt FROM ortho_template_diagnostics WHERE diagnostic_code = ?`, [targetCode], (cntErr, row) => {
+    if (cntErr) return res.status(500).json({ success: false, error: cntErr.message });
+    const count = row ? row.cnt : 0;
+    if (count > 0 && req.query.force !== 'true') {
+      // Soft deactivate
+      db.run(`UPDATE diagnostic_methods_catalog SET is_active = 0 WHERE code = ?`, [targetCode], (uErr) => {
+        if (uErr) return res.status(500).json({ success: false, error: uErr.message });
+        return res.json({
+          success: true,
+          softDeleted: true,
+          message: `Метод деактивирован, так как привязан к ${count} шаблонам. Для полного удаления передайте ?force=true.`
+        });
+      });
+      return;
+    }
+
+    db.run(`DELETE FROM ortho_template_diagnostics WHERE diagnostic_code = ?`, [targetCode], () => {
+      db.run(`DELETE FROM diagnostic_methods_catalog WHERE code = ?`, [targetCode], function(err) {
+        if (err) return res.status(500).json({ success: false, error: err.message });
+        res.json({ success: true, message: 'Метод диагностики успешно удален из справочника' });
+      });
+    });
+  });
+});
+
+// 9.2.5. GET /api/ortho/clusters - List master clusters with calculated counts
+router.get('/clusters', (req, res) => {
+  const sql = `
+    SELECT oc.*,
+      (SELECT COUNT(*) FROM ortho_templates WHERE cluster_id = oc.id AND (is_active = 1 OR is_active IS NULL)) AS templates_count,
+      (SELECT COUNT(*) FROM ortho_test_catalog WHERE joint_category = oc.joint_affinity OR (oc.joint_affinity = 'general' AND joint_category = 'general')) AS tests_count,
+      (SELECT COUNT(*) FROM diagnostic_methods_catalog WHERE target_joint = oc.joint_affinity OR (oc.joint_affinity = 'general' AND target_joint = 'general')) AS diagnostics_count
+    FROM ortho_clusters oc
+    WHERE (oc.is_active = 1 OR oc.is_active IS NULL)
+    ORDER BY oc.sort_order ASC, oc.id ASC
+  `;
+  db.all(sql, [], (err, rows) => {
+    if (err) return res.status(500).json({ success: false, error: err.message });
+    res.json({ success: true, total: (rows || []).length, clusters: rows || [] });
+  });
+});
+
+// 9.3. GET /api/ortho/templates/detailed - List templates with counts, cluster metadata & filters
+router.get('/templates/detailed', (req, res) => {
+  const { joint, search, cluster, with_details } = req.query;
+  let sql = `
+    SELECT ot.*,
+      (SELECT COUNT(*) FROM ortho_template_tests WHERE template_id = ot.id) AS tests_count,
+      (SELECT COUNT(*) FROM ortho_template_diagnostics WHERE template_id = ot.id) AS diagnostics_count
+    FROM ortho_templates ot
+    WHERE (ot.is_active = 1 OR ot.is_active IS NULL)
+  `;
+  const params = [];
+  if (cluster && cluster !== 'all') {
+    sql += ` AND ot.cluster_id = ?`;
+    params.push(cluster);
+  }
+  if (joint && joint !== 'all') {
+    sql += ` AND ot.joint_name = ?`;
+    params.push(joint);
+  }
+  if (search) {
+    sql += ` AND (ot.title LIKE ? OR ot.default_mkb_code LIKE ? OR ot.stage_or_severity LIKE ?)`;
+    params.push(`%${search}%`, `%${search}%`, `%${search}%`);
+  }
+  sql += ` ORDER BY ot.sort_order ASC, ot.id ASC`;
+
+  db.all(sql, params, (err, rows) => {
+    if (err) return res.status(500).json({ success: false, error: err.message });
+    const templates = rows || [];
+
+    if (!with_details || templates.length === 0) {
+      return res.json({ success: true, total: templates.length, templates });
+    }
+
+    const tIds = templates.map(t => t.id);
+    const placeholders = tIds.map(() => '?').join(',');
+
+    const testsSql = `
+      SELECT ott.template_id, ott.test_code, ott.expected_result, ott.is_mandatory,
+             otc.name_ru, otc.name_lat
+      FROM ortho_template_tests ott
+      JOIN ortho_test_catalog otc ON otc.code = ott.test_code
+      WHERE ott.template_id IN (${placeholders})
+      ORDER BY ott.sort_order ASC
+    `;
+
+    const diagSql = `
+      SELECT otd.template_id, otd.diagnostic_code, otd.urgency, otd.is_primary,
+             dmc.name, dmc.modality
+      FROM ortho_template_diagnostics otd
+      JOIN diagnostic_methods_catalog dmc ON dmc.code = otd.diagnostic_code
+      WHERE otd.template_id IN (${placeholders})
+      ORDER BY otd.sort_order ASC
+    `;
+
+    db.all(testsSql, tIds, (errTests, testRows) => {
+      const testsMap = {};
+      (testRows || []).forEach(tr => {
+        if (!testsMap[tr.template_id]) testsMap[tr.template_id] = [];
+        testsMap[tr.template_id].push({
+          code: tr.test_code,
+          name: tr.name_ru,
+          expected: tr.expected_result,
+          mandatory: tr.is_mandatory
+        });
+      });
+
+      db.all(diagSql, tIds, (errDiags, diagRows) => {
+        const diagsMap = {};
+        (diagRows || []).forEach(dr => {
+          if (!diagsMap[dr.template_id]) diagsMap[dr.template_id] = [];
+          diagsMap[dr.template_id].push({
+            code: dr.diagnostic_code,
+            name: dr.name,
+            modality: dr.modality,
+            urgency: dr.urgency,
+            is_primary: dr.is_primary
+          });
+        });
+
+        const fullTemplates = templates.map(t => {
+          let parsedRom = null;
+          try {
+            parsedRom = typeof t.rom_norm_preset === 'string' ? JSON.parse(t.rom_norm_preset) : t.rom_norm_preset;
+          } catch {}
+          return {
+            id: t.id,
+            title: t.title,
+            jointCategory: t.joint_name,
+            mkbCode: t.default_mkb_code || '',
+            category: t.category || '',
+            cluster_id: t.cluster_id || '',
+            cluster_name: t.cluster_name || '',
+            stage_or_severity: t.stage_or_severity || '',
+            side: t.default_side || 'right',
+            complaints: t.complaints_template || '',
+            objective: t.objective_template || '',
+            recommendations: t.recommendations_template || '',
+            rom: parsedRom,
+            tests: testsMap[t.id] || [],
+            diagnostics: diagsMap[t.id] || []
+          };
+        });
+
+        res.json({ success: true, total: fullTemplates.length, templates: fullTemplates });
+      });
+    });
+  });
+});
+
+// 9.4. GET /api/ortho/templates/:id/full - Get single template with joined tests & diagnostics
+router.get('/templates/:id/full', (req, res) => {
+  const templateId = req.params.id;
+  db.get(`SELECT * FROM ortho_templates WHERE id = ?`, [templateId], (err, template) => {
+    if (err) return res.status(500).json({ success: false, error: err.message });
+    if (!template) return res.status(404).json({ success: false, error: 'Шаблон не найден' });
+
+    // Fetch tests
+    const testsSql = `
+      SELECT ott.id, ott.test_code, ott.expected_result, ott.is_mandatory, ott.sort_order,
+             otc.name_ru, otc.name_lat, otc.joint_category, otc.target_structure,
+             otc.methodology, otc.positive_criteria, otc.sensitivity_specificity, otc.icon_type
+      FROM ortho_template_tests ott
+      JOIN ortho_test_catalog otc ON otc.code = ott.test_code
+      WHERE ott.template_id = ?
+      ORDER BY ott.sort_order ASC, ott.id ASC
+    `;
+    db.all(testsSql, [templateId], (tErr, tests) => {
+      if (tErr) return res.status(500).json({ success: false, error: tErr.message });
+
+      // Fetch diagnostics
+      const diagSql = `
+        SELECT otd.id, otd.diagnostic_code, otd.urgency, otd.default_side, otd.is_primary, otd.sort_order,
+               dmc.name, dmc.modality, dmc.target_joint, dmc.servdict_id, dmc.clinical_indications,
+               dmc.protocol_phrase, dmc.priority_level,
+               sd.price AS servdict_price, sd.name AS servdict_name
+        FROM ortho_template_diagnostics otd
+        JOIN diagnostic_methods_catalog dmc ON dmc.code = otd.diagnostic_code
+        LEFT JOIN servdict sd ON sd.id = dmc.servdict_id
+        WHERE otd.template_id = ?
+        ORDER BY otd.sort_order ASC, otd.id ASC
+      `;
+      db.all(diagSql, [templateId], (dErr, diagnostics) => {
+        if (dErr) return res.status(500).json({ success: false, error: dErr.message });
+
+        res.json({
+          success: true,
+          template: {
+            ...template,
+            tests: tests || [],
+            diagnostics: diagnostics || []
+          }
+        });
+      });
+    });
+  });
+});
+
+// 9.5. POST /api/ortho/templates - Create new template with relational tests and diagnostics
+router.post('/templates', (req, res) => {
+  const {
+    title, joint_name, default_mkb_code, template_json, category,
+    default_side, complaints_template, anamnesis_template, objective_template,
+    rom_norm_preset, recommendations_template, cluster_id, cluster_name,
+    stage_or_severity, clinical_tags, tests = [], diagnostics = []
+  } = req.body;
+
+  if (!title || !joint_name) {
+    return res.status(400).json({ success: false, error: 'Поля title и joint_name обязательны' });
+  }
+
+  const rawJson = typeof template_json === 'object' ? JSON.stringify(template_json) : (template_json || '{}');
+  const romPresetStr = typeof rom_norm_preset === 'object' ? JSON.stringify(rom_norm_preset) : rom_norm_preset;
+  const tagsStr = Array.isArray(clinical_tags) ? JSON.stringify(clinical_tags) : (clinical_tags || null);
+
+  db.run(`
+    INSERT INTO ortho_templates (
+      title, joint_name, default_mkb_code, template_json, category,
+      default_side, complaints_template, anamnesis_template, objective_template,
+      rom_norm_preset, recommendations_template, is_active, sort_order,
+      cluster_id, cluster_name, stage_or_severity, clinical_tags
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, ?, ?, ?, ?)
+  `, [
+    title, joint_name, default_mkb_code || null, rawJson, category || null,
+    default_side || 'right', complaints_template || null, anamnesis_template || null,
+    objective_template || null, romPresetStr || null, recommendations_template || null,
+    cluster_id || null, cluster_name || null, stage_or_severity || null, tagsStr
+  ], function(err) {
+    if (err) return res.status(500).json({ success: false, error: err.message });
+    const newId = this.lastID;
+
+    // Insert tests
+    if (Array.isArray(tests) && tests.length > 0) {
+      const tStmt = db.prepare(`
+        INSERT INTO ortho_template_tests (template_id, test_code, expected_result, is_mandatory, sort_order)
+        VALUES (?, ?, ?, ?, ?)
+      `);
+      tests.forEach((t, i) => {
+        tStmt.run([newId, t.test_code || t.code, t.expected_result || t.expected || 'positive', t.is_mandatory ?? 1, i * 10]);
+      });
+      tStmt.finalize();
+    }
+
+    // Insert diagnostics
+    if (Array.isArray(diagnostics) && diagnostics.length > 0) {
+      const dStmt = db.prepare(`
+        INSERT INTO ortho_template_diagnostics (template_id, diagnostic_code, urgency, default_side, is_primary, sort_order)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `);
+      diagnostics.forEach((d, i) => {
+        dStmt.run([newId, d.diagnostic_code || d.code, d.urgency || 'routine', d.default_side || default_side || 'affected', d.is_primary ?? 1, i * 10]);
+      });
+      dStmt.finalize();
+    }
+
+    logOrthoAudit({
+      eventType: EventTypes.PROTOCOL_SAVED,
+      message: `Создан новый шаблон осмотра #${newId}: "${title}" (${joint_name})`
+    });
+
+    res.json({ success: true, id: newId, message: 'Шаблон успешно создан' });
+  });
+});
+
+// 9.6. PUT /api/ortho/templates/:id - Update template & cascade tests and diagnostics
+router.put('/templates/:id', (req, res) => {
+  const templateId = req.params.id;
+  const {
+    title, joint_name, default_mkb_code, template_json, category,
+    default_side, complaints_template, anamnesis_template, objective_template,
+    rom_norm_preset, recommendations_template, cluster_id, cluster_name,
+    stage_or_severity, clinical_tags, tests = [], diagnostics = []
+  } = req.body;
+
+  const rawJson = typeof template_json === 'object' ? JSON.stringify(template_json) : (template_json || '{}');
+  const romPresetStr = typeof rom_norm_preset === 'object' ? JSON.stringify(rom_norm_preset) : rom_norm_preset;
+  const tagsStr = Array.isArray(clinical_tags) ? JSON.stringify(clinical_tags) : (clinical_tags || null);
+
+  db.run(`
+    UPDATE ortho_templates SET
+      title = ?,
+      joint_name = ?,
+      default_mkb_code = ?,
+      template_json = ?,
+      category = ?,
+      default_side = ?,
+      complaints_template = ?,
+      anamnesis_template = ?,
+      objective_template = ?,
+      rom_norm_preset = ?,
+      recommendations_template = ?,
+      cluster_id = COALESCE(?, cluster_id),
+      cluster_name = COALESCE(?, cluster_name),
+      stage_or_severity = COALESCE(?, stage_or_severity),
+      clinical_tags = COALESCE(?, clinical_tags)
+    WHERE id = ?
+  `, [
+    title, joint_name, default_mkb_code, rawJson, category,
+    default_side, complaints_template, anamnesis_template, objective_template,
+    romPresetStr, recommendations_template,
+    cluster_id || null, cluster_name || null, stage_or_severity || null, tagsStr,
+    templateId
+  ], (err) => {
+    if (err) return res.status(500).json({ success: false, error: err.message });
+
+    // Sync tests
+    db.run(`DELETE FROM ortho_template_tests WHERE template_id = ?`, [templateId], () => {
+      if (Array.isArray(tests) && tests.length > 0) {
+        const tStmt = db.prepare(`
+          INSERT INTO ortho_template_tests (template_id, test_code, expected_result, is_mandatory, sort_order)
+          VALUES (?, ?, ?, ?, ?)
+        `);
+        tests.forEach((t, i) => {
+          tStmt.run([templateId, t.test_code || t.code, t.expected_result || t.expected || 'positive', t.is_mandatory ?? 1, i * 10]);
+        });
+        tStmt.finalize();
+      }
+    });
+
+    // Sync diagnostics
+    db.run(`DELETE FROM ortho_template_diagnostics WHERE template_id = ?`, [templateId], () => {
+      if (Array.isArray(diagnostics) && diagnostics.length > 0) {
+        const dStmt = db.prepare(`
+          INSERT INTO ortho_template_diagnostics (template_id, diagnostic_code, urgency, default_side, is_primary, sort_order)
+          VALUES (?, ?, ?, ?, ?, ?)
+        `);
+        diagnostics.forEach((d, i) => {
+          dStmt.run([templateId, d.diagnostic_code || d.code, d.urgency || 'routine', d.default_side || default_side || 'affected', d.is_primary ?? 1, i * 10]);
+        });
+        dStmt.finalize();
+      }
+    });
+
+    logOrthoAudit({
+      eventType: EventTypes.PROTOCOL_SAVED,
+      message: `Обновлен шаблон осмотра #${templateId}: "${title}"`
+    });
+
+    res.json({ success: true, message: 'Шаблон успешно обновлен' });
+  });
+});
+
+// 9.7. POST /api/ortho/templates/:id/clone - Duplicate existing template
+router.post('/templates/:id/clone', (req, res) => {
+  const sourceId = req.params.id;
+
+  db.get(`SELECT * FROM ortho_templates WHERE id = ?`, [sourceId], (err, src) => {
+    if (err) return res.status(500).json({ success: false, error: err.message });
+    if (!src) return res.status(404).json({ success: false, error: 'Исходный шаблон не найден' });
+
+    const newTitle = `${src.title} (Копия)`;
+    db.run(`
+      INSERT INTO ortho_templates (
+        title, joint_name, default_mkb_code, template_json, category,
+        default_side, complaints_template, anamnesis_template, objective_template,
+        rom_norm_preset, recommendations_template, is_active, sort_order,
+        cluster_id, cluster_name, stage_or_severity, clinical_tags
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?)
+    `, [
+      newTitle, src.joint_name, src.default_mkb_code, src.template_json, src.category,
+      src.default_side, src.complaints_template, src.anamnesis_template, src.objective_template,
+      src.rom_norm_preset, src.recommendations_template, (src.sort_order || 0) + 1,
+      src.cluster_id, src.cluster_name, src.stage_or_severity, src.clinical_tags
+    ], function(insErr) {
+      if (insErr) return res.status(500).json({ success: false, error: insErr.message });
+      const newId = this.lastID;
+
+      // Copy tests
+      db.all(`SELECT * FROM ortho_template_tests WHERE template_id = ?`, [sourceId], (tErr, tests) => {
+        if (!tErr && tests && tests.length > 0) {
+          const tStmt = db.prepare(`
+            INSERT INTO ortho_template_tests (template_id, test_code, expected_result, is_mandatory, sort_order)
+            VALUES (?, ?, ?, ?, ?)
+          `);
+          tests.forEach(t => tStmt.run([newId, t.test_code, t.expected_result, t.is_mandatory, t.sort_order]));
+          tStmt.finalize();
+        }
+      });
+
+      // Copy diagnostics
+      db.all(`SELECT * FROM ortho_template_diagnostics WHERE template_id = ?`, [sourceId], (dErr, diags) => {
+        if (!dErr && diags && diags.length > 0) {
+          const dStmt = db.prepare(`
+            INSERT INTO ortho_template_diagnostics (template_id, diagnostic_code, urgency, default_side, is_primary, sort_order)
+            VALUES (?, ?, ?, ?, ?, ?)
+          `);
+          diags.forEach(d => dStmt.run([newId, d.diagnostic_code, d.urgency, d.default_side, d.is_primary, d.sort_order]));
+          dStmt.finalize();
+        }
+      });
+
+      logOrthoAudit({
+        eventType: EventTypes.PROTOCOL_SAVED,
+        message: `Клонирован шаблон #${sourceId} -> #${newId} ("${newTitle}")`
+      });
+
+      res.json({ success: true, id: newId, message: 'Шаблон успешно скопирован' });
+    });
+  });
+});
+
+// 9.8. DELETE /api/ortho/templates/:id - Archive or delete template
+router.delete('/templates/:id', (req, res) => {
+  const templateId = req.params.id;
+  db.run(`UPDATE ortho_templates SET is_active = 0 WHERE id = ?`, [templateId], function(err) {
+    if (err) return res.status(500).json({ success: false, error: err.message });
+    logOrthoAudit({
+      eventType: EventTypes.PROTOCOL_REVOKED,
+      message: `Деактивирован/архивирован шаблон #${templateId}`
+    });
+    res.json({ success: true, message: 'Шаблон перемещен в архив' });
   });
 });
 

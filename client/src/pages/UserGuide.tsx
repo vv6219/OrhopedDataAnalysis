@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
   Box,
   Typography,
@@ -45,6 +46,14 @@ import SmartToyIcon from '@mui/icons-material/SmartToy';
 import { UserGuidePrintTemplate } from '../components/UserGuidePrintTemplate';
 import { PosFiscalManualPrintTemplate } from '../components/PosFiscalManualPrintTemplate';
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
+import BiotechIcon from '@mui/icons-material/Biotech';
+import HealingIcon from '@mui/icons-material/Healing';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
+import ArticleIcon from '@mui/icons-material/Article';
+import MenuBookIcon from '@mui/icons-material/MenuBook';
+import OrthoTestsGuideRegistry from '../components/ortho/OrthoTestsGuideRegistry';
+import DiagnosticMethodsGuideRegistry from '../components/ortho/DiagnosticMethodsGuideRegistry';
+import OrthoTemplatesGuideRegistry from '../components/ortho/OrthoTemplatesGuideRegistry';
 
 interface GuideSection {
   id: string;
@@ -58,6 +67,23 @@ interface GuideSection {
 }
 
 export default function UserGuide() {
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const targetSection = params.get('section') || (location.hash ? location.hash.replace('#', '') : null);
+    if (targetSection) {
+      setExpandedSections(prev => ({ ...prev, [targetSection]: true }));
+      setSelectedCategory('all');
+      setTimeout(() => {
+        const el = document.getElementById(targetSection);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      }, 250);
+    }
+  }, [location.search, location.hash]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
@@ -71,6 +97,9 @@ export default function UserGuide() {
     'section-test-daemon': false,
     'section-print': false,
     'section-faq': false,
+    'section-ortho-templates': false,
+    'section-ortho-tests-registry': false,
+    'section-diagnostic-methods-registry': false,
   });
 
   const printRef = useRef<HTMLDivElement>(null);
@@ -78,7 +107,7 @@ export default function UserGuide() {
 
   const handlePrintTrigger = useReactToPrint({
     contentRef: printRef,
-    documentTitle: `Руководство_пользователя_ОртоERP_v1.4.2_${new Date().toISOString().slice(0, 10)}`,
+    documentTitle: `Руководство_пользователя_ОртоERP_v1.4.3_${new Date().toISOString().slice(0, 10)}`,
     pageStyle: `
       @page {
         size: A4 portrait;
@@ -1084,9 +1113,277 @@ export default function UserGuide() {
       )
     },
     {
+      id: 'section-ortho-templates',
+      category: 'ortho_templates',
+      title: '11. Справочник клинических шаблонов, тестов и методов диагностики (Templates Manager 2.0)',
+      subtitle: 'Корпоративная база знаний доказательной ортопедии: 31 эталонный шаблон протоколов, 39 валидированных тестов (Se/Sp), 26 методов обследования с привязкой к servdict и полнотекстовый поиск',
+      icon: <BiotechIcon sx={{ color: '#0F3C64' }} />,
+      tags: [
+        'шаблоны', 'клинические шаблоны', 'протоколы', 'ортопедия', 'тесты', 'диагностика', 'мкб-10', 'мрт', 'рентген', 'узи', 'энмг', 'плантография', 'servdict', 'гониометрия', 'rom', 'лахман', 'козен', 'фален', 'se', 'sp', 'доказательная медицина', 'live arm preview', 'полнотекстовый поиск', 'арм врача', 'калькуляция', 'касса'
+      ],
+      searchableText: `
+        Справочник клинических шаблонов 2.0 Templates Manager Ортопедические тесты Методы диагностики
+        31 эталонный шаблон протоколов по 7 анатомическим областям Коленный Плечевой Локтевой Тазобедренный Стопа Кисть Позвоночник
+        39 валидированных тестов доказательной медицины Чувствительность Se Специфичность Sp Уровень доказательности A B C
+        Тест Лахмана Передний выдвижной ящик Задний выдвижной ящик Pivot-Shift Мак-Мюррей Эпли Баллотирование надколенника Кларка Фэйрбэнка
+        Тест Козена Милля локтя гольфиста Симптом Тиннеля кубитального канала Вальгус-стресс Варус-стресс локтя
+        Тест Нира Хокинса-Кеннеди пустой банки Джобса падающей руки тревоги вывиха плеча Спида
+        Тест FABER Патрика FADIR Томаса Тренделенбурга Обера
+        Тест Уиндласса Томпсона выдвижной ящик голеностопа таранной кости
+        Тест Фалена Тиннеля запястья Финкельштейна де Кервена клавиши пианино Grind test ризартроз
+        Симптом Ласега проба Адамса сколиоз Сперлинга Вассермана
+        26 методов диагностики рентгенография МРТ УЗИ КТ ЭНМГ компьютерная плантография микроскопия синовии ревматологическая панель
+        Привязка к номенклатуре платных услуг servdict id 114 1675 99 1600 автоматический расчет стоимости
+        Полнотекстовый поиск Full-Text Search FTS по МКБ-10 авторам латыни анатомическому субстрату методике показаниям
+        Интерактивный Live ARM Preview переключатель Отрицательный Положительный обучающая подсказка по кнопке i
+        Сквозной поток в АРМ врача выбор сустава на Гомункулусе передача назначений В кассу без расхождений
+      `,
+      content: (
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+          <Alert severity="info" sx={{ borderRadius: 2 }}>
+            Раздел <strong>«Справочник клинических шаблонов 2.0»</strong> является единым источником стандартов для АРМ врача-ортопеда. Он гарантирует бесшовный переход от клинического осмотра и доказательных проб к назначению аппаратного обследования и автоматической передаче услуг в кассовый узел.
+          </Alert>
+
+          <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
+            <Button
+              variant="contained"
+              startIcon={<OpenInNewIcon />}
+              onClick={() => navigate('/ortho-templates')}
+              sx={{
+                bgcolor: '#0F3C64',
+                color: '#FFFFFF',
+                fontWeight: 700,
+                textTransform: 'none',
+                borderRadius: 2,
+                px: 2.5,
+                '&:hover': { bgcolor: '#156C9C' }
+              }}
+            >
+              Перейти в Справочник шаблонов 2.0
+            </Button>
+            <Button
+              variant="outlined"
+              startIcon={<HealingIcon />}
+              onClick={() => navigate('/ortho-workstation')}
+              sx={{
+                color: '#0F3C64',
+                borderColor: '#CBD5E1',
+                fontWeight: 600,
+                textTransform: 'none',
+                borderRadius: 2,
+                '&:hover': { borderColor: '#0F3C64', bgcolor: '#F0F9FF' }
+              }}
+            >
+              Открыть АРМ Врача-ортопеда
+            </Button>
+          </Box>
+
+          {/* Sub-block 1: Three Pillars Architecture */}
+          <Box sx={{ p: 2.5, border: '1px solid #E2E8F0', borderRadius: 2.5, bgcolor: '#F8FAFC' }}>
+            <Typography variant="subtitle1" sx={{ fontWeight: 800, color: '#0F3C64', mb: 1.5, display: 'flex', alignItems: 'center', gap: 1 }}>
+              <ArticleIcon sx={{ color: '#0284C7' }} /> 1. Архитектура трёх взаимосвязанных каталогов
+            </Typography>
+
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr 1fr' }, gap: 2 }}>
+              <Paper elevation={0} sx={{ p: 2, border: '1px solid #E2E8F0', borderRadius: 2, bgcolor: '#FFFFFF' }}>
+                <Typography variant="subtitle2" sx={{ fontWeight: 700, color: '#0F3C64', display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                  <ArticleIcon fontSize="small" sx={{ color: '#0F3C64' }} /> Шаблоны протоколов (31)
+                </Typography>
+                <Typography variant="body2" sx={{ color: '#64748B', mt: 1, fontSize: '0.84rem', lineHeight: 1.5 }}>
+                  • 31 эталонная нозология по 7 анатомическим зонам.<br />
+                  • Связь с кодом МКБ-10, категорией и стороной поражения.<br />
+                  • Нормы гониометрии ROM (активное/пассивное сгибание, дефицит).<br />
+                  • Привязка обязательных и факультативных тестов и методов диагностики.
+                </Typography>
+              </Paper>
+
+              <Paper elevation={0} sx={{ p: 2, border: '1px solid #E2E8F0', borderRadius: 2, bgcolor: '#FFFFFF' }}>
+                <Typography variant="subtitle2" sx={{ fontWeight: 700, color: '#166534', display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                  <HealingIcon fontSize="small" sx={{ color: '#166534' }} /> Ортопедические тесты (39)
+                </Typography>
+                <Typography variant="body2" sx={{ color: '#64748B', mt: 1, fontSize: '0.84rem', lineHeight: 1.5 }}>
+                  • 39 клинически валидированных проб доказательной ортопедии.<br />
+                  • Метрики чувствительности (Se) и специфичности (Sp) со слайдерами.<br />
+                  • Уровни доказательности A (РКИ), B (когорты), C (консенсус).<br />
+                  • Пошаговая техника проведения и критерий (+) для врача.<br />
+                  • Интерактивный Live ARM Preview переключатель.
+                </Typography>
+              </Paper>
+
+              <Paper elevation={0} sx={{ p: 2, border: '1px solid #E2E8F0', borderRadius: 2, bgcolor: '#FFFFFF' }}>
+                <Typography variant="subtitle2" sx={{ fontWeight: 700, color: '#0284C7', display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                  <BiotechIcon fontSize="small" sx={{ color: '#0284C7' }} /> Методы диагностики (26)
+                </Typography>
+                <Typography variant="body2" sx={{ color: '#64748B', mt: 1, fontSize: '0.84rem', lineHeight: 1.5 }}>
+                  • 26 методов инструментальной и лабораторной диагностики.<br />
+                  • Модальности: Рентген, МРТ, КТ, УЗИ, Лаборатория, ЭНМГ, Плантография.<br />
+                  • Прямая привязка к номенклатуре платных услуг (servdict).<br />
+                  • Автоматическая генерация направления в официальный протокол А4.<br />
+                  • Авторасчет стоимости и передача в кассовый узел клиники.
+                </Typography>
+              </Paper>
+            </Box>
+          </Box>
+
+          {/* Sub-block 2: Full-Text Search Guide */}
+          <Box sx={{ p: 2.5, border: '1px solid #E2E8F0', borderRadius: 2.5, bgcolor: '#F8FAFC' }}>
+            <Typography variant="subtitle1" sx={{ fontWeight: 800, color: '#0F3C64', mb: 1.5, display: 'flex', alignItems: 'center', gap: 1 }}>
+              <SearchIcon sx={{ color: '#D97706' }} /> 2. Интеллектуальный полнотекстовый поиск (FTS)
+            </Typography>
+
+            <Typography variant="body2" sx={{ color: '#334155', lineHeight: 1.6, mb: 1.5 }}>
+              Во всех каталогах и в АРМ врача встроен интеллектуальный мультипоиск, индексирующий текстовые поля без учета регистра:
+            </Typography>
+
+            <TableContainer component={Paper} elevation={0} sx={{ border: '1px solid #E2E8F0', borderRadius: 2 }}>
+              <Table size="small">
+                <TableHead sx={{ bgcolor: '#F1F5F9' }}>
+                  <TableRow>
+                    <TableCell sx={{ fontWeight: 800, color: '#0F3C64' }}>Область поиска</TableCell>
+                    <TableCell sx={{ fontWeight: 800, color: '#0F3C64' }}>Поля индексации</TableCell>
+                    <TableCell sx={{ fontWeight: 800, color: '#0F3C64' }}>Примеры поисковых запросов</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  <TableRow>
+                    <TableCell sx={{ fontWeight: 700, color: '#0F3C64' }}>Шаблоны протоколов</TableCell>
+                    <TableCell sx={{ fontSize: '0.84rem' }}>Код МКБ-10, наименование нозологии, жалобы, анамнез, объективный статус, назначенные услуги</TableCell>
+                    <TableCell sx={{ fontSize: '0.84rem', color: '#0284C7', fontFamily: 'monospace' }}>
+                      M77.1, M23, эпикондилит, щелчок в колене, стартовые боли, онемение пальцев
+                    </TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell sx={{ fontWeight: 700, color: '#166534' }}>Ортопедические тесты</TableCell>
+                    <TableCell sx={{ fontSize: '0.84rem' }}>Русское название, автор/латынь, системный код, повреждаемый субстрат, пошаговая техника, критерий (+)</TableCell>
+                    <TableCell sx={{ fontSize: '0.84rem', color: '#166534', fontFamily: 'monospace' }}>
+                      Лахман, Lachman, ПКС, мениск, ротаторная манжета, Фален, выдвижной ящик
+                    </TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell sx={{ fontWeight: 700, color: '#0284C7' }}>Методы диагностики</TableCell>
+                    <TableCell sx={{ fontSize: '0.84rem' }}>Название исследования, модальность (МРТ, УЗИ, рентген), показания, код и название услуги servdict</TableCell>
+                    <TableCell sx={{ fontSize: '0.84rem', color: '#0284C7', fontFamily: 'monospace' }}>
+                      УЗИ, рентген стоп, 1675, толщина фасции, стимуляционная ЭНМГ, синовия
+                    </TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell sx={{ fontWeight: 700, color: '#7C3AED' }}>АРМ врача (Workstation)</TableCell>
+                    <TableCell sx={{ fontSize: '0.84rem' }}>Интерактивный клик на Гомункулус, предиктивный ввод МКБ-10, фильтр чеклиста обследования</TableCell>
+                    <TableCell sx={{ fontSize: '0.84rem', color: '#7C3AED', fontFamily: 'monospace' }}>
+                      Клик на локоть -&gt; шаблоны локтя; ввод «M75» -&gt; шаблоны плеча
+                    </TableCell>
+                  </TableRow>
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </Box>
+
+          {/* Sub-block 3: User Operations Manual */}
+          <Box sx={{ p: 2.5, border: '1px solid #E2E8F0', borderRadius: 2.5, bgcolor: '#F8FAFC' }}>
+            <Typography variant="subtitle1" sx={{ fontWeight: 800, color: '#0F3C64', mb: 1.5, display: 'flex', alignItems: 'center', gap: 1 }}>
+              <MenuBookIcon sx={{ color: '#059669' }} /> 3. Пошаговые сценарии работы со справочником
+            </Typography>
+
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+              <Box sx={{ p: 2, bgcolor: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 2 }}>
+                <Typography variant="subtitle2" sx={{ fontWeight: 700, color: '#0F3C64' }}>
+                  Сценарий А: Редактирование и калибровка ортопедического теста
+                </Typography>
+                <Typography variant="body2" sx={{ color: '#475569', mt: 0.5, fontSize: '0.86rem' }}>
+                  1. Откройте переключатель <strong>«Ортопедические тесты (39)»</strong>.<br />
+                  2. В левой колонке найдите тест (например, <em>«Тест Лахмана»</em>).<br />
+                  3. Отрегулируйте слайдеры чувствительности (Se = 85%) и специфичности (Sp = 94%), выберите уровень доказательности (B).<br />
+                  4. Проверьте в блоке <strong>Live ARM Preview</strong> интерактивный переключатель и откройте подсказку <strong>(i)</strong>.<br />
+                  5. Нажмите <strong>«Сохранить изменения»</strong>.
+                </Typography>
+              </Box>
+
+              <Box sx={{ p: 2, bgcolor: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 2 }}>
+                <Typography variant="subtitle2" sx={{ fontWeight: 700, color: '#0F3C64' }}>
+                  Сценарий Б: Привязка метода диагностики к услуге клиники (servdict)
+                </Typography>
+                <Typography variant="body2" sx={{ color: '#475569', mt: 0.5, fontSize: '0.86rem' }}>
+                  1. Откройте вкладку <strong>«Методы диагностики (26)»</strong>.<br />
+                  2. В поле «Связанная услуга клиники» начните ввод наименования услуги из прайса (например, <em>«Рентгенография локтевого сустава»</em>).<br />
+                  3. Выберите позицию из автокомплита — система автоматически подтянет ID (114) и стоимость (1 800 ₽).<br />
+                  4. Нажмите <strong>«Сохранить метод»</strong>. Теперь при клике на этот метод в АРМ врача услуга мгновенно добавится в счет визита.
+                </Typography>
+              </Box>
+
+              <Box sx={{ p: 2, bgcolor: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 2 }}>
+                <Typography variant="subtitle2" sx={{ fontWeight: 700, color: '#0F3C64' }}>
+                  Сценарий В: Создание или клонирование клинического шаблона
+                </Typography>
+                <Typography variant="body2" sx={{ color: '#475569', mt: 0.5, fontSize: '0.86rem' }}>
+                  1. В режиме <strong>«Шаблоны протоколов»</strong> нажмите <strong>«Клонировать»</strong> для быстрого дублирования существующего шаблона или <strong>«Создать шаблон»</strong>.<br />
+                  2. Заполните жалобы, анамнез, эталонные углы гониометрии ROM.<br />
+                  3. Во вкладке «Ортопедические тесты» привяжите профильные тесты из каталога с ожидаемым ответом.<br />
+                  4. Во вкладке «Диагностика» отметьте обязательные первичные исследования.<br />
+                  5. Нажмите <strong>«Предпросмотр протокола А4»</strong> для визуальной проверки и сохраните шаблон.
+                </Typography>
+              </Box>
+            </Box>
+          </Box>
+
+          {/* Sub-block 4: Interactive Registry of 31 Clinical Templates */}
+          <Box sx={{ p: 2.5, border: '1px solid #E2E8F0', borderRadius: 2.5, bgcolor: '#FFFFFF' }}>
+            <Typography variant="subtitle1" sx={{ fontWeight: 800, color: '#0F3C64', mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
+              <ArticleIcon sx={{ color: '#0284C7' }} /> 4. Интерактивный каталог: 31 клинический шаблон и протокол приёма
+            </Typography>
+            <OrthoTemplatesGuideRegistry />
+          </Box>
+        </Box>
+      )
+    },
+    {
+      id: 'section-ortho-tests-registry',
+      category: 'ortho_tests',
+      title: '12. Полный реестр: 39 валидированных ортопедических тестов с руководствами для врача',
+      subtitle: 'Пошаговые алгоритмы биомеханики: исходное положение, точки захвата руками врача, вектор нагрузки, критерии положительного отклика (+), нозологии и диагностические ловушки',
+      icon: <BiotechIcon sx={{ color: '#0F3C64' }} />,
+      tags: [
+        'тесты', 'ортопедические тесты', '39 тестов', 'лахман', 'эпли', 'мак-мюррей', 'фален', 'тиннель', 'козен', 'милль',
+        'неер', 'хокинс', 'фабер', 'фадир', 'томас', 'виндласс', 'томпсон', 'ласег', 'адамс', 'сперлинг',
+        'биомеханика', 'чувствительность', 'специфичность', 'руководство врача', 'нагрузка', 'сустав', 'пкс', 'мениск'
+      ],
+      searchableText: `
+        Полный клинический реестр 39 валидированных ортопедических тестов
+        Коленный сустав 9 тестов: Тест Лахмана ПКС, Передний выдвижной ящик, Задний выдвижной ящик ЗКС, Pivot-Shift динамический подвывих, Тест Мак-Мюррея мениски, Дистракционно-компрессионный тест Эпли, Баллотирование надколенника выпот синовит, Тест Кларка пателлофеморальный артроз хондромаляция, Тест тревоги надколенника Fairbank MPFL.
+        Локтевой сустав 6 тестов: Тест Козена латеральный эпикондилит локоть теннисиста ECRB, Тест Милля разгибатели предплечья, Тест локтя гольфиста медиальный эпикондилит, Симптом Тиннеля кубитального канала локтевой нерв, Вальгус-стресс тест медиальная коллатеральная связка MCL UCL, Варус-стресс тест латеральная связка LUCL.
+        Плечевой сустав 6 тестов: Тест Нира субакромиальный импинджмент надостная мышца бурса, Тест Хокинса-Кеннеди клювовидно-акромиальная связка, Тест пустой банки Джобса надостная мышца supraspinatus, Тест падающей руки массивный разрыв ротаторной манжеты, Тест тревоги передняя нестабильность губа Банкарта, Тест Спида длинная головка бицепса SLAP.
+        Тазобедренный сустав 5 тестов: Тест FABER Патрика коксартроз сакроилеит КПС, Тест FADIR фемороацетабулярный импинджмент FAI разрыв губы, Тест Томаса сгибатели бедра iliopsoas контрактура, Симптом Тренделенбурга средняя ягодичная мышца парез, Тест Обера илиотибиальный тракт ITBS TFL.
+        Стопа и голеностоп 4 теста: Тест Уиндласса воротковый механизм подошвенный плантарный фасциит пяточная шпора, Тест Томпсона разрыв ахиллова сухожилия, Передний выдвижной ящик голеностопа таранно-малоберцовая связка ATFL, Стресс-тест таранной кости инверсионный наклон CFL.
+        Кисть и запястье 5 тестов: Тест Фалена карпальный канал срединный нерв medianus, Симптом Тиннеля на запястье, Тест Финкельштейна болезнь де Кервена, Симптом клавиши пианино ДРУС TFCC, Тест шлифовки 1-го ПЗП Grind test ризартроз.
+        Позвоночник и спина 4 теста: Симптом Ласега натяжение седалищного нерва корешки L4 L5 S1 грыжа диска люмбоишиалгия, Проба Адамса наклон вперед сколиоз торсия позвонков реберный горб, Тест Сперлинга фораминальная компрессия шейная радикулопатия C5 C6 C7, Тест Вассермана бедренный нерв корешки L2 L3 L4.
+      `,
+      content: <OrthoTestsGuideRegistry />
+    },
+    {
+      id: 'section-diagnostic-methods-registry',
+      category: 'diagnostics',
+      title: '13. Каталог методов диагностики и инструментальных исследований',
+      subtitle: 'Стандарты аппаратного обследования: МРТ, УЗИ с функциональными пробами, цифровая рентгенография, стимуляционная ЭНМГ, оптическая плантография и лабораторные комплексы',
+      icon: <DescriptionIcon sx={{ color: '#0F3C64' }} />,
+      tags: [
+        'диагностика', 'методы диагностики', 'инструментальные исследования', 'рентген', 'мрт', 'узи', 'энмг', 'плантография',
+        'кт', 'лаборатория', 'синовия', 'ревматологическая панель', 'показания', 'формулировка', 'servdict', 'цена', 'касса',
+        'гонартроз', 'коксартроз', 'мениск', 'пкс', 'зкс', 'плечо', 'ротаторная манжета', 'сколиоз', 'плоскостопие'
+      ],
+      searchableText: `
+        Каталог методов диагностики и инструментальных исследований 25 методов
+        Рентгенография: коленный сустав стоя под нагрузкой Kellgren-Lawrence, таз и оба ТБС коксартроз АНГБК, стопы с нагрузкой угол свода Штритер Чижин плоскостопие, плечевой сустав акромион Bigliani кальцификаты, локтевой сустав суставная мышь, лучезапястный сустав дуги Карпала ризартроз, функциональная рентгенография позвоночника спондилолистез нестабильность, панорамная спондилография сколиоз угол Кобба.
+        МРТ томография: коленный сустав 1.5-3.0 Тл Stoller мениски ПКС ЗКС, плечевой сустав ротаторная манжета надостная Банкарт SLAP, ТБС асептический некроз вертлужная губа FAI, пояснично-крестцовый отдел грыжи L1-S1 радикулопатия корешки, локтевой сустав рефрактерный эпикондилит LUCL, лучезапястный сустав TFCC триангулярный комплекс.
+        УЗИ ультразвук: коленный сустав завороты синовит киста Бейкера пункция, плечевой сустав динамические пробы импинджмент бицепс, ахиллово сухожилие плантарная фасция пяточная шпора > 4 мм, локтевой сустав энтезопатия ЦДК допплер, ТБС большой вертел трохантерит GTPS, карпальный канал срединный нерв CSA > 10 мм².
+        ЭНМГ электронейромиография: срединный нерв дистальная моторная латентность карпальный синдром, локтевой нерв кубитальный канал блок проведения.
+        Плантография: компьютерная оптическая подометрия индивидуальные стельки ФормТотикс.
+        КТ и Лаборатория: КТ с 3D-реконструкцией остеотомия, ревматологическая панель СРБ РФ АЦЦП мочевая кислота подагра, исследование синовиальной жидкости цитоз кристаллы уратов пирофосфаты.
+      `,
+      content: <DiagnosticMethodsGuideRegistry />
+    },
+    {
       id: 'section-faq',
       category: 'faq',
-      title: '10. Частые вопросы и диагностика неисправностей (FAQ)',
+      title: '14. Частые вопросы и диагностика неисправностей (FAQ)',
       subtitle: 'Решение типовых ситуаций, снятие зависших блокировок, сбои ККТ, проверка служб и бэкапы',
       icon: <HelpOutlineIcon sx={{ color: '#0F3C64' }} />,
       tags: ['faq', 'ошибки', 'блокировка', 'backup', 'база данных', 'вопросы', 'ккт', 'атол', 'com-порт', 'смена 24', 'службы', 'firebird'],
@@ -1215,7 +1512,10 @@ export default function UserGuide() {
     { id: 'services_health', label: '7. Сервисы сервера', count: sections.filter(s => s.category === 'services_health').length },
     { id: 'test_daemon', label: '8. Тесты [TEST_DAEMON]', count: sections.filter(s => s.category === 'test_daemon').length },
     { id: 'print', label: '9. Печать & Экспорт', count: sections.filter(s => s.category === 'print').length },
-    { id: 'faq', label: '10. FAQ & Ошибки', count: sections.filter(s => s.category === 'faq').length },
+    { id: 'ortho_templates', label: '11. Справочник 2.0', count: sections.filter(s => s.category === 'ortho_templates').length },
+    { id: 'ortho_tests', label: '12. Тесты (39)', count: sections.filter(s => s.category === 'ortho_tests').length },
+    { id: 'diagnostics', label: '13. Диагностика (25+)', count: sections.filter(s => s.category === 'diagnostics').length },
+    { id: 'faq', label: '14. FAQ & Ошибки', count: sections.filter(s => s.category === 'faq').length },
   ];
 
   return (
@@ -1233,7 +1533,7 @@ export default function UserGuide() {
               Инструкция пользователя МИС «ОртоERP»
             </Typography>
             <Chip
-              label="v1.4.2"
+              label="v1.4.3"
               size="small"
               sx={{ bgcolor: '#EBF8FF', color: '#0F3C64', fontWeight: 800, border: '1px solid #BEE3F8' }}
             />
@@ -1388,6 +1688,7 @@ export default function UserGuide() {
           const isExpanded = !!expandedSections[sec.id];
           return (
             <Accordion
+              id={sec.id}
               key={sec.id}
               expanded={isExpanded}
               onChange={() => handleToggleSection(sec.id)}

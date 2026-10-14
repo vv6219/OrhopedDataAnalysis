@@ -27,6 +27,7 @@ import ServerHealth from './pages/ServerHealth';
 import FiscalShiftsAnalytics from './pages/FiscalShiftsAnalytics';
 import OrthoWorkstation from './pages/OrthoWorkstation';
 import ProtocolsRegistry from './pages/ProtocolsRegistry';
+import OrthoTemplatesManager from './pages/OrthoTemplatesManager';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { FiscalProvider } from './context/FiscalContext';
 import { PosProvider } from './context/PosContext';
@@ -224,6 +225,9 @@ function AppContent() {
             <Route path="/scheduling" element={<Scheduling />} />
             <Route path="/ortho-workstation/:appointmentId" element={<OrthoWorkstation />} />
             <Route path="/ortho-workstation" element={<OrthoWorkstation />} />
+            <Route path="/ortho-templates-manager" element={<OrthoTemplatesManager />} />
+            <Route path="/ortho/templates-manager" element={<OrthoTemplatesManager />} />
+            <Route path="/templates-manager" element={<OrthoTemplatesManager />} />
             <Route path="/protocols-registry" element={<ProtocolsRegistry />} />
             <Route path="/protocols" element={<ProtocolsRegistry />} />
             <Route path="/staff-payouts" element={<StaffPayouts />} />

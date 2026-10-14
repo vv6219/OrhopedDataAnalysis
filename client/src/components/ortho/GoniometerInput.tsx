@@ -16,39 +16,49 @@ interface GoniometerInputProps {
   values: RomValues;
   onChange: (newValues: RomValues) => void;
   maxFlexion?: number;
-  jointType?: 'knee' | 'shoulder' | 'hip' | 'ankle' | 'spine';
+  jointType?: 'knee' | 'shoulder' | 'hip' | 'ankle' | 'spine' | 'elbow' | 'wrist';
 }
 
 export default function GoniometerInput({
   values,
   onChange,
-  maxFlexion = 140,
+  maxFlexion,
   jointType = 'knee'
 }: GoniometerInputProps) {
+  const effectiveMaxFlexion = maxFlexion ?? (
+    jointType === 'shoulder' ? 180 :
+    jointType === 'elbow' ? 150 :
+    jointType === 'hip' ? 125 :
+    jointType === 'ankle' ? 50 :
+    jointType === 'wrist' ? 80 :
+    jointType === 'spine' ? 90 :
+    140
+  );
+
   const handlePreset = (type: 'norm' | 'mild' | 'severe') => {
     if (type === 'norm') {
       onChange({
-        flexion_active: maxFlexion,
-        flexion_passive: maxFlexion,
+        flexion_active: effectiveMaxFlexion,
+        flexion_passive: effectiveMaxFlexion,
         extension_deficit: 0,
-        rotation_ext: 45,
-        rotation_int: 45
+        rotation_ext: jointType === 'elbow' ? 85 : 45,
+        rotation_int: jointType === 'elbow' ? 85 : 45
       });
     } else if (type === 'mild') {
       onChange({
-        flexion_active: maxFlexion - 25,
-        flexion_passive: maxFlexion - 15,
+        flexion_active: Math.max(30, effectiveMaxFlexion - 25),
+        flexion_passive: Math.max(35, effectiveMaxFlexion - 15),
         extension_deficit: -5,
-        rotation_ext: 35,
-        rotation_int: 35
+        rotation_ext: jointType === 'elbow' ? 70 : 35,
+        rotation_int: jointType === 'elbow' ? 70 : 35
       });
     } else if (type === 'severe') {
       onChange({
-        flexion_active: Math.round(maxFlexion * 0.6),
-        flexion_passive: Math.round(maxFlexion * 0.7),
+        flexion_active: Math.round(effectiveMaxFlexion * 0.6),
+        flexion_passive: Math.round(effectiveMaxFlexion * 0.7),
         extension_deficit: -15,
-        rotation_ext: 20,
-        rotation_int: 20
+        rotation_ext: jointType === 'elbow' ? 45 : 20,
+        rotation_int: jointType === 'elbow' ? 45 : 20
       });
     }
   };
@@ -108,19 +118,19 @@ export default function GoniometerInput({
             <Typography variant="caption" sx={{ fontWeight: 600, color: '#475569' }}>
               Активное сгибание
             </Typography>
-            <Typography variant="caption" sx={{ fontWeight: 700, color: values.flexion_active < maxFlexion - 20 ? '#EF4444' : '#0F3C64' }}>
+            <Typography variant="caption" sx={{ fontWeight: 700, color: values.flexion_active < effectiveMaxFlexion - 20 ? '#EF4444' : '#0F3C64' }}>
               {values.flexion_active}°
             </Typography>
           </Box>
           <Slider
             value={values.flexion_active || 0}
-            min={30}
-            max={maxFlexion}
+            min={jointType === 'ankle' ? 10 : 30}
+            max={effectiveMaxFlexion}
             step={5}
             onChange={(_, val) => onChange({ ...values, flexion_active: Number(val) })}
             valueLabelDisplay="auto"
             sx={{
-              color: values.flexion_active < maxFlexion - 20 ? '#EF4444' : '#0284C7',
+              color: values.flexion_active < effectiveMaxFlexion - 20 ? '#EF4444' : '#0284C7',
               height: 6
             }}
           />
@@ -138,8 +148,8 @@ export default function GoniometerInput({
           </Box>
           <Slider
             value={values.flexion_passive || 0}
-            min={30}
-            max={maxFlexion + 10}
+            min={jointType === 'ankle' ? 10 : 30}
+            max={effectiveMaxFlexion + 10}
             step={5}
             onChange={(_, val) => onChange({ ...values, flexion_passive: Number(val) })}
             valueLabelDisplay="auto"
@@ -175,26 +185,49 @@ export default function GoniometerInput({
         </Grid>
 
         {/* Rotation if applicable */}
-        {(jointType === 'shoulder' || jointType === 'hip') && (
-          <Grid size={{ xs: 12, sm: 6 }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-              <Typography variant="caption" sx={{ fontWeight: 600, color: '#475569' }}>
-                Наружная ротация
-              </Typography>
-              <Typography variant="caption" sx={{ fontWeight: 700, color: '#0F3C64' }}>
-                {values.rotation_ext || 0}°
-              </Typography>
-            </Box>
-            <Slider
-              value={values.rotation_ext || 0}
-              min={0}
-              max={90}
-              step={5}
-              onChange={(_, val) => onChange({ ...values, rotation_ext: Number(val) })}
-              valueLabelDisplay="auto"
-              sx={{ color: '#0284C7', height: 6 }}
-            />
-          </Grid>
+        {(jointType === 'shoulder' || jointType === 'hip' || jointType === 'elbow') && (
+          <>
+            <Grid size={{ xs: 12, sm: 6 }}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                <Typography variant="caption" sx={{ fontWeight: 600, color: '#475569' }}>
+                  {jointType === 'elbow' ? 'Супинация предплечья' : 'Наружная ротация'}
+                </Typography>
+                <Typography variant="caption" sx={{ fontWeight: 700, color: '#0F3C64' }}>
+                  {values.rotation_ext || 0}°
+                </Typography>
+              </Box>
+              <Slider
+                value={values.rotation_ext || 0}
+                min={0}
+                max={90}
+                step={5}
+                onChange={(_, val) => onChange({ ...values, rotation_ext: Number(val) })}
+                valueLabelDisplay="auto"
+                sx={{ color: '#0284C7', height: 6 }}
+              />
+            </Grid>
+            {jointType === 'elbow' && (
+              <Grid size={{ xs: 12, sm: 6 }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                  <Typography variant="caption" sx={{ fontWeight: 600, color: '#475569' }}>
+                    Пронация предплечья
+                  </Typography>
+                  <Typography variant="caption" sx={{ fontWeight: 700, color: '#0F3C64' }}>
+                    {values.rotation_int || 0}°
+                  </Typography>
+                </Box>
+                <Slider
+                  value={values.rotation_int || 0}
+                  min={0}
+                  max={90}
+                  step={5}
+                  onChange={(_, val) => onChange({ ...values, rotation_int: Number(val) })}
+                  valueLabelDisplay="auto"
+                  sx={{ color: '#0284C7', height: 6 }}
+                />
+              </Grid>
+            )}
+          </>
         )}
       </Grid>
     </Paper>

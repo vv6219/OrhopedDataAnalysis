@@ -43,6 +43,8 @@ import JointExamCard from '../components/ortho/JointExamCard';
 import type { JointExamState } from '../components/ortho/JointExamCard';
 import PatientMediaHub from '../components/ortho/PatientMediaHub';
 import type { MediaItem } from '../components/ortho/PatientMediaHub';
+import DiagnosticRecommendationsCard from '../components/ortho/DiagnosticRecommendationsCard';
+import ScienceIcon from '@mui/icons-material/Science';
 import OrthoProtocolPreview from '../components/ortho/OrthoProtocolPreview';
 import type { OrthoProtocolData, OrthoPrescriptionItem } from '../components/reports/OrthoProtocolPrintTemplate';
 import { parseProtocolContent } from '../utils/protocolXmlParser';
@@ -58,6 +60,12 @@ const COMMON_MKB10 = [
   { code: 'M23.2', name: 'Поражение мениска в результате старого разрыва или травмы' },
   { code: 'M75.1', name: 'Синдром сдавления ротатора плеча (импинджмент)' },
   { code: 'M75.2', name: 'Тендинит двуглавой мышцы плеча' },
+  { code: 'M77.1', name: 'Латеральный эпикондилит («локоть теннисиста»)' },
+  { code: 'M77.0', name: 'Медиальный эпикондилит («локоть гольфиста»)' },
+  { code: 'M70.2', name: 'Бурсит локтевого отростка (олекранона)' },
+  { code: 'M19.0', name: 'Первичный артроз других суставов (в т.ч. локтевого)' },
+  { code: 'G56.2', name: 'Поражение локтевого нерва (синдром кубитального канала)' },
+  { code: 'S53.4', name: 'Растяжение и перенапряжение связок локтевого сустава' },
   { code: 'M77.3', name: 'Пяточная шпора (плантарный фасциит)' },
   { code: 'M54.5', name: 'Боль внизу спины (люмбалгия)' },
   { code: 'M54.4', name: 'Люмбаго с ишиасом' },
@@ -124,6 +132,7 @@ export default function OrthoWorkstation() {
   );
   const [prescriptions, setPrescriptions] = useState<OrthoPrescriptionItem[]>([]);
   const [pendingService, setPendingService] = useState<any | null>(null);
+  const [activeTemplateDiagnostics, setActiveTemplateDiagnostics] = useState<any[]>([]);
 
   // E-Sign info
   const [isSigned, setIsSigned] = useState(false);
@@ -150,10 +159,43 @@ export default function OrthoWorkstation() {
     }
   };
 
+  // Complete reset of all 4 clinical exam cards & workstation state
+  const resetAllCardsState = () => {
+    setProtocolId(null);
+    setIsSigned(false);
+    setSignedAt(undefined);
+    setSignatureHash(undefined);
+    setComplaints('');
+    setAnamnesis('');
+    setVasScore(4);
+    setSelectedJoint('knee_r');
+    setJointExamsMap({
+      knee_r: {
+        jointArea: 'knee_r',
+        side: 'right',
+        axis: 'norm',
+        effusion: 0,
+        rom: { flexion_active: 140, flexion_passive: 140, extension_deficit: 0 },
+        tests: { lachman: 'negative', anterior_drawer: 'negative', mcmurray: 'negative' }
+      }
+    });
+    setSelectedMkb(null);
+    setClinicalDiagnosis('');
+    // Card 4: План лечения, манипуляции и назначенные услуги клиники
+    setRecommendations('1. Охранительный двигательный режим, исключение осевых ударных нагрузок.\n2. Ношение разгрузочного ортеза при ходьбе.\n3. Курс ЛФК и кинезиотерапии.');
+    setPendingService(null);
+    setPrescriptions([]);
+    setActiveTemplateDiagnostics([]);
+    setMediaList([]);
+    setBiomechanicsHistory([]);
+    setRightPanelTab(0);
+  };
+
   // Fetch Appointment & Patient Context
   const fetchContext = async () => {
     setLoading(true);
     setError(null);
+    resetAllCardsState();
     try {
       let url = `${API_BASE_URL}/api/ortho/context`;
       const qParams = new URLSearchParams();
@@ -188,8 +230,8 @@ export default function OrthoWorkstation() {
         const cp = data.currentProtocol;
         setProtocolId(cp.id);
         setIsSigned(cp.is_signed === 1);
-        setSignedAt(cp.signed_at);
-        setSignatureHash(cp.signature_hash);
+        setSignedAt(cp.signed_at || undefined);
+        setSignatureHash(cp.signature_hash || undefined);
 
         let parsedJson: any = null;
         if (cp.protocol_json) {
@@ -202,7 +244,7 @@ export default function OrthoWorkstation() {
 
         const parsedXml = parseProtocolContent(cp.content);
 
-        // Hydrate clinical narrative
+        // Card 1: Hydrate clinical narrative
         setComplaints(parsedJson?.complaints || parsedXml.complaints || cp.title || '');
         setAnamnesis(parsedJson?.anamnesis || parsedXml.anamnesis || '');
         setRecommendations(
@@ -212,6 +254,7 @@ export default function OrthoWorkstation() {
           '1. Охранительный двигательный режим, исключение осевых ударных нагрузок.\n2. Ношение разгрузочного ортеза при ходьбе.\n3. Курс ЛФК и кинезиотерапии.'
         );
 
+        // Card 2: Joint exam & Homunculus
         if (parsedJson) {
           if (parsedJson.vasScore !== undefined) setVasScore(parsedJson.vasScore);
           if (parsedJson.jointArea) setSelectedJoint(parsedJson.jointArea as JointAreaId);
@@ -233,8 +276,8 @@ export default function OrthoWorkstation() {
           setVasScore(cp.vas_score);
         }
 
-        // Hydrate prescriptions from parsedJson or fallback to backend currentPrescriptions (servplan / ortho_treatment_prescriptions)
-        if (parsedJson?.prescriptions && parsedJson.prescriptions.length > 0) {
+        // Card 4: Hydrate prescriptions from parsedJson or fallback to backend currentPrescriptions
+        if (parsedJson?.prescriptions && Array.isArray(parsedJson.prescriptions) && parsedJson.prescriptions.length > 0) {
           setPrescriptions(
             parsedJson.prescriptions.map((p: any, i: number) => ({
               id: p.id || `presc-${i}`,
@@ -250,7 +293,7 @@ export default function OrthoWorkstation() {
               details: typeof p.details_json === 'string' ? JSON.parse(p.details_json || '{}') : (p.details || {})
             }))
           );
-        } else if (data.currentPrescriptions && data.currentPrescriptions.length > 0) {
+        } else if (data.currentPrescriptions && Array.isArray(data.currentPrescriptions) && data.currentPrescriptions.length > 0) {
           setPrescriptions(
             data.currentPrescriptions.map((p: any) => ({
               id: `presc-${p.id}`,
@@ -266,18 +309,44 @@ export default function OrthoWorkstation() {
               details: typeof p.details_json === 'string' ? JSON.parse(p.details_json || '{}') : (p.details_json || {})
             }))
           );
+        } else {
+          setPrescriptions([]);
         }
 
-        // Diagnosis
+        // Card 3: Diagnosis
         const diagText = parsedJson?.clinicalDiagnosis || parsedXml.diagnosis || (parsedXml.isXml ? '' : cp.content) || '';
         setClinicalDiagnosis(diagText);
 
         const mkbCode = cp.mkb_code || parsedXml.mkb;
         if (mkbCode) {
           setSelectedMkb({ code: mkbCode, name: cp.mkb_name || '' });
+        } else {
+          setSelectedMkb(null);
         }
       } else {
-        // Default complaints for fresh exam
+        // Fresh exam initialization for new/switched patient without existing protocol
+        setProtocolId(null);
+        setIsSigned(false);
+        setSignedAt(undefined);
+        setSignatureHash(undefined);
+        setSelectedMkb(null);
+        setVasScore(4);
+        setSelectedJoint('knee_r');
+        setJointExamsMap({
+          knee_r: {
+            jointArea: 'knee_r',
+            side: 'right',
+            axis: 'norm',
+            effusion: 0,
+            rom: { flexion_active: 140, flexion_passive: 140, extension_deficit: 0 },
+            tests: { lachman: 'negative', anterior_drawer: 'negative', mcmurray: 'negative' }
+          }
+        });
+        // Card 4: Clean slate for prescriptions & recommendations
+        setRecommendations('1. Охранительный двигательный режим, исключение осевых ударных нагрузок.\n2. Ношение разгрузочного ортеза при ходьбе.\n3. Курс ЛФК и кинезиотерапии.');
+        setPendingService(null);
+        setPrescriptions([]);
+        // Narrative defaults
         setComplaints('Боль в правом коленном суставе при физической нагрузке и спуске по лестнице, стартовая скованность.');
         setAnamnesis('Считает себя больным около 6 месяцев. Связывает с повышенной нагрузкой. Ранее консервативно не лечился.');
         setClinicalDiagnosis('Первичный двусторонний гонартроз II стадии (Kellgren-Lawrence). Застарелое повреждение внутреннего мениска правого коленного сустава. Болевой синдром (ВАШ 4).');
@@ -294,18 +363,88 @@ export default function OrthoWorkstation() {
     fetchContext();
   }, [appointmentId, queryProtocolId, queryPatientId]);
 
+  // Helper to map template to accurate JointAreaId
+  const resolveJointArea = (jointName?: string, title?: string, content?: string): JointAreaId => {
+    if (jointName) {
+      const jn = String(jointName).toLowerCase().trim();
+      if (jn.endsWith('_r') || jn.endsWith('_l') || jn.endsWith('_c') || jn.endsWith('_th')) {
+        return jn as JointAreaId;
+      }
+      if (jn === 'elbow') return 'elbow_r';
+      if (jn === 'shoulder') return 'shoulder_r';
+      if (jn === 'hip') return 'hip_r';
+      if (jn === 'ankle' || jn === 'foot') return 'foot_r';
+      if (jn === 'wrist') return 'wrist_r';
+      if (jn === 'spine') return 'spine_l';
+      return `${jn}_r` as JointAreaId;
+    }
+    const text = ((title || '') + ' ' + (content || '')).toLowerCase();
+    if (/локт|эпикондил|олекранон/.test(text)) return 'elbow_r';
+    if (/колен|гонартроз|мениск|patell/.test(text)) return 'knee_r';
+    if (/плеч|акромион|ротатор/.test(text)) return 'shoulder_r';
+    if (/тазобедр|коксартроз|вертлуж/.test(text)) return 'hip_r';
+    if (/стоп|голеностоп|пятк|фасциит|ахилл/.test(text)) return 'foot_r';
+    if (/позвоноч|спин|люмбалг|диск|шеин|грудн/.test(text)) return 'spine_l';
+    if (/кист|лучезап|запяст|карпал/.test(text)) return 'wrist_r';
+    return 'knee_r';
+  };
+
   // Current Joint State
   const currentJointState: JointExamState = useMemo(() => {
-    return (
-      jointExamsMap[selectedJoint] || {
-        jointArea: selectedJoint,
-        side: selectedJoint.endsWith('_l') ? 'left' : 'right',
-        axis: 'norm',
-        effusion: 0,
-        rom: { flexion_active: 140, flexion_passive: 140, extension_deficit: 0 },
-        tests: {}
-      }
-    );
+    if (jointExamsMap[selectedJoint]) {
+      return jointExamsMap[selectedJoint];
+    }
+
+    const isElbow = selectedJoint.startsWith('elbow');
+    const isShoulder = selectedJoint.startsWith('shoulder');
+    const isHip = selectedJoint.startsWith('hip');
+    const isFoot = selectedJoint.startsWith('foot');
+    const isWrist = selectedJoint.startsWith('wrist');
+    const isSpine = selectedJoint.startsWith('spine');
+
+    let defaultRom = { flexion_active: 140, flexion_passive: 140, extension_deficit: 0 };
+    let defaultTests: Record<string, string> = {
+      lachman: 'negative',
+      anterior_drawer: 'negative',
+      mcmurray: 'negative',
+      patella_ballottement: 'negative'
+    };
+
+    if (isElbow) {
+      defaultRom = { flexion_active: 145, flexion_passive: 150, extension_deficit: 0 };
+      defaultTests = {
+        cozen: 'negative',
+        mill: 'negative',
+        golfer: 'negative',
+        tinel_cubital: 'negative',
+        valgus_stress_elbow: 'negative',
+        varus_stress_elbow: 'negative'
+      };
+    } else if (isShoulder) {
+      defaultRom = { flexion_active: 170, flexion_passive: 170, extension_deficit: 0 };
+      defaultTests = { neer: 'negative', hawkins: 'negative', empty_can_jobe: 'negative' };
+    } else if (isHip) {
+      defaultRom = { flexion_active: 120, flexion_passive: 125, extension_deficit: 0 };
+      defaultTests = { faber: 'negative', fadir: 'negative', thomas: 'negative', trendelenburg: 'negative' };
+    } else if (isWrist) {
+      defaultRom = { flexion_active: 75, flexion_passive: 80, extension_deficit: 0 };
+      defaultTests = { phalen: 'negative', tinel_wrist: 'negative', finkelstein: 'negative', piano_key: 'negative' };
+    } else if (isFoot) {
+      defaultRom = { flexion_active: 45, flexion_passive: 45, extension_deficit: 0 };
+      defaultTests = { windlass: 'negative', thompson: 'negative' };
+    } else if (isSpine) {
+      defaultRom = { flexion_active: 90, flexion_passive: 90, extension_deficit: 0 };
+      defaultTests = { lasegue: 'negative', adams: 'negative' };
+    }
+
+    return {
+      jointArea: selectedJoint,
+      side: selectedJoint.endsWith('_l') ? 'left' : 'right',
+      axis: 'norm',
+      effusion: 0,
+      rom: defaultRom,
+      tests: defaultTests
+    };
   }, [jointExamsMap, selectedJoint]);
 
   const handleJointExamChange = (newState: JointExamState) => {
@@ -327,8 +466,11 @@ export default function OrthoWorkstation() {
   }, [selectedJoint, vasScore, mediaList]);
 
   // Fast Clinical Template Fill (ortho_templates + protdict)
-  const handleApplyTemplate = (tmpl: any) => {
+  const handleApplyTemplate = async (tmpl: any) => {
     try {
+      const matchingArea = resolveJointArea(tmpl.joint_name, tmpl.title, tmpl.content);
+      setSelectedJoint(matchingArea);
+
       if (tmpl.source === 'protdict' || tmpl.content) {
         // CLINICAL PROTOCOL TEMPLATE (Firebird protdict)
         const parsed = parseProtocolContent(tmpl.content);
@@ -349,24 +491,33 @@ export default function OrthoWorkstation() {
           if (found) setSelectedMkb(found);
           else setSelectedMkb({ code: effectiveMkb, name: tmpl.title });
         }
-
-        if (tmpl.joint_name) {
-          const matchingArea: JointAreaId = (tmpl.joint_name + '_r') as JointAreaId;
-          setSelectedJoint(matchingArea);
-        }
+        setActiveTemplateDiagnostics([]);
       } else {
-        // BIOMECHANICS TEMPLATE (ortho_templates)
-        const parsed = typeof tmpl.template_json === 'string' ? JSON.parse(tmpl.template_json) : tmpl.template_json;
-        if (parsed.complaints) setComplaints(parsed.complaints);
-        if (parsed.anamnesis) setAnamnesis(parsed.anamnesis);
-        if (parsed.vas) setVasScore(parsed.vas);
-        if (tmpl.default_mkb_code) {
-          const found = COMMON_MKB10.find((m) => m.code === tmpl.default_mkb_code);
+        // BIOMECHANICS & KNOWLEDGE BASE 2.0 TEMPLATE (ortho_templates)
+        const parsed = typeof tmpl.template_json === 'string' ? JSON.parse(tmpl.template_json) : (tmpl.template_json || {});
+        
+        // Populate clinical fields (either from top-level columns or from template_json)
+        const complaintsText = tmpl.complaints_template || parsed.complaints;
+        if (complaintsText) setComplaints(complaintsText);
+
+        const anamnesisText = tmpl.anamnesis_template || parsed.anamnesis;
+        if (anamnesisText) setAnamnesis(anamnesisText);
+
+        if (parsed.vas !== undefined) setVasScore(parsed.vas);
+
+        const effectiveMkb = tmpl.default_mkb_code || parsed.default_mkb_code;
+        if (effectiveMkb) {
+          const found = COMMON_MKB10.find((m) => m.code === effectiveMkb);
           if (found) setSelectedMkb(found);
-          else setSelectedMkb({ code: tmpl.default_mkb_code, name: tmpl.title });
+          else setSelectedMkb({ code: effectiveMkb, name: tmpl.title });
         }
+        
         if (parsed.clinicalDiagnosis) setClinicalDiagnosis(parsed.clinicalDiagnosis);
-        if (parsed.recommendations) setRecommendations(parsed.recommendations);
+        else if (tmpl.title) setClinicalDiagnosis(tmpl.title);
+
+        const recsText = tmpl.recommendations_template || parsed.recommendations;
+        if (recsText) setRecommendations(recsText);
+
         if (parsed.prescriptions) {
           setPrescriptions(
             parsed.prescriptions.map((p: any, i: number) => ({
@@ -382,23 +533,53 @@ export default function OrthoWorkstation() {
             }))
           );
         }
-        if (tmpl.joint_name) {
-          const matchingArea: JointAreaId = (tmpl.joint_name + '_r') as JointAreaId;
-          setSelectedJoint(matchingArea);
-          if (parsed.rom || parsed.tests) {
-            setJointExamsMap((prev) => ({
-              ...prev,
-              [matchingArea]: {
-                jointArea: matchingArea,
-                side: 'right',
-                axis: parsed.axis || 'norm',
-                effusion: parsed.effusion || 0,
-                rom: parsed.rom || { flexion_active: 140, flexion_passive: 140, extension_deficit: 0 },
-                tests: parsed.tests || {}
+
+        let examRom = parsed.rom || { flexion_active: 140, flexion_passive: 140, extension_deficit: 0 };
+        let examTests = parsed.tests || {};
+
+        // Fetch deep relational diagnostics and tests from Knowledge Base 2.0 API
+        if (tmpl.rawId) {
+          try {
+            const fullRes = await fetch(`${API_BASE_URL}/api/ortho/templates/${tmpl.rawId}/full`);
+            if (fullRes.ok) {
+              const fullData = await fullRes.json();
+              if (fullData.success && fullData.template) {
+                const t = fullData.template;
+                if (t.complaints_template) setComplaints(t.complaints_template);
+                if (t.anamnesis_template) setAnamnesis(t.anamnesis_template);
+                if (t.recommendations_template) setRecommendations(t.recommendations_template);
+
+                if (Array.isArray(t.diagnosticMethods)) {
+                  setActiveTemplateDiagnostics(t.diagnosticMethods);
+                }
+
+                if (Array.isArray(t.tests) && t.tests.length > 0) {
+                  const testsFromDb: Record<string, string> = { ...examTests };
+                  t.tests.forEach((testRel: any) => {
+                    if (testRel.test_code) {
+                      testsFromDb[testRel.test_code] = testRel.expected_result || 'positive';
+                    }
+                  });
+                  examTests = testsFromDb;
+                }
               }
-            }));
+            }
+          } catch (err) {
+            console.error('Error fetching full template relations:', err);
           }
         }
+
+        setJointExamsMap((prev) => ({
+          ...prev,
+          [matchingArea]: {
+            jointArea: matchingArea,
+            side: matchingArea.endsWith('_l') ? 'left' : 'right',
+            axis: parsed.axis || 'norm',
+            effusion: parsed.effusion || 0,
+            rom: examRom,
+            tests: examTests
+          }
+        }));
       }
       setToastMessage(`Шаблон «${tmpl.title}» успешно применён`);
     } catch (e: any) {
@@ -447,7 +628,7 @@ export default function OrthoWorkstation() {
     return {
       protocolNumber: protocolId || `DRAFT-${appt.id || 'NEW'}`,
       visitDate: appt.appointment_date || new Date().toISOString(),
-      doctorName: appt.doctor_name || 'Добрушкин В.И.',
+      doctorName: appt.doctor_name || contextData?.doctor?.full_name || 'Добрушкин Александр Моисеевич',
       patient: {
         id: pt.id,
         fullName: pt.full_name || 'Пациент не выбран',
@@ -576,11 +757,11 @@ export default function OrthoWorkstation() {
     try {
       setSaving(true);
       let currentProtocolId = protocolId;
-      if (!isSigned) {
-        const savedId = await handleSaveProtocol('draft');
-        if (savedId) {
-          currentProtocolId = savedId;
-        }
+      // Always save current protocol state & prescriptions to DB so database protocol matches cashier calculation
+      const saveStatus = isSigned ? 'signed' : 'draft';
+      const savedId = await handleSaveProtocol(saveStatus);
+      if (savedId) {
+        currentProtocolId = savedId;
       }
 
       const targetPt = contextData?.patient;
@@ -719,7 +900,7 @@ export default function OrthoWorkstation() {
               <span>Дата рожд.: <b>{patient.bdate || '—'}</b> ({patient.age || '—'} лет)</span>
               <span>Пол: <b>{patient.sex === 1 ? 'М' : patient.sex === 2 ? 'Ж' : '—'}</b></span>
               <span>Тел: <b>{patient.sphone || patient.phone || '—'}</b></span>
-              <span>Врач: <b>{appointment.doctor_name || 'Добрушкин В.И.'}</b></span>
+              <span>Врач: <b>{appointment.doctor_name || contextData?.doctor?.full_name || 'Добрушкин Александр Моисеевич'}</b></span>
             </Typography>
           </Box>
         </Box>
@@ -731,10 +912,13 @@ export default function OrthoWorkstation() {
             sx={{ width: 240 }}
             options={patientSearchOptions}
             loading={patientSearchLoading}
+            value={null}
             getOptionLabel={(p) => (typeof p === 'string' ? p : `${p.full_name || ''} ${p.bdate ? `(${p.bdate})` : ''} ${p.mednum ? `[#${p.mednum}]` : ''}`)}
             onInputChange={(_, val) => handleSearchPatients(val)}
             onChange={(_, selectedPatient) => {
               if (selectedPatient?.id) {
+                resetAllCardsState();
+                setToastMessage(`Смена пациента: ${selectedPatient.full_name || 'Пациент'}...`);
                 navigate(`/ortho-workstation?patientId=${selectedPatient.id}`);
               }
             }}
@@ -765,12 +949,30 @@ export default function OrthoWorkstation() {
             />
           )}
 
+          <Tooltip title="Открыть Справочник клинических шаблонов 2.0 (CRUD, ортопедические тесты, методы диагностики)">
+            <Button
+              variant="outlined"
+              size="small"
+              startIcon={<ScienceIcon />}
+              onClick={() => navigate('/ortho-templates-manager')}
+              sx={{
+                fontWeight: 700,
+                borderColor: '#0284C7',
+                color: '#0284C7',
+                whiteSpace: 'nowrap',
+                '&:hover': { bgcolor: '#F0F9FF', borderColor: '#0369A1' }
+              }}
+            >
+              Шаблоны 2.0
+            </Button>
+          </Tooltip>
+
           <Button
             variant="outlined"
             size="small"
             startIcon={<SaveIcon />}
             onClick={() => handleSaveProtocol('draft')}
-            disabled={saving || isSigned}
+            disabled={saving}
             sx={{ fontWeight: 700 }}
           >
             Черновик
@@ -781,10 +983,10 @@ export default function OrthoWorkstation() {
             size="small"
             startIcon={<LockIcon />}
             onClick={() => handleSaveProtocol('signed')}
-            disabled={saving || isSigned}
+            disabled={saving}
             sx={{ bgcolor: '#0284C7', '&:hover': { bgcolor: '#0369A1' }, fontWeight: 700 }}
           >
-            Подписать (ЭЦП)
+            {isSigned ? 'Обновить (ЭЦП)' : 'Подписать (ЭЦП)'}
           </Button>
 
           <Button
@@ -901,6 +1103,55 @@ export default function OrthoWorkstation() {
             />
           </Box>
 
+          {/* DIAGNOSTIC RECOMMENDATIONS CARD (Methods, X-Ray, MRI, US, Labs with 1-click add to prescriptions) */}
+          <Box sx={{ mb: 2 }}>
+            <DiagnosticRecommendationsCard
+              jointCategory={selectedJoint.split('_')[0] === 'foot' ? 'ankle' : selectedJoint.split('_')[0]}
+              templateDiagnostics={activeTemplateDiagnostics}
+              existingPrescriptions={prescriptions.map((p) => ({
+                title: p.name || (p as any).title || '',
+                service_id: (p as any).serviceId || (p as any).service_id,
+                unit_price: Number(p.price ?? (p as any).unitPrice ?? (p as any).unit_price ?? 0)
+              }))}
+              onAddPrescription={(newPresc) => {
+                const exists = prescriptions.find((p) => (p.name || (p as any).title) === newPresc.title);
+                if (exists) {
+                  setPrescriptions((prev) =>
+                    prev.map((p) =>
+                      (p.name || (p as any).title) === newPresc.title
+                        ? { ...p, quantity: (p.quantity || 1) + 1 }
+                        : p
+                    )
+                  );
+                } else {
+                  setPrescriptions((prev) => [
+                    ...prev,
+                    {
+                      id: `serv-${newPresc.service_id || Date.now()}`,
+                      code: '',
+                      serviceCode: '',
+                      name: newPresc.title,
+                      title: newPresc.title,
+                      category: newPresc.category || 'Диагностика',
+                      quantity: newPresc.quantity || 1,
+                      price: newPresc.unit_price,
+                      unitPrice: newPresc.unit_price,
+                      serviceId: newPresc.service_id
+                    }
+                  ]);
+                }
+                setToastMessage(`Добавлено в назначения: ${newPresc.title} (${newPresc.unit_price} ₽)`);
+              }}
+              onAppendRecommendationText={(phrase) => {
+                setRecommendations((prev) => {
+                  if (prev.includes(phrase)) return prev;
+                  return prev ? `${prev}\n- ${phrase}` : `- ${phrase}`;
+                });
+                setToastMessage('Рекомендация добавлена в текст плана лечения');
+              }}
+            />
+          </Box>
+
           {/* 4. DIAGNOSIS (ICD-10 + EXPANDED CLINICAL) */}
           <Paper sx={{ p: 2, mb: 2, borderRadius: 2 }}>
             <Typography variant="subtitle2" sx={{ fontWeight: 800, color: '#0F3C64', mb: 1.5 }}>
@@ -914,7 +1165,25 @@ export default function OrthoWorkstation() {
                   options={COMMON_MKB10}
                   getOptionLabel={(o) => `${o.code} — ${o.name}`}
                   value={selectedMkb}
-                  onChange={(_, val) => setSelectedMkb(val)}
+                  onChange={(_, val) => {
+                    setSelectedMkb(val);
+                    if (val) {
+                      const code = val.code;
+                      if (code.startsWith('M77.1') || code.startsWith('M77.0') || code.startsWith('M70.2') || code.startsWith('G56.2') || code.startsWith('S53')) {
+                        setSelectedJoint((prev) => (prev.startsWith('elbow') ? prev : 'elbow_r'));
+                      } else if (code.startsWith('M17') || code.startsWith('M23') || code.startsWith('S83')) {
+                        setSelectedJoint((prev) => (prev.startsWith('knee') ? prev : 'knee_r'));
+                      } else if (code.startsWith('M75')) {
+                        setSelectedJoint((prev) => (prev.startsWith('shoulder') ? prev : 'shoulder_r'));
+                      } else if (code.startsWith('M16')) {
+                        setSelectedJoint((prev) => (prev.startsWith('hip') ? prev : 'hip_r'));
+                      } else if (code.startsWith('M77.3') || code.startsWith('M20.1')) {
+                        setSelectedJoint((prev) => (prev.startsWith('foot') ? prev : 'foot_r'));
+                      } else if (code.startsWith('M54')) {
+                        setSelectedJoint((prev) => (prev.startsWith('spine') ? prev : 'spine_l'));
+                      }
+                    }
+                  }}
                   renderInput={(params) => <TextField {...params} label="Код по МКБ-10" />}
                 />
               </Grid>
