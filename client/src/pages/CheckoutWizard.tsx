@@ -428,7 +428,7 @@ export default function CheckoutWizard() {
           : null;
 
         if (candidateItems && candidateItems.length > 0) {
-          const normalize = (s: string) => (s || '').toLowerCase().replace(/[\s\(\)\-_.,\/]/g, '');
+          const normalize = (s: string) => (s || '').toLowerCase().replace(/[\s(\)\-_.,/]/g, '');
           const mapped = candidateItems.map((it: any, i: number) => {
             const itemPrice = Number(it.price ?? it.unitPrice ?? it.unit_price ?? 0);
             const itemQty = Number(it.quantity || 1);
@@ -745,12 +745,12 @@ export default function CheckoutWizard() {
         .map(v => String(v).toLowerCase());
 
       const combinedText = fieldValues.join(' ');
-      const punctuationFreeText = combinedText.replace(/[\[\]_\\-]/g, ' ');
+      const punctuationFreeText = combinedText.replace(/[[\]_\\-]/g, ' ');
 
       return normalizedTokens.every((token) => {
         if (fieldValues.some(f => f.includes(token))) return true;
         if (combinedText.includes(token)) return true;
-        const cleanTok = token.replace(/[\[\]_\\-]/g, ' ').trim();
+        const cleanTok = token.replace(/[[\]_\\-]/g, ' ').trim();
         if (cleanTok && punctuationFreeText.includes(cleanTok)) return true;
         const noPunctTok = token.replace(/[^a-z0-9а-яё]/gi, '');
         const noPunctCombined = combinedText.replace(/[^a-z0-9а-яё]/gi, '');

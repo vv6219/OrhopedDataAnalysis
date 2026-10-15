@@ -22,7 +22,15 @@ import {
   TableCell,
   TableContainer,
   TableHead,
-  TableRow
+  TableRow,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Divider,
+  InputAdornment,
+  Card,
+  CardActionArea
 } from '@mui/material';
 import MedicalServicesIcon from '@mui/icons-material/MedicalServices';
 import SaveIcon from '@mui/icons-material/Save';
@@ -36,8 +44,14 @@ import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
+import PersonSearchIcon from '@mui/icons-material/PersonSearch';
+import PersonIcon from '@mui/icons-material/Person';
+import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
+import AssignmentIcon from '@mui/icons-material/Assignment';
+import SearchIcon from '@mui/icons-material/Search';
+import LayersIcon from '@mui/icons-material/Layers';
 import { API_BASE_URL } from '../config/apiConfig';
-import BodyHomunculus from '../components/ortho/BodyHomunculus';
+import BodyHomunculus, { JOINT_TO_CLUSTER } from '../components/ortho/BodyHomunculus';
 import type { JointAreaId, JointExamSummary } from '../components/ortho/BodyHomunculus';
 import JointExamCard from '../components/ortho/JointExamCard';
 import type { JointExamState } from '../components/ortho/JointExamCard';
@@ -48,6 +62,29 @@ import ScienceIcon from '@mui/icons-material/Science';
 import OrthoProtocolPreview from '../components/ortho/OrthoProtocolPreview';
 import type { OrthoProtocolData, OrthoPrescriptionItem } from '../components/reports/OrthoProtocolPrintTemplate';
 import { parseProtocolContent } from '../utils/protocolXmlParser';
+
+export interface MasterCluster {
+  id: string;
+  code: string;
+  name_ru: string;
+  joint_affinity: string;
+  badge_color: string;
+  sort_order: number;
+}
+
+export const MASTER_CLUSTERS: MasterCluster[] = [
+  { id: 'all', code: 'ALL', name_ru: 'Все кластеры (100)', joint_affinity: 'all', badge_color: '#0F3C64', sort_order: 0 },
+  { id: 'cluster_knee', code: 'KNEE', name_ru: '1. Коленный сустав', joint_affinity: 'knee', badge_color: '#0284C7', sort_order: 10 },
+  { id: 'cluster_shoulder', code: 'SHOULDER', name_ru: '2. Плечевой пояс', joint_affinity: 'shoulder', badge_color: '#9333EA', sort_order: 20 },
+  { id: 'cluster_hip_pelvis', code: 'HIP_PELVIS', name_ru: '3. Таз и ТБС', joint_affinity: 'hip', badge_color: '#16A34A', sort_order: 30 },
+  { id: 'cluster_foot_ankle', code: 'FOOT_ANKLE', name_ru: '4. Стопа и голеностоп', joint_affinity: 'ankle', badge_color: '#0D9488', sort_order: 40 },
+  { id: 'cluster_elbow', code: 'ELBOW', name_ru: '5. Локтевой сустав', joint_affinity: 'elbow', badge_color: '#EA580C', sort_order: 50 },
+  { id: 'cluster_wrist_hand', code: 'WRIST_HAND', name_ru: '6. Кисть и запястье', joint_affinity: 'wrist', badge_color: '#DB2777', sort_order: 60 },
+  { id: 'cluster_spine', code: 'SPINE', name_ru: '7. Позвоночник и торакс', joint_affinity: 'spine', badge_color: '#475569', sort_order: 70 },
+  { id: 'cluster_pediatric', code: 'PEDIATRIC', name_ru: '8. Детская ортопедия', joint_affinity: 'general', badge_color: '#D97706', sort_order: 80 },
+  { id: 'cluster_systemic', code: 'SYSTEMIC', name_ru: '9. Системные синдромы', joint_affinity: 'general', badge_color: '#4F46E5', sort_order: 90 },
+  { id: 'cluster_postop', code: 'POSTOP', name_ru: '10. Постоперационные протоколы', joint_affinity: 'general', badge_color: '#059669', sort_order: 100 }
+];
 
 // Common ICD-10 Orthopedic options for quick autocomplete
 const COMMON_MKB10 = [
@@ -139,6 +176,13 @@ export default function OrthoWorkstation() {
   const [signedAt, setSignedAt] = useState<string | undefined>(undefined);
   const [signatureHash, setSignatureHash] = useState<string | undefined>(undefined);
 
+  // Flow State: 2-level cluster & protocol selection
+  const [selectedClusterId, setSelectedClusterId] = useState<string | null>('all');
+  const [protocolDialogOpen, setProtocolDialogOpen] = useState(false);
+  const [patientDialogOpen, setPatientDialogOpen] = useState(false);
+  const [protocolSearchQuery, setProtocolSearchQuery] = useState('');
+  const [currentSelectedTemplate, setCurrentSelectedTemplate] = useState<any | null>(null);
+
   // Fast Patient Autocomplete search
   const handleSearchPatients = async (query: string) => {
     if (!query || query.trim().length < 2) {
@@ -189,6 +233,7 @@ export default function OrthoWorkstation() {
     setMediaList([]);
     setBiomechanicsHistory([]);
     setRightPanelTab(0);
+    setCurrentSelectedTemplate(null);
   };
 
   // Fetch Appointment & Patient Context
@@ -202,11 +247,14 @@ export default function OrthoWorkstation() {
       if (queryProtocolId) qParams.append('protocolId', queryProtocolId);
       if (queryPatientId) qParams.append('patientId', queryPatientId);
 
+      const hasDirectTarget = (appointmentId && appointmentId !== 'new') || Boolean(queryPatientId) || Boolean(queryProtocolId);
+
       if (appointmentId && appointmentId !== 'new') {
         url = `${API_BASE_URL}/api/ortho/context/${appointmentId}`;
       } else if (qParams.toString()) {
         url = `${API_BASE_URL}/api/ortho/context?${qParams.toString()}`;
       } else {
+        // CLEAN SLATE MODE: If user entered /ortho-workstation without patient key, load catalogs without sample patient
         url = `${API_BASE_URL}/api/ortho/context/2`;
       }
 
@@ -219,7 +267,18 @@ export default function OrthoWorkstation() {
         throw new Error(data.error || 'Не удалось получить данные приема');
       }
 
-      setContextData(data);
+      // If entered cleanly without a patient key, set patient to null so doctor chooses patient first
+      if (!hasDirectTarget) {
+        setContextData({
+          ...data,
+          patient: null,
+          appointment: null,
+          currentProtocol: null
+        });
+      } else {
+        setContextData(data);
+      }
+
       setTemplates(data.templates || []);
       setServicesCatalog(data.services || data.servicesList || []);
       setMediaList(data.mediaAttachments || []);
@@ -388,6 +447,49 @@ export default function OrthoWorkstation() {
     if (/кист|лучезап|запяст|карпал/.test(text)) return 'wrist_r';
     return 'knee_r';
   };
+
+  // Filter templates by selected cluster and search query
+  const filteredTemplates = useMemo(() => {
+    return templates.filter((tmpl) => {
+      // 1. Cluster filter
+      if (selectedClusterId && selectedClusterId !== 'all') {
+        const clusterCode = selectedClusterId.replace('cluster_', '').toUpperCase();
+        const tmplCluster = String(tmpl.cluster_id || tmpl.cluster || tmpl.category || '').toUpperCase();
+        const tmplJoint = String(tmpl.joint_name || '').toLowerCase();
+        
+        let match = false;
+        if (tmpl.cluster_id === selectedClusterId) {
+          match = true;
+        } else if (tmplCluster.includes(clusterCode)) {
+          match = true;
+        } else {
+          // Fallback to joint name check
+          if (selectedClusterId === 'cluster_knee' && /колен|гонартроз|мениск|patell/.test(tmplJoint + ' ' + tmpl.title)) match = true;
+          if (selectedClusterId === 'cluster_shoulder' && /плеч|акромион|ротатор/.test(tmplJoint + ' ' + tmpl.title)) match = true;
+          if (selectedClusterId === 'cluster_hip_pelvis' && /тазобедр|коксартроз|вертлуж/.test(tmplJoint + ' ' + tmpl.title)) match = true;
+          if (selectedClusterId === 'cluster_foot_ankle' && /стоп|голеностоп|пятк|фасциит|ахилл/.test(tmplJoint + ' ' + tmpl.title)) match = true;
+          if (selectedClusterId === 'cluster_elbow' && /локт|эпикондил|олекранон/.test(tmplJoint + ' ' + tmpl.title)) match = true;
+          if (selectedClusterId === 'cluster_wrist_hand' && /кист|лучезап|запяст|карпал/.test(tmplJoint + ' ' + tmpl.title)) match = true;
+          if (selectedClusterId === 'cluster_spine' && /позвоноч|спин|люмбалг|диск|шеин|грудн/.test(tmplJoint + ' ' + tmpl.title)) match = true;
+          if (selectedClusterId === 'cluster_pediatric' && /детск|врожден|дисплаз/.test(tmpl.title)) match = true;
+          if (selectedClusterId === 'cluster_systemic' && /систем|ревмат|остеопороз/.test(tmpl.title)) match = true;
+          if (selectedClusterId === 'cluster_postop' && /постоперац|реабилитац|эндопротез/.test(tmpl.title)) match = true;
+        }
+        if (!match) return false;
+      }
+
+      // 2. Search query filter
+      if (protocolSearchQuery.trim()) {
+        const q = protocolSearchQuery.toLowerCase();
+        const titleMatch = (tmpl.title || '').toLowerCase().includes(q);
+        const codeMatch = (tmpl.default_mkb_code || tmpl.mkb_code || '').toLowerCase().includes(q);
+        const jointMatch = (tmpl.joint_name || '').toLowerCase().includes(q);
+        return titleMatch || codeMatch || jointMatch;
+      }
+
+      return true;
+    });
+  }, [templates, selectedClusterId, protocolSearchQuery]);
 
   // Current Joint State
   const currentJointState: JointExamState = useMemo(() => {
@@ -581,6 +683,8 @@ export default function OrthoWorkstation() {
           }
         }));
       }
+      setCurrentSelectedTemplate(tmpl);
+      setProtocolDialogOpen(false);
       setToastMessage(`Шаблон «${tmpl.title}» успешно применён`);
     } catch (e: any) {
       console.error('Error applying template:', e);
@@ -878,14 +982,70 @@ export default function OrthoWorkstation() {
           </Tooltip>
           <Box>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-              <Typography variant="h6" sx={{ fontWeight: 800, color: '#0F3C64', fontSize: '1.15rem' }}>
-                {patient.full_name || 'Иванов Иван Иванович'}
-              </Typography>
-              <Chip
-                label={`№ карты: ${patient.mednum || 'б/н'}`}
-                size="small"
-                sx={{ bgcolor: '#E2E8F0', fontWeight: 700, fontSize: '0.75rem' }}
-              />
+              {contextData?.patient?.id ? (
+                <>
+                  <Typography variant="h6" sx={{ fontWeight: 800, color: '#0F3C64', fontSize: '1.15rem' }}>
+                    {patient.full_name || 'Пациент'}
+                  </Typography>
+                  <Chip
+                    label={`№ карты: ${patient.mednum || 'б/н'}`}
+                    size="small"
+                    sx={{ bgcolor: '#E2E8F0', fontWeight: 700, fontSize: '0.75rem' }}
+                  />
+                  <Button
+                    size="small"
+                    variant="text"
+                    startIcon={<SwapHorizIcon sx={{ fontSize: 16 }} />}
+                    onClick={() => setPatientDialogOpen(true)}
+                    sx={{ textTransform: 'none', fontWeight: 700, color: '#0284C7', py: 0, px: 0.8 }}
+                  >
+                    Сменить
+                  </Button>
+                </>
+              ) : (
+                <Button
+                  variant="contained"
+                  color="warning"
+                  size="small"
+                  startIcon={<PersonSearchIcon />}
+                  onClick={() => setPatientDialogOpen(true)}
+                  sx={{ fontWeight: 800, textTransform: 'none', px: 2 }}
+                >
+                  ⚠️ Пациент не выбран — Нажмите для выбора
+                </Button>
+              )}
+
+              {/* Protocol status badge & changer */}
+              {currentSelectedTemplate ? (
+                <Chip
+                  icon={<AssignmentIcon sx={{ fontSize: 15 }} />}
+                  label={`Протокол: ${currentSelectedTemplate.title}`}
+                  color="primary"
+                  variant="outlined"
+                  size="small"
+                  onClick={() => setProtocolDialogOpen(true)}
+                  onDelete={() => setProtocolDialogOpen(true)}
+                  deleteIcon={<SwapHorizIcon />}
+                  sx={{ fontWeight: 700, cursor: 'pointer', maxWidth: 280 }}
+                />
+              ) : (
+                <Button
+                  size="small"
+                  variant="outlined"
+                  startIcon={<LayersIcon sx={{ fontSize: 16 }} />}
+                  onClick={() => setProtocolDialogOpen(true)}
+                  sx={{
+                    textTransform: 'none',
+                    fontWeight: 700,
+                    borderColor: '#CBD5E1',
+                    color: '#475569',
+                    fontSize: '0.78rem'
+                  }}
+                >
+                  Выбрать протокол (2 уровня)
+                </Button>
+              )}
+
               {isSigned && (
                 <Chip
                   icon={<CheckCircleIcon sx={{ fontSize: 16 }} />}
@@ -897,9 +1057,15 @@ export default function OrthoWorkstation() {
               )}
             </Box>
             <Typography variant="caption" sx={{ color: '#64748B', display: 'flex', gap: 2, mt: 0.2 }}>
-              <span>Дата рожд.: <b>{patient.bdate || '—'}</b> ({patient.age || '—'} лет)</span>
-              <span>Пол: <b>{patient.sex === 1 ? 'М' : patient.sex === 2 ? 'Ж' : '—'}</b></span>
-              <span>Тел: <b>{patient.sphone || patient.phone || '—'}</b></span>
+              {contextData?.patient?.id ? (
+                <>
+                  <span>Дата рожд.: <b>{patient.bdate || '—'}</b> ({patient.age || '—'} лет)</span>
+                  <span>Пол: <b>{patient.sex === 1 ? 'М' : patient.sex === 2 ? 'Ж' : '—'}</b></span>
+                  <span>Тел: <b>{patient.sphone || patient.phone || '—'}</b></span>
+                </>
+              ) : (
+                <span style={{ color: '#D97706', fontWeight: 600 }}>Новый визит: выберите пациента и клинический протокол для автоматического заполнения.</span>
+              )}
               <span>Врач: <b>{appointment.doctor_name || contextData?.doctor?.full_name || 'Добрушкин Александр Моисеевич'}</b></span>
             </Typography>
           </Box>
@@ -907,47 +1073,21 @@ export default function OrthoWorkstation() {
 
         {/* PATIENT SEARCH, FAST CLINICAL TEMPLATES & ACTION BUTTONS */}
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <Autocomplete
+          <Button
+            variant="outlined"
             size="small"
-            sx={{ width: 240 }}
-            options={patientSearchOptions}
-            loading={patientSearchLoading}
-            value={null}
-            getOptionLabel={(p) => (typeof p === 'string' ? p : `${p.full_name || ''} ${p.bdate ? `(${p.bdate})` : ''} ${p.mednum ? `[#${p.mednum}]` : ''}`)}
-            onInputChange={(_, val) => handleSearchPatients(val)}
-            onChange={(_, selectedPatient) => {
-              if (selectedPatient?.id) {
-                resetAllCardsState();
-                setToastMessage(`Смена пациента: ${selectedPatient.full_name || 'Пациент'}...`);
-                navigate(`/ortho-workstation?patientId=${selectedPatient.id}`);
-              }
+            startIcon={<LayersIcon />}
+            onClick={() => setProtocolDialogOpen(true)}
+            sx={{
+              fontWeight: 700,
+              borderColor: '#0284C7',
+              color: '#0284C7',
+              whiteSpace: 'nowrap',
+              textTransform: 'none'
             }}
-            noOptionsText="Введите ФИО или № карты"
-            renderInput={(params) => (
-              <TextField
-                {...params}
-                placeholder="🔍 Сменить пациента..."
-                size="small"
-              />
-            )}
-          />
-
-          {templates.length > 0 && (
-            <Autocomplete
-              size="small"
-              options={templates}
-              groupBy={(option) => option.category || 'Шаблоны'}
-              getOptionLabel={(t) => t.title}
-              onChange={(_, val) => val && handleApplyTemplate(val)}
-              renderInput={(params) => (
-                <TextField
-                  {...params}
-                  placeholder="Быстрый шаблон (F4)..."
-                  sx={{ width: 260 }}
-                />
-              )}
-            />
-          )}
+          >
+            Справочник протоколов (100)
+          </Button>
 
           <Tooltip title="Открыть Справочник клинических шаблонов 2.0 (CRUD, ортопедические тесты, методы диагностики)">
             <Button
@@ -957,13 +1097,14 @@ export default function OrthoWorkstation() {
               onClick={() => navigate('/ortho-templates-manager')}
               sx={{
                 fontWeight: 700,
-                borderColor: '#0284C7',
-                color: '#0284C7',
+                borderColor: '#64748B',
+                color: '#64748B',
                 whiteSpace: 'nowrap',
-                '&:hover': { bgcolor: '#F0F9FF', borderColor: '#0369A1' }
+                textTransform: 'none',
+                '&:hover': { bgcolor: '#F8FAFC' }
               }}
             >
-              Шаблоны 2.0
+              Конструктор 2.0
             </Button>
           </Tooltip>
 
@@ -1074,14 +1215,53 @@ export default function OrthoWorkstation() {
 
           {/* 2. 2D HOMUNCULUS & ANATOMICAL SELECTION */}
           <Paper sx={{ p: 2, mb: 2, borderRadius: 2 }}>
-            <Typography variant="subtitle2" sx={{ fontWeight: 800, color: '#0F3C64', mb: 1.5 }}>
-              2. Анатомическая карта (2D Гомункулус)
-            </Typography>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.5 }}>
+              <Typography variant="subtitle2" sx={{ fontWeight: 800, color: '#0F3C64' }}>
+                2. Анатомическая карта (2D Гомункулус)
+              </Typography>
+              <Button
+                size="small"
+                variant="outlined"
+                startIcon={<AssignmentIcon sx={{ fontSize: 16 }} />}
+                onClick={() => {
+                  if (selectedJoint && JOINT_TO_CLUSTER[selectedJoint]) {
+                    setSelectedClusterId(JOINT_TO_CLUSTER[selectedJoint].clusterId);
+                  }
+                  setProtocolDialogOpen(true);
+                }}
+                sx={{
+                  fontSize: '0.75rem',
+                  fontWeight: 700,
+                  borderColor: '#0284C7',
+                  color: '#0284C7',
+                  textTransform: 'none'
+                }}
+              >
+                Протоколы кластера ({filteredTemplates.length})
+              </Button>
+            </Box>
 
             <BodyHomunculus
               selectedJoint={selectedJoint}
               onSelectJoint={(j) => setSelectedJoint(j)}
               examData={homunculusExamSummary}
+              selectedClusterId={selectedClusterId}
+              onSelectCluster={(clusterId, side) => {
+                setSelectedClusterId(clusterId);
+                if (side && side !== 'axial') {
+                  setJointExamsMap((prev) => {
+                    const cur = prev[selectedJoint] || currentJointState;
+                    return {
+                      ...prev,
+                      [selectedJoint]: {
+                        ...cur,
+                        side
+                      }
+                    };
+                  });
+                }
+              }}
+              showClusterQuickFilters={true}
             />
           </Paper>
 
@@ -1379,6 +1559,230 @@ export default function OrthoWorkstation() {
         onClose={() => setToastMessage(null)}
         message={toastMessage}
       />
+
+      {/* 1. PATIENT SELECTION DIALOG */}
+      <Dialog
+        open={patientDialogOpen}
+        onClose={() => setPatientDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle sx={{ fontWeight: 800, color: '#0F3C64', display: 'flex', alignItems: 'center', gap: 1 }}>
+          <PersonSearchIcon /> Выбор пациента для приема
+        </DialogTitle>
+        <DialogContent dividers>
+          <Typography variant="body2" sx={{ color: '#64748B', mb: 2 }}>
+            Найдите пациента по ФИО, номеру карты или телефону, чтобы загрузить его историю и привязать новый протокол:
+          </Typography>
+
+          <Autocomplete
+            fullWidth
+            options={patientSearchOptions}
+            loading={patientSearchLoading}
+            getOptionLabel={(p) => (typeof p === 'string' ? p : `${p.full_name || ''} ${p.bdate ? `(${p.bdate})` : ''} ${p.mednum ? `[№ карты: ${p.mednum}]` : ''}`)}
+            onInputChange={(_, val) => handleSearchPatients(val)}
+            onChange={(_, selectedPatient) => {
+              if (selectedPatient?.id) {
+                resetAllCardsState();
+                setPatientDialogOpen(false);
+                setToastMessage(`Пациент ${selectedPatient.full_name || ''} выбран!`);
+                navigate(`/ortho-workstation?patientId=${selectedPatient.id}`);
+              }
+            }}
+            noOptionsText="Введите минимум 2 буквы для поиска"
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                label="Поиск пациента (ФИО / № карты / телефон)"
+                autoFocus
+                placeholder="Например: Иванов..."
+                slotProps={{
+                  ...params.slotProps,
+                  input: {
+                    ...params.slotProps?.input,
+                    startAdornment: (
+                      <>
+                        <InputAdornment position="start">
+                          <PersonIcon color="action" />
+                        </InputAdornment>
+                        {params.slotProps?.input?.startAdornment}
+                      </>
+                    )
+                  }
+                }}
+              />
+            )}
+          />
+
+          {contextData?.patient?.id && (
+            <Alert severity="info" sx={{ mt: 2 }}>
+              Текущий активный пациент: <b>{patient.full_name}</b> (№ карты {patient.mednum || 'б/н'}). При выборе нового пациента текущие несохраненные данные будут сброшены.
+            </Alert>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setPatientDialogOpen(false)} sx={{ fontWeight: 700 }}>
+            Закрыть
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* 2. TWO-LEVEL CLINICAL PROTOCOL SELECTION DIALOG (CLUSTER -> PROTOCOL) */}
+      <Dialog
+        open={protocolDialogOpen}
+        onClose={() => setProtocolDialogOpen(false)}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle sx={{ fontWeight: 800, color: '#0F3C64', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <LayersIcon color="primary" /> Справочник клинических протоколов 2.0
+          </Box>
+          <Chip
+            label={`Найдено: ${filteredTemplates.length} из ${templates.length}`}
+            size="small"
+            color="primary"
+            variant="outlined"
+            sx={{ fontWeight: 700 }}
+          />
+        </DialogTitle>
+        <DialogContent dividers sx={{ p: 2 }}>
+          {/* LEVEL 1: CLUSTER SELECTOR PILLS */}
+          <Typography variant="caption" sx={{ fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: 0.5, display: 'block', mb: 1 }}>
+            Уровень 1: Выберите анатомический или нозологический кластер
+          </Typography>
+          <Box sx={{ display: 'flex', gap: 0.8, flexWrap: 'wrap', mb: 2.5 }}>
+            {MASTER_CLUSTERS.map((cl) => {
+              const isSelected = selectedClusterId === cl.id;
+              return (
+                <Chip
+                  key={cl.id}
+                  label={cl.name_ru}
+                  size="small"
+                  onClick={() => setSelectedClusterId(cl.id)}
+                  sx={{
+                    fontWeight: 700,
+                    fontSize: '0.76rem',
+                    bgcolor: isSelected ? cl.badge_color : '#F1F5F9',
+                    color: isSelected ? '#FFFFFF' : '#334155',
+                    border: `1px solid ${isSelected ? cl.badge_color : '#CBD5E1'}`,
+                    cursor: 'pointer',
+                    '&:hover': {
+                      bgcolor: isSelected ? cl.badge_color : '#E2E8F0'
+                    }
+                  }}
+                />
+              );
+            })}
+          </Box>
+
+          <Divider sx={{ mb: 2 }} />
+
+          {/* LEVEL 2: SEARCH & PROTOCOL CARDS */}
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.5, gap: 2 }}>
+            <Typography variant="caption" sx={{ fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+              Уровень 2: Нозологии и клинические протоколы ({filteredTemplates.length})
+            </Typography>
+            <TextField
+              size="small"
+              placeholder="Поиск по диагнозу, МКБ-10 или симптому..."
+              value={protocolSearchQuery}
+              onChange={(e) => setProtocolSearchQuery(e.target.value)}
+              sx={{ width: 320 }}
+              slotProps={{
+                input: {
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <SearchIcon sx={{ fontSize: 18, color: '#94A3B8' }} />
+                    </InputAdornment>
+                  )
+                }
+              }}
+            />
+          </Box>
+
+          <Box sx={{ maxHeight: 380, overflowY: 'auto', pr: 0.5 }}>
+            {filteredTemplates.length > 0 ? (
+              <Grid container spacing={1.5}>
+                {filteredTemplates.map((tmpl) => {
+                  const effectiveMkb = tmpl.default_mkb_code || tmpl.mkb_code || '—';
+                  const isCurrent = currentSelectedTemplate?.title === tmpl.title;
+                  return (
+                    <Grid size={{ xs: 12, sm: 6 }} key={tmpl.id || tmpl.rawId || tmpl.title}>
+                      <Card
+                        variant="outlined"
+                        sx={{
+                          borderRadius: 2,
+                          borderColor: isCurrent ? '#0284C7' : '#E2E8F0',
+                          bgcolor: isCurrent ? '#F0F9FF' : '#FFFFFF',
+                          transition: 'all 0.15s ease-in-out',
+                          '&:hover': {
+                            borderColor: '#0284C7',
+                            boxShadow: '0 4px 12px rgba(2,132,199,0.1)'
+                          }
+                        }}
+                      >
+                        <CardActionArea onClick={() => handleApplyTemplate(tmpl)} sx={{ p: 1.5 }}>
+                          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 0.5 }}>
+                            <Typography variant="body2" sx={{ fontWeight: 700, color: '#0F3C64', lineHeight: 1.3 }}>
+                              {tmpl.title}
+                            </Typography>
+                            <Chip
+                              label={effectiveMkb}
+                              size="small"
+                              sx={{
+                                fontWeight: 800,
+                                fontSize: '0.72rem',
+                                bgcolor: '#E0F2FE',
+                                color: '#0369A1',
+                                height: 20
+                              }}
+                            />
+                          </Box>
+                          <Typography variant="caption" sx={{ color: '#64748B', display: 'block', mb: 1 }}>
+                            Локализация: <b>{tmpl.joint_name || 'Опорно-двигательный аппарат'}</b>
+                          </Typography>
+                          <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                            <Button
+                              size="small"
+                              variant={isCurrent ? 'contained' : 'outlined'}
+                              color="primary"
+                              sx={{ fontSize: '0.72rem', fontWeight: 700, py: 0.2, textTransform: 'none' }}
+                            >
+                              {isCurrent ? '✓ Применён' : 'Применить в прием'}
+                            </Button>
+                          </Box>
+                        </CardActionArea>
+                      </Card>
+                    </Grid>
+                  );
+                })}
+              </Grid>
+            ) : (
+              <Box sx={{ p: 4, textAlign: 'center' }}>
+                <Typography variant="body2" sx={{ color: '#94A3B8' }}>
+                  В данном кластере нет протоколов, соответствующих запросу. Попробуйте выбрать «Все кластеры» или очистить поиск.
+                </Typography>
+              </Box>
+            )}
+          </Box>
+        </DialogContent>
+        <DialogActions sx={{ px: 2.5, py: 1.5, justifyContent: 'space-between' }}>
+          <Button
+            startIcon={<ScienceIcon />}
+            onClick={() => {
+              setProtocolDialogOpen(false);
+              navigate('/ortho-templates-manager');
+            }}
+            sx={{ fontWeight: 700, color: '#64748B', textTransform: 'none' }}
+          >
+            Управление шаблонами 2.0
+          </Button>
+          <Button variant="outlined" onClick={() => setProtocolDialogOpen(false)} sx={{ fontWeight: 700 }}>
+            Отмена
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }

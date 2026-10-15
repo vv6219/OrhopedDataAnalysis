@@ -27,10 +27,10 @@ const customStringOperators = getGridStringOperators().map((operator) => {
       ...operator,
       getApplyFilterFn: (filterItem: any) => {
         if (!filterItem.value) return null;
-        const normalizedSearch = filterItem.value.toLowerCase().replace(/[-_ \[\]]+/g, ' ').trim();
+        const normalizedSearch = filterItem.value.toLowerCase().replace(/[-_ [\]]+/g, ' ').trim();
         return (value: any) => {
           if (value == null) return false;
-          const normalizedCell = String(value).toLowerCase().replace(/[-_ \[\]]+/g, ' ');
+          const normalizedCell = String(value).toLowerCase().replace(/[-_ [\]]+/g, ' ');
           return normalizedCell.includes(normalizedSearch);
         };
       },
@@ -148,11 +148,11 @@ export default function Parameters() {
       filterOperators: customStringOperators,
       getApplyQuickFilterFn: (value) => {
         if (!value) return null;
-        const normalizedSearch = value.toLowerCase().replace(/[-_ \[\]]+/g, ' ').trim();
+        const normalizedSearch = value.toLowerCase().replace(/[-_ [\]]+/g, ' ').trim();
         const searchWords = normalizedSearch.split(/\s+/).filter(Boolean);
         return (cellValue) => {
           if (cellValue == null) return false;
-          const normalizedCell = String(cellValue).toLowerCase().replace(/[-_ \[\]]+/g, ' ');
+          const normalizedCell = String(cellValue).toLowerCase().replace(/[-_ [\]]+/g, ' ');
           return searchWords.every((word: string) => normalizedCell.includes(word));
         };
       },

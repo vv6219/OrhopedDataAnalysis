@@ -27,11 +27,38 @@ export interface JointExamSummary {
   detailsLabel?: string;
 }
 
+export const JOINT_TO_CLUSTER: Record<JointAreaId, { clusterId: string; clusterName: string; side: 'left' | 'right' | 'axial' }> = {
+  knee_r: { clusterId: 'cluster_knee', clusterName: 'Коленный сустав', side: 'right' },
+  knee_l: { clusterId: 'cluster_knee', clusterName: 'Коленный сустав', side: 'left' },
+  shoulder_r: { clusterId: 'cluster_shoulder', clusterName: 'Плечевой пояс', side: 'right' },
+  shoulder_l: { clusterId: 'cluster_shoulder', clusterName: 'Плечевой пояс', side: 'left' },
+  hip_r: { clusterId: 'cluster_hip_pelvis', clusterName: 'Таз и ТБС', side: 'right' },
+  hip_l: { clusterId: 'cluster_hip_pelvis', clusterName: 'Таз и ТБС', side: 'left' },
+  spine_c: { clusterId: 'cluster_spine', clusterName: 'Позвоночник и торакс', side: 'axial' },
+  spine_th: { clusterId: 'cluster_spine', clusterName: 'Позвоночник и торакс', side: 'axial' },
+  spine_l: { clusterId: 'cluster_spine', clusterName: 'Позвоночник и торакс', side: 'axial' },
+  foot_r: { clusterId: 'cluster_foot_ankle', clusterName: 'Стопа и голеностоп', side: 'right' },
+  foot_l: { clusterId: 'cluster_foot_ankle', clusterName: 'Стопа и голеностоп', side: 'left' },
+  elbow_r: { clusterId: 'cluster_elbow', clusterName: 'Локтевой сустав', side: 'right' },
+  elbow_l: { clusterId: 'cluster_elbow', clusterName: 'Локтевой сустав', side: 'left' },
+  wrist_r: { clusterId: 'cluster_wrist_hand', clusterName: 'Кисть и запястье', side: 'right' },
+  wrist_l: { clusterId: 'cluster_wrist_hand', clusterName: 'Кисть и запястье', side: 'left' }
+};
+
+export const NON_JOINT_CLUSTERS = [
+  { id: 'cluster_pediatric', name: 'Детская ортопедия', code: 'ДЕТ', color: '#D97706' },
+  { id: 'cluster_systemic', name: 'Системные / Ревма', code: 'СИСТ', color: '#4F46E5' },
+  { id: 'cluster_postop', name: 'Постоперационные', code: 'ПОСТ', color: '#059669' }
+];
+
 interface BodyHomunculusProps {
   selectedJoint: JointAreaId | null;
   onSelectJoint: (joint: JointAreaId) => void;
   examData?: Partial<Record<JointAreaId, JointExamSummary>>;
   onQuickNormAll?: () => void;
+  selectedClusterId?: string | null;
+  onSelectCluster?: (clusterId: string, side?: 'left' | 'right' | 'axial') => void;
+  showClusterQuickFilters?: boolean;
 }
 
 const JOINT_NAMES: Record<JointAreaId, string> = {
@@ -56,13 +83,29 @@ export default function BodyHomunculus({
   selectedJoint,
   onSelectJoint,
   examData = {},
-  onQuickNormAll
+  onQuickNormAll,
+  selectedClusterId,
+  onSelectCluster,
+  showClusterQuickFilters = true
 }: BodyHomunculusProps) {
   const [viewSide, setViewSide] = useState<'front' | 'back'>('front');
 
+  const handleJointClick = (id: JointAreaId) => {
+    onSelectJoint(id);
+    if (onSelectCluster) {
+      const clusterInfo = JOINT_TO_CLUSTER[id];
+      if (clusterInfo) {
+        onSelectCluster(clusterInfo.clusterId, clusterInfo.side);
+      }
+    }
+  };
+
   const getJointColor = (id: JointAreaId) => {
     const status = examData[id]?.status || 'unexamined';
+    const isClusterMatch = selectedClusterId && JOINT_TO_CLUSTER[id]?.clusterId === selectedClusterId;
+    
     if (id === selectedJoint) return '#0284C7'; // Selected active blue
+    if (isClusterMatch) return '#0EA5E9'; // Sky blue for cluster match
     switch (status) {
       case 'normal':
         return '#22C55E'; // Green
@@ -76,7 +119,9 @@ export default function BodyHomunculus({
   };
 
   const getJointRadius = (id: JointAreaId) => {
-    return id === selectedJoint ? 14 : 11;
+    if (id === selectedJoint) return 14;
+    const isClusterMatch = selectedClusterId && JOINT_TO_CLUSTER[id]?.clusterId === selectedClusterId;
+    return isClusterMatch ? 13 : 11;
   };
 
   const renderJointPoint = (
@@ -86,11 +131,13 @@ export default function BodyHomunculus({
     label: string
   ) => {
     const isSelected = selectedJoint === id;
+    const isClusterMatch = selectedClusterId && JOINT_TO_CLUSTER[id]?.clusterId === selectedClusterId;
     const color = getJointColor(id);
     const r = getJointRadius(id);
     const info = examData[id];
     const status = info?.status || 'unexamined';
     const mediaCount = info?.mediaCount || 0;
+    const clusterInfo = JOINT_TO_CLUSTER[id];
 
     return (
       <Tooltip
@@ -100,6 +147,11 @@ export default function BodyHomunculus({
             <Typography variant="body2" sx={{ fontWeight: 700 }}>
               {JOINT_NAMES[id]}
             </Typography>
+            {clusterInfo && (
+              <Typography variant="caption" sx={{ display: 'block', color: '#0284C7', fontWeight: 600 }}>
+                Кластер: {clusterInfo.clusterName} ({clusterInfo.side === 'left' ? 'Слева' : clusterInfo.side === 'right' ? 'Справа' : 'Осевой'})
+              </Typography>
+            )}
             <Typography variant="caption" sx={{ display: 'block', color: '#94A3B8' }}>
               Статус:{' '}
               {status === 'normal'
@@ -120,20 +172,20 @@ export default function BodyHomunculus({
         arrow
       >
         <g
-          onClick={() => onSelectJoint(id)}
+          onClick={() => handleJointClick(id)}
           style={{ cursor: 'pointer', transition: 'all 0.2s ease-in-out' }}
         >
           <title>{label}</title>
-          {isSelected && (
+          {(isSelected || isClusterMatch) && (
             <circle
               cx={cx}
               cy={cy}
               r={r + 6}
               fill="none"
-              stroke="#0284C7"
-              strokeWidth="2.5"
-              strokeDasharray="4 3"
-              opacity="0.85"
+              stroke={isSelected ? '#0284C7' : '#38BDF8'}
+              strokeWidth={isSelected ? '2.5' : '1.8'}
+              strokeDasharray={isSelected ? '4 3' : '3 3'}
+              opacity="0.9"
             />
           )}
           <circle
@@ -208,6 +260,33 @@ export default function BodyHomunculus({
           </Button>
         </Box>
       </Box>
+
+      {/* Non-joint and general cluster chips ribbon */}
+      {showClusterQuickFilters && (
+        <Box sx={{ width: '100%', display: 'flex', gap: 0.5, flexWrap: 'wrap', mb: 1, justifyContent: 'center' }}>
+          {NON_JOINT_CLUSTERS.map((cl) => {
+            const isClActive = selectedClusterId === cl.id;
+            return (
+              <Chip
+                key={cl.id}
+                label={cl.name}
+                size="small"
+                onClick={() => onSelectCluster && onSelectCluster(cl.id)}
+                sx={{
+                  fontSize: '0.7rem',
+                  height: 22,
+                  fontWeight: 700,
+                  bgcolor: isClActive ? cl.color : '#F1F5F9',
+                  color: isClActive ? '#FFFFFF' : '#475569',
+                  border: `1px solid ${isClActive ? cl.color : '#CBD5E1'}`,
+                  cursor: 'pointer',
+                  '&:hover': { bgcolor: isClActive ? cl.color : '#E2E8F0' }
+                }}
+              />
+            );
+          })}
+        </Box>
+      )}
 
       {/* SVG Homunculus Human Silhouette */}
       <Box sx={{ position: 'relative', width: 220, height: 350 }}>
@@ -316,8 +395,8 @@ export default function BodyHomunculus({
         </svg>
       </Box>
 
-      {/* Selected Joint Banner */}
-      <Box sx={{ mt: 1, textAlign: 'center', width: '100%' }}>
+      {/* Selected Joint & Active Cluster Banner */}
+      <Box sx={{ mt: 1, display: 'flex', gap: 1, justifyContent: 'center', alignItems: 'center', flexWrap: 'wrap', width: '100%' }}>
         {selectedJoint ? (
           <Chip
             label={JOINT_NAMES[selectedJoint]}
@@ -330,6 +409,14 @@ export default function BodyHomunculus({
           <Typography variant="caption" sx={{ color: '#64748B' }}>
             Нажмите на сустав на схеме для осмотра
           </Typography>
+        )}
+        {selectedJoint && JOINT_TO_CLUSTER[selectedJoint] && (
+          <Chip
+            label={`Кластер: ${JOINT_TO_CLUSTER[selectedJoint].clusterName}`}
+            variant="outlined"
+            size="small"
+            sx={{ fontWeight: 600, fontSize: '0.74rem', borderColor: '#0284C7', color: '#0369A1' }}
+          />
         )}
       </Box>
 
