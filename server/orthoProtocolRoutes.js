@@ -78,7 +78,17 @@ router.get('/templates', (req, res) => {
   const search = req.query.search ? String(req.query.search).trim() : '';
   const joint = req.query.joint ? String(req.query.joint).trim() : '';
 
-  db.all(`SELECT id, title, joint_name, default_mkb_code, template_json, 'biomechanics' AS source FROM ortho_templates ORDER BY id ASC`, [], (oErr, orthoTemplates) => {
+  db.all(`
+    SELECT id, title, joint_name, default_mkb_code, template_json, category,
+           cluster_id, cluster_name, is_custom, author_doctor_name, clinical_tags,
+           complaints_template, anamnesis_template, anamnesis_vitae_template,
+           objective_template, objective_status_template, special_studies_template,
+           performed_manipulations_template, default_sections_mask, recommendations_template,
+           'biomechanics' AS source
+    FROM ortho_templates
+    WHERE (is_active = 1 OR is_active IS NULL)
+    ORDER BY is_custom DESC, sort_order ASC, id ASC
+  `, [], (oErr, orthoTemplates) => {
     if (oErr) return res.status(500).json({ success: false, error: oErr.message });
 
     let pSql = `SELECT id, name AS title, title AS full_title, content, kind, post, 'protdict' AS source FROM protdict WHERE hide_f = 0`;
@@ -99,7 +109,21 @@ router.get('/templates', (req, res) => {
         joint_name: ot.joint_name,
         default_mkb_code: ot.default_mkb_code,
         template_json: ot.template_json,
-        category: 'Биомеханика Neutral-0 ROM',
+        category: ot.category || 'Биомеханика Neutral-0 ROM',
+        cluster_id: ot.cluster_id || '',
+        cluster_name: ot.cluster_name || '',
+        is_custom: Boolean(ot.is_custom),
+        author_doctor_name: ot.author_doctor_name || '',
+        clinical_tags: ot.clinical_tags || '',
+        complaints_template: ot.complaints_template || '',
+        anamnesis_template: ot.anamnesis_template || '',
+        anamnesis_vitae_template: ot.anamnesis_vitae_template || '',
+        objective_template: ot.objective_template || '',
+        objective_status_template: ot.objective_status_template || '',
+        special_studies_template: ot.special_studies_template || '',
+        performed_manipulations_template: ot.performed_manipulations_template || '',
+        default_sections_mask: ot.default_sections_mask || '',
+        recommendations_template: ot.recommendations_template || '',
         source: 'biomechanics'
       }));
 
@@ -776,6 +800,16 @@ router.post('/save', (req, res) => {
     tests,
     complaints,
     anamnesis,
+    anamnesis_vitae,
+    anamnesisVitae,
+    objective_status,
+    objectiveStatus,
+    special_studies,
+    specialStudies,
+    performed_manipulations,
+    performedManipulations,
+    active_sections_mask,
+    activeSectionsMask,
     recommendations,
     diagnosis,
     prescriptions = [],
@@ -787,6 +821,13 @@ router.post('/save', (req, res) => {
   if (!patientId) {
     return res.status(400).json({ success: false, error: 'Не указан patientId' });
   }
+
+  const resolvedAnamnesisVitae = anamnesis_vitae !== undefined ? anamnesis_vitae : (anamnesisVitae || '');
+  const resolvedObjectiveStatus = objective_status !== undefined ? objective_status : (objectiveStatus || '');
+  const resolvedSpecialStudies = special_studies !== undefined ? special_studies : (specialStudies || '');
+  const resolvedPerformedManipulations = performed_manipulations !== undefined ? performed_manipulations : (performedManipulations || '');
+  const resolvedActiveSectionsMask = typeof active_sections_mask === 'object' ? JSON.stringify(active_sections_mask) :
+    (typeof activeSectionsMask === 'object' ? JSON.stringify(activeSectionsMask) : (active_sections_mask || activeSectionsMask || ''));
 
   const nowIso = new Date().toISOString().slice(0, 19).replace('T', ' ');
   const todayDate = new Date().toISOString().slice(0, 10);
@@ -800,6 +841,11 @@ router.post('/save', (req, res) => {
     tests,
     complaints,
     anamnesis,
+    anamnesis_vitae: resolvedAnamnesisVitae,
+    objective_status: resolvedObjectiveStatus,
+    special_studies: resolvedSpecialStudies,
+    performed_manipulations: resolvedPerformedManipulations,
+    active_sections_mask: resolvedActiveSectionsMask,
     recommendations,
     diagnosis,
     prescriptions,
@@ -824,7 +870,12 @@ router.post('/save', (req, res) => {
           signed_at = CASE WHEN ? = 'signed' THEN ? ELSE signed_at END,
           signed_by_docn = ?,
           signature_hash = COALESCE(?, signature_hash),
-          moddate = ?
+          moddate = ?,
+          anamnesis_vitae = ?,
+          objective_status = ?,
+          special_studies = ?,
+          performed_manipulations = ?,
+          active_sections_mask = ?
         WHERE id = ?
       `, [
         diagnosis ? `${diagnosis.mkb_code || ''} ${diagnosis.mkb_name || ''}`.trim() : 'Ортопедический осмотр',
@@ -840,6 +891,11 @@ router.post('/save', (req, res) => {
         doctorId,
         signatureHash,
         nowIso,
+        resolvedAnamnesisVitae,
+        resolvedObjectiveStatus,
+        resolvedSpecialStudies,
+        resolvedPerformedManipulations,
+        resolvedActiveSectionsMask,
         protocolId
       ], function(err) {
         if (err) return res.status(500).json({ success: false, error: err.message });
@@ -849,10 +905,12 @@ router.post('/save', (req, res) => {
       db.run(`
         INSERT INTO protocols (
           docn, pt_id, vdate, kind, mode, title, content, post, rdate, fname, hide_f, moddate, moduser, shot_f,
-          protocol_json, schema_version, appointment_id, status, vas_score, primary_joint, side, is_signed, signed_at, signed_by_docn, signature_hash
+          protocol_json, schema_version, appointment_id, status, vas_score, primary_joint, side, is_signed, signed_at, signed_by_docn, signature_hash,
+          anamnesis_vitae, objective_status, special_studies, performed_manipulations, active_sections_mask
         ) VALUES (
           ?, ?, ?, 1, 1, ?, ?, 'Врач травматолог-ортопед', ?, 'protocol.rtf', 0, ?, 'ortho_workstation', 0,
-          ?, '2.0', ?, ?, ?, ?, ?, ?, ?, ?, ?
+          ?, '2.0', ?, ?, ?, ?, ?, ?, ?, ?, ?,
+          ?, ?, ?, ?, ?
         )
       `, [
         doctorId,
@@ -871,7 +929,12 @@ router.post('/save', (req, res) => {
         status === 'signed' ? 1 : 0,
         status === 'signed' ? nowIso : null,
         doctorId,
-        signatureHash
+        signatureHash,
+        resolvedAnamnesisVitae,
+        resolvedObjectiveStatus,
+        resolvedSpecialStudies,
+        resolvedPerformedManipulations,
+        resolvedActiveSectionsMask
       ], function(err) {
         if (err) return res.status(500).json({ success: false, error: err.message });
         postSaveHandler(this.lastID);
@@ -1651,7 +1714,7 @@ router.get('/clusters', (req, res) => {
 
 // 9.3. GET /api/ortho/templates/detailed - List templates with counts, cluster metadata & filters
 router.get('/templates/detailed', (req, res) => {
-  const { joint, search, cluster, with_details } = req.query;
+  const { joint, search, cluster, with_details, only_custom } = req.query;
   let sql = `
     SELECT ot.*,
       (SELECT COUNT(*) FROM ortho_template_tests WHERE template_id = ot.id) AS tests_count,
@@ -1668,11 +1731,21 @@ router.get('/templates/detailed', (req, res) => {
     sql += ` AND ot.joint_name = ?`;
     params.push(joint);
   }
-  if (search) {
-    sql += ` AND (ot.title LIKE ? OR ot.default_mkb_code LIKE ? OR ot.stage_or_severity LIKE ?)`;
-    params.push(`%${search}%`, `%${search}%`, `%${search}%`);
+  if (only_custom === 'true' || only_custom === '1') {
+    sql += ` AND ot.is_custom = 1`;
   }
-  sql += ` ORDER BY ot.sort_order ASC, ot.id ASC`;
+  if (search) {
+    const sLower = search.trim().toLowerCase();
+    const isCustomKeyword = ['кастом', 'custom', 'автор'].some(k => sLower.includes(k));
+    if (isCustomKeyword) {
+      sql += ` AND (ot.title LIKE ? OR ot.default_mkb_code LIKE ? OR ot.stage_or_severity LIKE ? OR ot.category LIKE ? OR ot.clinical_tags LIKE ? OR ot.author_doctor_name LIKE ? OR ot.is_custom = 1)`;
+      params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
+    } else {
+      sql += ` AND (ot.title LIKE ? OR ot.default_mkb_code LIKE ? OR ot.stage_or_severity LIKE ? OR ot.category LIKE ? OR ot.clinical_tags LIKE ? OR ot.author_doctor_name LIKE ?)`;
+      params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
+    }
+  }
+  sql += ` ORDER BY ot.is_custom DESC, ot.sort_order ASC, ot.id ASC`;
 
   db.all(sql, params, (err, rows) => {
     if (err) return res.status(500).json({ success: false, error: err.message });
@@ -1733,6 +1806,13 @@ router.get('/templates/detailed', (req, res) => {
           try {
             parsedRom = typeof t.rom_norm_preset === 'string' ? JSON.parse(t.rom_norm_preset) : t.rom_norm_preset;
           } catch {}
+          let parsedTags = [];
+          try {
+            parsedTags = typeof t.clinical_tags === 'string' ? JSON.parse(t.clinical_tags) : (t.clinical_tags || []);
+          } catch {
+            parsedTags = t.clinical_tags ? [t.clinical_tags] : [];
+          }
+
           return {
             id: t.id,
             title: t.title,
@@ -1742,9 +1822,17 @@ router.get('/templates/detailed', (req, res) => {
             cluster_id: t.cluster_id || '',
             cluster_name: t.cluster_name || '',
             stage_or_severity: t.stage_or_severity || '',
+            is_custom: Boolean(t.is_custom),
+            author_doctor_name: t.author_doctor_name || '',
+            clinical_tags: parsedTags,
             side: t.default_side || 'right',
             complaints: t.complaints_template || '',
             objective: t.objective_template || '',
+            anamnesis_vitae: t.anamnesis_vitae_template || '',
+            objective_status: t.objective_status_template || '',
+            special_studies: t.special_studies_template || '',
+            performed_manipulations: t.performed_manipulations_template || '',
+            default_sections_mask: t.default_sections_mask || '',
             recommendations: t.recommendations_template || '',
             rom: parsedRom,
             tests: testsMap[t.id] || [],
@@ -1811,6 +1899,8 @@ router.post('/templates', (req, res) => {
   const {
     title, joint_name, default_mkb_code, template_json, category,
     default_side, complaints_template, anamnesis_template, objective_template,
+    anamnesis_vitae_template, objective_status_template, special_studies_template,
+    performed_manipulations_template, default_sections_mask,
     rom_norm_preset, recommendations_template, cluster_id, cluster_name,
     stage_or_severity, clinical_tags, tests = [], diagnostics = []
   } = req.body;
@@ -1822,19 +1912,30 @@ router.post('/templates', (req, res) => {
   const rawJson = typeof template_json === 'object' ? JSON.stringify(template_json) : (template_json || '{}');
   const romPresetStr = typeof rom_norm_preset === 'object' ? JSON.stringify(rom_norm_preset) : rom_norm_preset;
   const tagsStr = Array.isArray(clinical_tags) ? JSON.stringify(clinical_tags) : (clinical_tags || null);
+  const maskStr = typeof default_sections_mask === 'object' ? JSON.stringify(default_sections_mask) : (default_sections_mask || null);
+
+  const isCustomVal = req.body.is_custom ? 1 : (category === 'Кастомизированный шаблон' ? 1 : 0);
+  const authorDoctorNameVal = req.body.author_doctor_name || null;
 
   db.run(`
     INSERT INTO ortho_templates (
       title, joint_name, default_mkb_code, template_json, category,
       default_side, complaints_template, anamnesis_template, objective_template,
+      anamnesis_vitae_template, objective_status_template, special_studies_template,
+      performed_manipulations_template, default_sections_mask,
       rom_norm_preset, recommendations_template, is_active, sort_order,
-      cluster_id, cluster_name, stage_or_severity, clinical_tags
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, ?, ?, ?, ?)
+      cluster_id, cluster_name, stage_or_severity, clinical_tags,
+      is_custom, author_doctor_name
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, ?, ?, ?, ?, ?, ?)
   `, [
     title, joint_name, default_mkb_code || null, rawJson, category || null,
     default_side || 'right', complaints_template || null, anamnesis_template || null,
-    objective_template || null, romPresetStr || null, recommendations_template || null,
-    cluster_id || null, cluster_name || null, stage_or_severity || null, tagsStr
+    objective_template || null,
+    anamnesis_vitae_template || null, objective_status_template || null, special_studies_template || null,
+    performed_manipulations_template || null, maskStr,
+    romPresetStr || null, recommendations_template || null,
+    cluster_id || null, cluster_name || null, stage_or_severity || null, tagsStr,
+    isCustomVal, authorDoctorNameVal
   ], function(err) {
     if (err) return res.status(500).json({ success: false, error: err.message });
     const newId = this.lastID;
@@ -1872,12 +1973,146 @@ router.post('/templates', (req, res) => {
   });
 });
 
+// 9.5.1. POST /api/ortho/templates/save-from-workstation - Save patient protocol exam as a customized template
+router.post('/templates/save-from-workstation', (req, res) => {
+  const {
+    title,
+    joint_name,
+    cluster_id,
+    cluster_name,
+    default_mkb_code,
+    category = 'Кастомизированный шаблон',
+    author_doctor_name = 'Врач травматолог-ортопед',
+    clinical_tags = ['custom', 'авторский'],
+    stage_or_severity,
+    default_side = 'right',
+    complaints_template,
+    anamnesis_template,
+    anamnesis_vitae_template,
+    objective_template,
+    objective_status_template,
+    special_studies_template,
+    performed_manipulations_template,
+    recommendations_template,
+    default_sections_mask,
+    rom_norm_preset,
+    tests = [],
+    diagnostics = []
+  } = req.body;
+
+  if (!title || !joint_name) {
+    return res.status(400).json({ success: false, error: 'Название шаблона и сустав обязательны' });
+  }
+
+  // Ensure 'custom' and 'авторский' tags are present
+  let tagsList = Array.isArray(clinical_tags) ? [...clinical_tags] : (typeof clinical_tags === 'string' ? [clinical_tags] : []);
+  if (!tagsList.includes('custom')) tagsList.unshift('custom');
+  if (!tagsList.includes('авторский')) tagsList.push('авторский');
+  const tagsStr = JSON.stringify(tagsList);
+
+  const maskStr = typeof default_sections_mask === 'object' ? JSON.stringify(default_sections_mask) : (default_sections_mask || null);
+  const romPresetStr = typeof rom_norm_preset === 'object' ? JSON.stringify(rom_norm_preset) : (rom_norm_preset || null);
+  const rawTemplateJson = JSON.stringify({
+    title,
+    joint_name,
+    category,
+    is_custom: 1,
+    author_doctor_name,
+    saved_from_workstation: true,
+    saved_at: new Date().toISOString()
+  });
+
+  const insertSql = `
+    INSERT INTO ortho_templates (
+      title, joint_name, default_mkb_code, template_json, category,
+      default_side, complaints_template, anamnesis_template, objective_template,
+      anamnesis_vitae_template, objective_status_template, special_studies_template,
+      performed_manipulations_template, default_sections_mask,
+      rom_norm_preset, recommendations_template, is_active, sort_order,
+      cluster_id, cluster_name, stage_or_severity, clinical_tags,
+      is_custom, author_doctor_name
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, ?, ?, ?, ?, 1, ?)
+  `;
+
+  const insertParams = [
+    title, joint_name, default_mkb_code || null, rawTemplateJson, category,
+    default_side, complaints_template || null, anamnesis_template || null, objective_template || null,
+    anamnesis_vitae_template || null, objective_status_template || null, special_studies_template || null,
+    performed_manipulations_template || null, maskStr,
+    romPresetStr, recommendations_template || null,
+    cluster_id || null, cluster_name || null, stage_or_severity || null, tagsStr,
+    author_doctor_name
+  ];
+
+  db.run(insertSql, insertParams, function(err) {
+    if (err) {
+      console.error('Error saving template from workstation:', err);
+      return res.status(500).json({ success: false, error: err.message });
+    }
+    const newId = this.lastID;
+
+    // Save relational tests if provided
+    if (Array.isArray(tests) && tests.length > 0) {
+      const tStmt = db.prepare(`
+        INSERT INTO ortho_template_tests (template_id, test_code, expected_result, is_mandatory, sort_order)
+        VALUES (?, ?, ?, ?, ?)
+      `);
+      tests.forEach((t, i) => {
+        const code = t.test_code || t.code;
+        if (code) {
+          tStmt.run([newId, code, t.expected_result || t.expected || 'positive', t.is_mandatory ?? 1, i * 10]);
+        }
+      });
+      tStmt.finalize();
+    }
+
+    // Save relational diagnostics if provided
+    if (Array.isArray(diagnostics) && diagnostics.length > 0) {
+      const dStmt = db.prepare(`
+        INSERT INTO ortho_template_diagnostics (template_id, diagnostic_code, urgency, default_side, is_primary, sort_order)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `);
+      diagnostics.forEach((d, i) => {
+        const code = d.diagnostic_code || d.code;
+        if (code) {
+          dStmt.run([newId, code, d.urgency || 'routine', d.default_side || default_side, d.is_primary ? 1 : 0, i * 10]);
+        }
+      });
+      dStmt.finalize();
+    }
+
+    logOrthoAudit({
+      eventType: EventTypes.PROTOCOL_SAVED,
+      message: `Создан кастомизированный шаблон #${newId} "${title}" (Кластер: ${cluster_name || cluster_id}, Автор: ${author_doctor_name})`
+    });
+
+    res.json({
+      success: true,
+      id: newId,
+      template: {
+        id: newId,
+        title,
+        joint_name,
+        cluster_id,
+        cluster_name,
+        category,
+        is_custom: true,
+        author_doctor_name,
+        clinical_tags: tagsList
+      },
+      message: 'Кастомизированный шаблон успешно сохранен в Кластер!'
+    });
+  });
+});
+
 // 9.6. PUT /api/ortho/templates/:id - Update template & cascade tests and diagnostics
 router.put('/templates/:id', (req, res) => {
   const templateId = req.params.id;
   const {
     title, joint_name, default_mkb_code, template_json, category,
     default_side, complaints_template, anamnesis_template, objective_template,
+    anamnesis_vitae_template, objective_status_template, special_studies_template,
+    performed_manipulations_template, default_sections_mask,
     rom_norm_preset, recommendations_template, cluster_id, cluster_name,
     stage_or_severity, clinical_tags, tests = [], diagnostics = []
   } = req.body;
@@ -1885,6 +2120,7 @@ router.put('/templates/:id', (req, res) => {
   const rawJson = typeof template_json === 'object' ? JSON.stringify(template_json) : (template_json || '{}');
   const romPresetStr = typeof rom_norm_preset === 'object' ? JSON.stringify(rom_norm_preset) : rom_norm_preset;
   const tagsStr = Array.isArray(clinical_tags) ? JSON.stringify(clinical_tags) : (clinical_tags || null);
+  const maskStr = typeof default_sections_mask === 'object' ? JSON.stringify(default_sections_mask) : (default_sections_mask || null);
 
   db.run(`
     UPDATE ortho_templates SET
@@ -1897,6 +2133,11 @@ router.put('/templates/:id', (req, res) => {
       complaints_template = ?,
       anamnesis_template = ?,
       objective_template = ?,
+      anamnesis_vitae_template = COALESCE(?, anamnesis_vitae_template),
+      objective_status_template = COALESCE(?, objective_status_template),
+      special_studies_template = COALESCE(?, special_studies_template),
+      performed_manipulations_template = COALESCE(?, performed_manipulations_template),
+      default_sections_mask = COALESCE(?, default_sections_mask),
       rom_norm_preset = ?,
       recommendations_template = ?,
       cluster_id = COALESCE(?, cluster_id),
@@ -1907,6 +2148,8 @@ router.put('/templates/:id', (req, res) => {
   `, [
     title, joint_name, default_mkb_code, rawJson, category,
     default_side, complaints_template, anamnesis_template, objective_template,
+    anamnesis_vitae_template, objective_status_template, special_studies_template,
+    performed_manipulations_template, maskStr,
     romPresetStr, recommendations_template,
     cluster_id || null, cluster_name || null, stage_or_severity || null, tagsStr,
     templateId

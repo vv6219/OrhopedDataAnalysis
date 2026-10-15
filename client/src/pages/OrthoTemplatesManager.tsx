@@ -30,7 +30,6 @@ import {
   Switch,
   FormControlLabel,
   CircularProgress,
-  Badge,
   ToggleButton,
   ToggleButtonGroup
 } from '@mui/material';
@@ -52,7 +51,8 @@ import {
   Article as ArticleIcon,
   MenuBook as ManualIcon,
   Layers as LayersIcon,
-  Clear as ClearIcon
+  Clear as ClearIcon,
+  Star as StarIcon
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import DiagnosticMethodsCatalogManager from '../components/ortho/DiagnosticMethodsCatalogManager';
@@ -128,7 +128,7 @@ export interface MasterCluster {
 }
 
 export const MASTER_CLUSTERS: MasterCluster[] = [
-  { id: 'all', code: 'ALL', name_ru: 'Все кластеры (100)', joint_affinity: 'all', badge_color: '#0F3C64', sort_order: 0 },
+  { id: 'all', code: 'ALL', name_ru: 'Все кластеры', joint_affinity: 'all', badge_color: '#0F3C64', sort_order: 0 },
   { id: 'cluster_knee', code: 'KNEE', name_ru: '1. Коленный сустав', joint_affinity: 'knee', badge_color: '#0284C7', sort_order: 10 },
   { id: 'cluster_shoulder', code: 'SHOULDER', name_ru: '2. Плечевой пояс', joint_affinity: 'shoulder', badge_color: '#9333EA', sort_order: 20 },
   { id: 'cluster_hip_pelvis', code: 'HIP_PELVIS', name_ru: '3. Таз и ТБС', joint_affinity: 'hip', badge_color: '#16A34A', sort_order: 30 },
@@ -155,12 +155,19 @@ interface FullTemplate {
   complaints_template?: string;
   anamnesis_template?: string;
   objective_template?: string;
+  anamnesis_vitae_template?: string;
+  objective_status_template?: string;
+  special_studies_template?: string;
+  performed_manipulations_template?: string;
+  default_sections_mask?: string | Record<string, boolean>;
   recommendations_template?: string;
   rom_norm_preset?: any;
   template_json?: any;
   tests: TemplateTestItem[];
   diagnostics: TemplateDiagnosticItem[];
   prescriptions?: PrescriptionItem[];
+  is_custom?: boolean | number;
+  author_doctor_name?: string;
 }
 
 const JOINT_OPTIONS = [
@@ -186,6 +193,7 @@ export default function OrthoTemplatesManager() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedJointFilter, setSelectedJointFilter] = useState('all');
   const [selectedClusterFilter, setSelectedClusterFilter] = useState('all');
+  const [onlyCustomFilter, setOnlyCustomFilter] = useState(false);
   const [groupByCluster, setGroupByCluster] = useState(false);
   const [selectedTemplateId, setSelectedTemplateId] = useState<number | null>(null);
 
@@ -280,11 +288,18 @@ export default function OrthoTemplatesManager() {
           complaints_template: t.complaints_template || parsedJson.complaints || '',
           anamnesis_template: t.anamnesis_template || parsedJson.anamnesis || '',
           objective_template: t.objective_template || parsedJson.objective || '',
+          anamnesis_vitae_template: t.anamnesis_vitae_template || parsedJson.anamnesis_vitae || '',
+          objective_status_template: t.objective_status_template || parsedJson.objective_status || '',
+          special_studies_template: t.special_studies_template || parsedJson.special_studies || '',
+          performed_manipulations_template: t.performed_manipulations_template || parsedJson.performed_manipulations || '',
+          default_sections_mask: t.default_sections_mask || parsedJson.default_sections_mask || '',
           recommendations_template: t.recommendations_template || (parsedJson.recommendations || ''),
           rom_norm_preset: parsedRom,
           tests: t.tests || [],
           diagnostics: t.diagnostics || [],
-          prescriptions: parsedJson.prescriptions || []
+          prescriptions: parsedJson.prescriptions || [],
+          is_custom: Boolean(t.is_custom),
+          author_doctor_name: t.author_doctor_name || ''
         });
       }
     } catch (e) {
@@ -314,11 +329,18 @@ export default function OrthoTemplatesManager() {
       complaints_template: '',
       anamnesis_template: '',
       objective_template: '',
+      anamnesis_vitae_template: '',
+      objective_status_template: '',
+      special_studies_template: '',
+      performed_manipulations_template: '',
+      default_sections_mask: '',
       recommendations_template: '',
       rom_norm_preset: { flexion_active: 130, flexion_passive: 140, extension_deficit: 0 },
       tests: [],
       diagnostics: [],
-      prescriptions: []
+      prescriptions: [],
+      is_custom: false,
+      author_doctor_name: ''
     };
     setSelectedTemplateId(null);
     setCurrentTemplate(newTpl);
@@ -342,12 +364,23 @@ export default function OrthoTemplatesManager() {
         complaints_template: currentTemplate.complaints_template,
         anamnesis_template: currentTemplate.anamnesis_template,
         objective_template: currentTemplate.objective_template,
+        anamnesis_vitae_template: currentTemplate.anamnesis_vitae_template,
+        objective_status_template: currentTemplate.objective_status_template,
+        special_studies_template: currentTemplate.special_studies_template,
+        performed_manipulations_template: currentTemplate.performed_manipulations_template,
+        default_sections_mask: currentTemplate.default_sections_mask,
         rom_norm_preset: currentTemplate.rom_norm_preset,
         recommendations_template: currentTemplate.recommendations_template,
+        is_custom: currentTemplate.is_custom ? 1 : 0,
+        author_doctor_name: currentTemplate.author_doctor_name || null,
         template_json: {
           complaints: currentTemplate.complaints_template,
           anamnesis: currentTemplate.anamnesis_template,
+          anamnesis_vitae: currentTemplate.anamnesis_vitae_template,
           objective: currentTemplate.objective_template,
+          objective_status: currentTemplate.objective_status_template,
+          special_studies: currentTemplate.special_studies_template,
+          performed_manipulations: currentTemplate.performed_manipulations_template,
           rom: currentTemplate.rom_norm_preset,
           prescriptions: currentTemplate.prescriptions
         },
@@ -520,17 +553,28 @@ export default function OrthoTemplatesManager() {
   // Filtered Templates for Left Master Panel
   const filteredTemplates = useMemo(() => {
     return templates.filter(t => {
+      const isCustom = t.is_custom === 1 || t.is_custom === true || t.category === 'Кастомизированный шаблон';
+      if (onlyCustomFilter && !isCustom) return false;
+
       const matchCluster = selectedClusterFilter === 'all' || t.cluster_id === selectedClusterFilter;
       const matchJoint = selectedJointFilter === 'all' || t.joint_name === selectedJointFilter;
       const query = searchQuery.trim().toLowerCase();
+
+      const isCustomKeyword = ['кастом', 'custom', 'автор'].some(k => query.includes(k));
+      if (isCustomKeyword && isCustom) return matchCluster && matchJoint;
+
       const matchSearch = !query ||
         (t.title && t.title.toLowerCase().includes(query)) ||
         (t.default_mkb_code && t.default_mkb_code.toLowerCase().includes(query)) ||
         (t.stage_or_severity && t.stage_or_severity.toLowerCase().includes(query)) ||
-        (t.cluster_name && t.cluster_name.toLowerCase().includes(query));
+        (t.cluster_name && t.cluster_name.toLowerCase().includes(query)) ||
+        (t.author_doctor_name && t.author_doctor_name.toLowerCase().includes(query)) ||
+        (t.category && t.category.toLowerCase().includes(query)) ||
+        (t.clinical_tags && JSON.stringify(t.clinical_tags).toLowerCase().includes(query));
+
       return matchCluster && matchJoint && matchSearch;
     });
-  }, [templates, selectedClusterFilter, selectedJointFilter, searchQuery]);
+  }, [templates, selectedClusterFilter, selectedJointFilter, searchQuery, onlyCustomFilter]);
 
   // Grouped templates for Cluster-Accordion view
   const groupedTemplates = useMemo(() => {
@@ -553,9 +597,9 @@ export default function OrthoTemplatesManager() {
   }, [filteredTemplates, groupByCluster]);
 
   return (
-    <Box sx={{ p: 2 }}>
+    <Box sx={{ p: { xs: 1, sm: 1.5 }, height: 'calc(100vh - 75px)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       {/* Top Banner Navigation */}
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1, flexShrink: 0 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
           <Button
             variant="outlined"
@@ -691,16 +735,17 @@ export default function OrthoTemplatesManager() {
               display: 'flex',
               alignItems: 'center',
               gap: 1,
-              mb: 2,
-              p: 1.25,
+              mb: 1.25,
+              p: 1,
               bgcolor: '#FFFFFF',
               borderRadius: 2,
               boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
               border: '1px solid #E2E8F0',
               overflowX: 'auto',
               whiteSpace: 'nowrap',
-              '&::-webkit-scrollbar': { height: 5 },
-              '&::-webkit-scrollbar-thumb': { bgcolor: '#CBD5E1', borderRadius: 3 }
+              flexShrink: 0,
+              '&::-webkit-scrollbar': { height: 4 },
+              '&::-webkit-scrollbar-thumb': { bgcolor: '#CBD5E1', borderRadius: 2 }
             }}
           >
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, pl: 0.5, pr: 1, borderRight: '1px solid #E2E8F0', flexShrink: 0 }}>
@@ -758,10 +803,10 @@ export default function OrthoTemplatesManager() {
           </Box>
 
           {/* Master-Detail Split Grid */}
-          <Grid container spacing={2}>
+          <Grid container spacing={2} sx={{ flexGrow: 1, minHeight: 0, height: 'calc(100% - 100px)' }}>
             {/* LEFT MASTER PANEL: Templates Tree / List */}
-            <Grid size={{ xs: 12, md: 4, lg: 3.5 }}>
-              <Paper sx={{ p: 2, height: 'calc(100vh - 190px)', display: 'flex', flexDirection: 'column', borderRadius: 2 }}>
+            <Grid size={{ xs: 12, md: 4, lg: 3.5 }} sx={{ height: '100%', minHeight: 0 }}>
+              <Paper sx={{ p: 1.75, height: '100%', display: 'flex', flexDirection: 'column', borderRadius: 2 }}>
                 {/* Search Input */}
                 <TextField
                   size="small"
@@ -798,20 +843,39 @@ export default function OrthoTemplatesManager() {
                   ))}
                 </Box>
 
-                {/* Header Controls: Count & Group toggle */}
-                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1, pb: 0.75, borderBottom: '1px solid #E2E8F0' }}>
+                {/* Header Controls: Count, Custom Filter & Group toggle */}
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1, pb: 0.75, borderBottom: '1px solid #E2E8F0', gap: 1 }}>
                   <Typography variant="caption" sx={{ fontWeight: 700, color: '#64748B' }}>
                     Найдено: <b>{filteredTemplates.length}</b> из {templates.length}
                   </Typography>
-                  <Button
-                    size="small"
-                    variant="text"
-                    startIcon={groupByCluster ? <ArticleIcon sx={{ fontSize: 14 }} /> : <LayersIcon sx={{ fontSize: 14 }} />}
-                    onClick={() => setGroupByCluster(prev => !prev)}
-                    sx={{ textTransform: 'none', fontSize: '0.72rem', py: 0, px: 0.75, fontWeight: 700 }}
-                  >
-                    {groupByCluster ? 'Списком' : 'По кластерам'}
-                  </Button>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Chip
+                      icon={<StarIcon sx={{ fontSize: '13px !important', color: onlyCustomFilter ? '#FFF !important' : '#D97706 !important' }} />}
+                      label="⭐ Только кастом"
+                      size="small"
+                      clickable
+                      onClick={() => setOnlyCustomFilter(prev => !prev)}
+                      sx={{
+                        fontWeight: 800,
+                        fontSize: '0.68rem',
+                        height: 22,
+                        bgcolor: onlyCustomFilter ? '#D97706' : '#FEF3C7',
+                        color: onlyCustomFilter ? '#FFFFFF' : '#92400E',
+                        border: '1px solid #F59E0B',
+                        cursor: 'pointer',
+                        '&:hover': { bgcolor: onlyCustomFilter ? '#B45309' : '#FDE68A' }
+                      }}
+                    />
+                    <Button
+                      size="small"
+                      variant="text"
+                      startIcon={groupByCluster ? <ArticleIcon sx={{ fontSize: 14 }} /> : <LayersIcon sx={{ fontSize: 14 }} />}
+                      onClick={() => setGroupByCluster(prev => !prev)}
+                      sx={{ textTransform: 'none', fontSize: '0.72rem', py: 0, px: 0.75, fontWeight: 700 }}
+                    >
+                      {groupByCluster ? 'Списком' : 'По кластерам'}
+                    </Button>
+                  </Box>
                 </Box>
 
                 {/* Templates List */}
@@ -823,9 +887,9 @@ export default function OrthoTemplatesManager() {
                   ) : filteredTemplates.length === 0 ? (
                     <Box sx={{ textAlign: 'center', p: 3 }}>
                       <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                        Шаблоны не найдены
+                        {onlyCustomFilter ? 'Кастомизированные авторские шаблоны не найдены' : 'Шаблоны не найдены'}
                       </Typography>
-                      {(selectedClusterFilter !== 'all' || selectedJointFilter !== 'all' || searchQuery) && (
+                      {(selectedClusterFilter !== 'all' || selectedJointFilter !== 'all' || searchQuery || onlyCustomFilter) && (
                         <Button
                           size="small"
                           variant="outlined"
@@ -833,6 +897,7 @@ export default function OrthoTemplatesManager() {
                             setSelectedClusterFilter('all');
                             setSelectedJointFilter('all');
                             setSearchQuery('');
+                            setOnlyCustomFilter(false);
                           }}
                           sx={{ textTransform: 'none', fontSize: '0.75rem' }}
                         >
@@ -858,6 +923,8 @@ export default function OrthoTemplatesManager() {
                           const isSelected = selectedTemplateId === t.id;
                           const cluster = MASTER_CLUSTERS.find(c => c.id === t.cluster_id) || grp.cluster;
                           const clusterColor = cluster?.badge_color || '#94A3B8';
+                          const isCustom = t.is_custom === 1 || t.is_custom === true || t.category === 'Кастомизированный шаблон';
+
                           return (
                             <Card
                               key={t.id}
@@ -867,21 +934,37 @@ export default function OrthoTemplatesManager() {
                                 mb: 1,
                                 cursor: 'pointer',
                                 borderRadius: 1.5,
-                                borderColor: isSelected ? '#156C9C' : '#E2E8F0',
-                                borderLeft: `4px solid ${clusterColor}`,
+                                borderColor: isSelected ? '#156C9C' : isCustom ? '#FCD34D' : '#E2E8F0',
+                                borderLeft: `4px solid ${isCustom ? '#F59E0B' : clusterColor}`,
                                 borderWidth: isSelected ? 2 : 1,
-                                bgcolor: isSelected ? '#F0F7FF' : '#FFFFFF',
+                                bgcolor: isSelected ? '#F0F7FF' : isCustom ? '#FFFDF5' : '#FFFFFF',
                                 transition: 'all 0.15s ease-in-out',
                                 '&:hover': {
-                                  borderColor: '#156C9C',
+                                  borderColor: isCustom ? '#F59E0B' : '#156C9C',
                                   transform: 'translateY(-1px)',
-                                  boxShadow: '0 2px 8px rgba(0,0,0,0.06)'
+                                  boxShadow: isCustom ? '0 2px 8px rgba(245,158,11,0.15)' : '0 2px 8px rgba(0,0,0,0.06)'
                                 }
                               }}
                             >
                               <CardContent sx={{ p: '10px !important' }}>
                                 <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.5 }}>
                                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                    {isCustom && (
+                                      <Chip
+                                        icon={<StarIcon sx={{ fontSize: '11px !important', color: '#B45309 !important' }} />}
+                                        label="Авторский"
+                                        size="small"
+                                        sx={{
+                                          bgcolor: '#FEF3C7',
+                                          color: '#92400E',
+                                          fontSize: '0.62rem',
+                                          fontWeight: 800,
+                                          height: 18,
+                                          borderRadius: '4px',
+                                          border: '1px solid #FCD34D'
+                                        }}
+                                      />
+                                    )}
                                     <Chip
                                       label={cluster?.code || 'CL'}
                                       size="small"
@@ -910,9 +993,14 @@ export default function OrthoTemplatesManager() {
                                     {t.joint_name}
                                   </Typography>
                                 </Box>
-                                <Typography variant="body2" sx={{ fontWeight: 700, color: '#1E293B', mb: 0.5, lineHeight: 1.3 }}>
+                                <Typography variant="body2" sx={{ fontWeight: 700, color: '#1E293B', mb: 0.3, lineHeight: 1.3 }}>
                                   {t.title}
                                 </Typography>
+                                {isCustom && t.author_doctor_name && (
+                                  <Typography variant="caption" sx={{ display: 'block', color: '#B45309', fontWeight: 600, mb: 0.3, fontSize: '0.68rem' }}>
+                                    ⭐ Автор: {t.author_doctor_name}
+                                  </Typography>
+                                )}
                                 {t.stage_or_severity && (
                                   <Typography variant="caption" sx={{ display: 'block', color: '#0284C7', fontWeight: 600, mb: 0.5, fontSize: '0.68rem' }}>
                                     {t.stage_or_severity}
@@ -948,6 +1036,8 @@ export default function OrthoTemplatesManager() {
                       const isSelected = selectedTemplateId === t.id;
                       const cluster = MASTER_CLUSTERS.find(c => c.id === t.cluster_id);
                       const clusterColor = cluster?.badge_color || '#94A3B8';
+                      const isCustom = t.is_custom === 1 || t.is_custom === true || t.category === 'Кастомизированный шаблон';
+
                       return (
                         <Card
                           key={t.id}
@@ -957,21 +1047,37 @@ export default function OrthoTemplatesManager() {
                             mb: 1,
                             cursor: 'pointer',
                             borderRadius: 1.5,
-                            borderColor: isSelected ? '#156C9C' : '#E2E8F0',
-                            borderLeft: `4px solid ${clusterColor}`,
+                            borderColor: isSelected ? '#156C9C' : isCustom ? '#FCD34D' : '#E2E8F0',
+                            borderLeft: `4px solid ${isCustom ? '#F59E0B' : clusterColor}`,
                             borderWidth: isSelected ? 2 : 1,
-                            bgcolor: isSelected ? '#F0F7FF' : '#FFFFFF',
+                            bgcolor: isSelected ? '#F0F7FF' : isCustom ? '#FFFDF5' : '#FFFFFF',
                             transition: 'all 0.15s ease-in-out',
                             '&:hover': {
-                              borderColor: '#156C9C',
+                              borderColor: isCustom ? '#F59E0B' : '#156C9C',
                               transform: 'translateY(-1px)',
-                              boxShadow: '0 2px 8px rgba(0,0,0,0.06)'
+                              boxShadow: isCustom ? '0 2px 8px rgba(245,158,11,0.15)' : '0 2px 8px rgba(0,0,0,0.06)'
                             }
                           }}
                         >
                           <CardContent sx={{ p: '10px !important' }}>
                             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.5 }}>
                               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                {isCustom && (
+                                  <Chip
+                                    icon={<StarIcon sx={{ fontSize: '11px !important', color: '#B45309 !important' }} />}
+                                    label="Авторский"
+                                    size="small"
+                                    sx={{
+                                      bgcolor: '#FEF3C7',
+                                      color: '#92400E',
+                                      fontSize: '0.62rem',
+                                      fontWeight: 800,
+                                      height: 18,
+                                      borderRadius: '4px',
+                                      border: '1px solid #FCD34D'
+                                    }}
+                                  />
+                                )}
                                 <Chip
                                   label={cluster?.code || 'CL'}
                                   size="small"
@@ -1000,9 +1106,14 @@ export default function OrthoTemplatesManager() {
                                 {t.joint_name}
                               </Typography>
                             </Box>
-                            <Typography variant="body2" sx={{ fontWeight: 700, color: '#1E293B', mb: 0.5, lineHeight: 1.3 }}>
+                            <Typography variant="body2" sx={{ fontWeight: 700, color: '#1E293B', mb: 0.3, lineHeight: 1.3 }}>
                               {t.title}
                             </Typography>
+                            {isCustom && t.author_doctor_name && (
+                              <Typography variant="caption" sx={{ display: 'block', color: '#B45309', fontWeight: 600, mb: 0.3, fontSize: '0.68rem' }}>
+                                ⭐ Автор: {t.author_doctor_name}
+                              </Typography>
+                            )}
                             {t.stage_or_severity && (
                               <Typography variant="caption" sx={{ display: 'block', color: '#0284C7', fontWeight: 600, mb: 0.5, fontSize: '0.68rem' }}>
                                 {t.stage_or_severity}
@@ -1037,8 +1148,19 @@ export default function OrthoTemplatesManager() {
             </Grid>
 
         {/* RIGHT DETAIL PANEL: Editor & Live Preview */}
-        <Grid size={{ xs: 12, md: 8, lg: 8.5 }}>
-          <Paper sx={{ p: 2.5, height: 'calc(100vh - 160px)', display: 'flex', flexDirection: 'column', borderRadius: 2, overflowY: 'auto' }}>
+        <Grid size={{ xs: 12, md: 8, lg: 8.5 }} sx={{ height: '100%', minHeight: 0 }}>
+          <Paper
+            sx={{
+              p: 2.5,
+              height: '100%',
+              display: 'flex',
+              flexDirection: 'column',
+              borderRadius: 2,
+              overflowY: 'auto',
+              '&::-webkit-scrollbar': { width: 6 },
+              '&::-webkit-scrollbar-thumb': { bgcolor: '#CBD5E1', borderRadius: 3 }
+            }}
+          >
             {loadingDetail ? (
               <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
                 <CircularProgress />
@@ -1052,11 +1174,41 @@ export default function OrthoTemplatesManager() {
             ) : (
               <>
                 {/* Header Action Bar */}
-                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2, pb: 1.5, borderBottom: '1px solid #E2E8F0' }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Box
+                  sx={{
+                    position: 'sticky',
+                    top: -20,
+                    zIndex: 10,
+                    bgcolor: '#FFFFFF',
+                    pt: 0.5,
+                    pb: 1.5,
+                    mb: 2,
+                    borderBottom: '1px solid #E2E8F0',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    flexWrap: 'wrap',
+                    gap: 1
+                  }}
+                >
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
                     <Typography variant="h6" sx={{ fontWeight: 800, color: '#0F3C64' }}>
                       {currentTemplate.id ? `Редактирование: ${currentTemplate.title}` : 'Новый клинический шаблон'}
                     </Typography>
+                    {(currentTemplate.is_custom || currentTemplate.category === 'Кастомизированный шаблон') && (
+                      <Chip
+                        icon={<StarIcon sx={{ fontSize: '13px !important', color: '#B45309 !important' }} />}
+                        label="⭐ Авторский кастом"
+                        size="small"
+                        sx={{
+                          bgcolor: '#FEF3C7',
+                          color: '#92400E',
+                          fontWeight: 800,
+                          fontSize: '0.72rem',
+                          border: '1px solid #FCD34D'
+                        }}
+                      />
+                    )}
                   </Box>
                   <Box sx={{ display: 'flex', gap: 1 }}>
                     {currentTemplate.id && (
@@ -1186,7 +1338,7 @@ export default function OrthoTemplatesManager() {
                       onChange={(e) => setCurrentTemplate({ ...currentTemplate, stage_or_severity: e.target.value })}
                     />
                   </Grid>
-                  <Grid size={{ xs: 12, sm: 12 }}>
+                  <Grid size={{ xs: 12, sm: 6 }}>
                     <TextField
                       label="Клиническая категория / Нозологическая группа"
                       size="small"
@@ -1195,70 +1347,189 @@ export default function OrthoTemplatesManager() {
                       onChange={(e) => setCurrentTemplate({ ...currentTemplate, category: e.target.value })}
                     />
                   </Grid>
+                  <Grid size={{ xs: 12, sm: 6 }}>
+                    <TextField
+                      label="Автор протокола (Врач)"
+                      size="small"
+                      fullWidth
+                      placeholder="Напр. Иванов И.И."
+                      value={currentTemplate.author_doctor_name || ''}
+                      onChange={(e) => setCurrentTemplate({ ...currentTemplate, author_doctor_name: e.target.value })}
+                      helperText={currentTemplate.is_custom ? '⭐ Кастомизированный авторский шаблон' : ''}
+                    />
+                  </Grid>
                 </Grid>
 
                 {/* Tabs Bar */}
-                <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}>
-                  <Tabs value={activeTab} onChange={(_, v) => setActiveTab(v)}>
-                    <Tab label="1. Жалобы и Объективно" icon={<HospitalIcon fontSize="small" />} iconPosition="start" />
-                    <Tab label="2. Гониометрия ROM" icon={<RomIcon fontSize="small" />} iconPosition="start" />
+                <Box
+                  sx={{
+                    position: 'sticky',
+                    top: 40,
+                    zIndex: 9,
+                    bgcolor: '#FFFFFF',
+                    borderBottom: '2px solid #E2E8F0',
+                    mb: 2.5,
+                    flexShrink: 0
+                  }}
+                >
+                  <Tabs
+                    value={activeTab}
+                    onChange={(_, v) => setActiveTab(v)}
+                    variant="scrollable"
+                    scrollButtons="auto"
+                    allowScrollButtonsMobile
+                    sx={{
+                      minHeight: 44,
+                      '& .MuiTabs-scroller': {
+                        overflowX: 'auto !important'
+                      },
+                      '& .MuiTabs-flexContainer': {
+                        gap: 0.5
+                      },
+                      '& .MuiTab-root': {
+                        textTransform: 'none',
+                        fontWeight: 700,
+                        fontSize: '0.8rem',
+                        minHeight: 44,
+                        minWidth: 'auto',
+                        px: 1.25,
+                        py: 0.75,
+                        whiteSpace: 'nowrap',
+                        color: '#64748B',
+                        transition: 'all 0.15s ease',
+                        '&:hover': {
+                          color: '#0F3C64',
+                          bgcolor: '#F8FAFC'
+                        },
+                        '&.Mui-selected': {
+                          color: '#0F3C64',
+                          fontWeight: 800
+                        }
+                      },
+                      '& .MuiTabs-indicator': {
+                        height: 3,
+                        borderRadius: '3px 3px 0 0',
+                        bgcolor: '#0284C7'
+                      }
+                    }}
+                  >
+                    <Tab label="1. Жалобы и Объективно" icon={<HospitalIcon sx={{ fontSize: 17 }} />} iconPosition="start" />
+                    <Tab label="2. Гониометрия ROM" icon={<RomIcon sx={{ fontSize: 17 }} />} iconPosition="start" />
                     <Tab
                       label={
-                        <Badge badgeContent={currentTemplate.tests.length} color="primary" sx={{ pr: 1 }}>
-                          3. Ортопедические тесты
-                        </Badge>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                          <span>3. Ортопедические тесты</span>
+                          <Chip
+                            label={currentTemplate.tests.length}
+                            size="small"
+                            sx={{
+                              height: 18,
+                              fontSize: '0.65rem',
+                              fontWeight: 800,
+                              bgcolor: activeTab === 2 ? '#0284C7' : '#E2E8F0',
+                              color: activeTab === 2 ? '#FFFFFF' : '#475569'
+                            }}
+                          />
+                        </Box>
                       }
-                      icon={<HealingIcon fontSize="small" />}
+                      icon={<HealingIcon sx={{ fontSize: 17 }} />}
                       iconPosition="start"
                     />
                     <Tab
                       label={
-                        <Badge badgeContent={currentTemplate.diagnostics.length} color="secondary" sx={{ pr: 1 }}>
-                          4. Диагностика
-                        </Badge>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                          <span>4. Диагностика</span>
+                          <Chip
+                            label={currentTemplate.diagnostics.length}
+                            size="small"
+                            sx={{
+                              height: 18,
+                              fontSize: '0.65rem',
+                              fontWeight: 800,
+                              bgcolor: activeTab === 3 ? '#0284C7' : '#E2E8F0',
+                              color: activeTab === 3 ? '#FFFFFF' : '#475569'
+                            }}
+                          />
+                        </Box>
                       }
-                      icon={<BiotechIcon fontSize="small" />}
+                      icon={<BiotechIcon sx={{ fontSize: 17 }} />}
                       iconPosition="start"
                     />
-                    <Tab label="5. Назначения и Услуги" icon={<HospitalIcon fontSize="small" />} iconPosition="start" />
-                    <Tab label="6. Предпросмотр протокола А4" icon={<PreviewIcon fontSize="small" />} iconPosition="start" />
+                    <Tab label="5. Назначения и Услуги" icon={<HospitalIcon sx={{ fontSize: 17 }} />} iconPosition="start" />
+                    <Tab label="6. Предпросмотр протокола" icon={<PreviewIcon sx={{ fontSize: 17 }} />} iconPosition="start" />
                   </Tabs>
                 </Box>
 
                 {/* TAB 0: Complaints, Anamnesis & Objective */}
                 {activeTab === 0 && (
-                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.25, pb: 4 }}>
                     <TextField
-                      label="Эталонные жалобы пациента"
+                      label="Жалобы"
                       multiline
-                      rows={3}
+                      minRows={2.5}
                       fullWidth
                       value={currentTemplate.complaints_template || ''}
                       onChange={(e) => setCurrentTemplate({ ...currentTemplate, complaints_template: e.target.value })}
                       placeholder="Боль по передней поверхности колена при нагрузке, спуске по лестнице..."
                     />
                     <TextField
-                      label="Анамнез заболевания"
+                      label="Анамнез заболевания (Anamnesis morbi)"
                       multiline
-                      rows={2.5}
+                      minRows={2.5}
                       fullWidth
                       value={currentTemplate.anamnesis_template || ''}
                       onChange={(e) => setCurrentTemplate({ ...currentTemplate, anamnesis_template: e.target.value })}
                       placeholder="Боли нарастали в течение 3 месяцев после физической нагрузки..."
                     />
                     <TextField
-                      label="Объективный локальный статус"
+                      label="Анамнез жизни (Anamnesis vitae)"
                       multiline
-                      rows={3}
+                      minRows={2.5}
+                      fullWidth
+                      value={currentTemplate.anamnesis_vitae_template || ''}
+                      onChange={(e) => setCurrentTemplate({ ...currentTemplate, anamnesis_vitae_template: e.target.value })}
+                      placeholder="Аллергологический статус, сопутствующие заболевания, перенесенные вмешательства..."
+                    />
+                    <TextField
+                      label="Общий объективный статус (Status praesens)"
+                      multiline
+                      minRows={2.5}
+                      fullWidth
+                      value={currentTemplate.objective_status_template || ''}
+                      onChange={(e) => setCurrentTemplate({ ...currentTemplate, objective_status_template: e.target.value })}
+                      placeholder="Общее состояние, телосложение, гемодинамика, кожные покровы, периферические отеки..."
+                    />
+                    <TextField
+                      label="Объективный локальный ортопедический статус (Status localis)"
+                      multiline
+                      minRows={3}
                       fullWidth
                       value={currentTemplate.objective_template || ''}
                       onChange={(e) => setCurrentTemplate({ ...currentTemplate, objective_template: e.target.value })}
-                      placeholder="Умеренный отек, болезненность суставной щели..."
+                      placeholder="Умеренный отек, болезненность суставной щели, деформация оси..."
+                    />
+                    <TextField
+                      label="Специальные методы исследования (МРТ, КТ, рентген, УЗИ, анализы)"
+                      multiline
+                      minRows={2.5}
+                      fullWidth
+                      value={currentTemplate.special_studies_template || ''}
+                      onChange={(e) => setCurrentTemplate({ ...currentTemplate, special_studies_template: e.target.value })}
+                      placeholder="Рентгенологические критерии, МРТ-заключение, сонография, лабораторные маркеры..."
+                    />
+                    <TextField
+                      label="Выполненные манипуляции на приеме (блокады, пункции, инъекции)"
+                      multiline
+                      minRows={2.5}
+                      fullWidth
+                      value={currentTemplate.performed_manipulations_template || ''}
+                      onChange={(e) => setCurrentTemplate({ ...currentTemplate, performed_manipulations_template: e.target.value })}
+                      placeholder="Внутрисуставная пункция, блокада ГКС, введение гиалуроновой кислоты/PRP, повязка..."
                     />
                     <TextField
                       label="Рекомендации и консервативное лечение"
                       multiline
-                      rows={2.5}
+                      minRows={3}
                       fullWidth
                       value={currentTemplate.recommendations_template || ''}
                       onChange={(e) => setCurrentTemplate({ ...currentTemplate, recommendations_template: e.target.value })}
@@ -1624,11 +1895,23 @@ export default function OrthoTemplatesManager() {
                     </Typography>
 
                     <Typography variant="body2" sx={{ mb: 1 }}>
-                      <strong>Анамнез заболевания:</strong> {currentTemplate.anamnesis_template || 'Не указан'}
+                      <strong>Анамнез заболевания (Anamnesis morbi):</strong> {currentTemplate.anamnesis_template || 'Не указан'}
                     </Typography>
 
+                    {currentTemplate.anamnesis_vitae_template && (
+                      <Typography variant="body2" sx={{ mb: 1 }}>
+                        <strong>Анамнез жизни (Anamnesis vitae):</strong> {currentTemplate.anamnesis_vitae_template}
+                      </Typography>
+                    )}
+
+                    {currentTemplate.objective_status_template && (
+                      <Typography variant="body2" sx={{ mb: 1 }}>
+                        <strong>Общий объективный статус (Status praesens):</strong> {currentTemplate.objective_status_template}
+                      </Typography>
+                    )}
+
                     <Typography variant="body2" sx={{ mb: 1 }}>
-                      <strong>Объективный статус:</strong> {currentTemplate.objective_template || 'Без особенностей'}
+                      <strong>Локальный ортопедический статус:</strong> {currentTemplate.objective_template || 'Без особенностей'}
                     </Typography>
 
                     <Typography variant="body2" sx={{ mb: 1 }}>
@@ -1648,6 +1931,12 @@ export default function OrthoTemplatesManager() {
                       ))}
                     </Box>
 
+                    {currentTemplate.special_studies_template && (
+                      <Typography variant="body2" sx={{ mt: 1.5, mb: 0.5 }}>
+                        <strong>Специальные методы исследования:</strong> {currentTemplate.special_studies_template}
+                      </Typography>
+                    )}
+
                     <Typography variant="body2" sx={{ mt: 1.5, mb: 0.5 }}>
                       <strong>План обследования:</strong>
                     </Typography>
@@ -1660,6 +1949,12 @@ export default function OrthoTemplatesManager() {
                         </li>
                       ))}
                     </Box>
+
+                    {currentTemplate.performed_manipulations_template && (
+                      <Typography variant="body2" sx={{ mt: 1.5, mb: 0.5 }}>
+                        <strong>Выполненные манипуляции:</strong> {currentTemplate.performed_manipulations_template}
+                      </Typography>
+                    )}
 
                     <Typography variant="body2" sx={{ mt: 1.5, mb: 0.5 }}>
                       <strong>Назначения и лечение:</strong> {currentTemplate.recommendations_template}

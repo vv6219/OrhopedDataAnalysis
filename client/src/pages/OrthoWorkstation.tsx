@@ -59,6 +59,17 @@ import PatientMediaHub from '../components/ortho/PatientMediaHub';
 import type { MediaItem } from '../components/ortho/PatientMediaHub';
 import DiagnosticRecommendationsCard from '../components/ortho/DiagnosticRecommendationsCard';
 import ScienceIcon from '@mui/icons-material/Science';
+import UnfoldMoreIcon from '@mui/icons-material/UnfoldMore';
+import UnfoldLessIcon from '@mui/icons-material/UnfoldLess';
+import PrintIcon from '@mui/icons-material/Print';
+import HealingIcon from '@mui/icons-material/Healing';
+import FactCheckIcon from '@mui/icons-material/FactCheck';
+import AccessibilityNewIcon from '@mui/icons-material/AccessibilityNew';
+import BiotechIcon from '@mui/icons-material/Biotech';
+import ContentPasteIcon from '@mui/icons-material/ContentPaste';
+import MonitorHeartIcon from '@mui/icons-material/MonitorHeart';
+import StarIcon from '@mui/icons-material/Star';
+import { OrthoSandwichCard } from '../components/ortho/OrthoSandwichCard';
 import OrthoProtocolPreview from '../components/ortho/OrthoProtocolPreview';
 import type { OrthoProtocolData, OrthoPrescriptionItem } from '../components/reports/OrthoProtocolPrintTemplate';
 import { parseProtocolContent } from '../utils/protocolXmlParser';
@@ -142,9 +153,79 @@ export default function OrthoWorkstation() {
   const [protocolId, setProtocolId] = useState<number | null>(null);
   const [complaints, setComplaints] = useState('');
   const [anamnesis, setAnamnesis] = useState('');
+  const [anamnesisVitae, setAnamnesisVitae] = useState('');
+  const [objectiveStatus, setObjectiveStatus] = useState('');
+  const [specialStudies, setSpecialStudies] = useState('');
+  const [performedManipulations, setPerformedManipulations] = useState('');
   const [vasScore, setVasScore] = useState<number>(4);
   const [gait] = useState('Свободная, физиологическая, без хромоты.');
   const [posture] = useState('Осанка правильная, физиологические изгибы сохранены.');
+
+  // Sandwich Card Controls: Expanded state (default: all expanded on first load)
+  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
+    complaints: true,
+    anamnesis_morbi: true,
+    anamnesis_vitae: true,
+    objective_status: true,
+    status_localis: true,
+    functional_tests: true,
+    special_studies: true,
+    diagnosis: true,
+    performed_manipulations: true,
+    recommendations: true
+  });
+
+  // Sandwich Card Controls: Active / Selective print filter state
+  const [activeSections, setActiveSections] = useState<Record<string, boolean>>({
+    complaints: true,
+    anamnesis_morbi: true,
+    anamnesis_vitae: true,
+    objective_status: true,
+    status_localis: true,
+    functional_tests: true,
+    special_studies: true,
+    diagnosis: true,
+    performed_manipulations: true,
+    recommendations: true
+  });
+
+  const handleToggleExpand = (secKey: string) => {
+    setExpandedSections((prev) => ({ ...prev, [secKey]: !prev[secKey] }));
+  };
+
+  const handleExpandAll = () => {
+    setExpandedSections({
+      complaints: true,
+      anamnesis_morbi: true,
+      anamnesis_vitae: true,
+      objective_status: true,
+      status_localis: true,
+      functional_tests: true,
+      special_studies: true,
+      diagnosis: true,
+      performed_manipulations: true,
+      recommendations: true
+    });
+  };
+
+  const handleCollapseAll = () => {
+    setExpandedSections({
+      complaints: false,
+      anamnesis_morbi: false,
+      anamnesis_vitae: false,
+      objective_status: false,
+      status_localis: false,
+      functional_tests: false,
+      special_studies: false,
+      diagnosis: false,
+      performed_manipulations: false,
+      recommendations: false
+    });
+  };
+
+  const handleToggleActive = (secKey: string, active: boolean) => {
+    setActiveSections((prev) => ({ ...prev, [secKey]: active }));
+  };
 
   // Selected joint on Homunculus & Exam states per joint
   const [selectedJoint, setSelectedJoint] = useState<JointAreaId>('knee_r');
@@ -183,6 +264,19 @@ export default function OrthoWorkstation() {
   const [protocolSearchQuery, setProtocolSearchQuery] = useState('');
   const [currentSelectedTemplate, setCurrentSelectedTemplate] = useState<any | null>(null);
 
+  // Custom Template Creation State (Save as customized template to Cluster)
+  const [saveCustomDialogOpen, setSaveCustomDialogOpen] = useState(false);
+  const [customTplTitle, setCustomTplTitle] = useState('');
+  const [customTplClusterId, setCustomTplClusterId] = useState('cluster_knee');
+  const [customTplMkbCode, setCustomTplMkbCode] = useState('');
+  const [customTplCategory, setCustomTplCategory] = useState('Кастомизированный шаблон');
+  const [customTplTags, setCustomTplTags] = useState('custom, авторский');
+  const [customTplDoctorName, setCustomTplDoctorName] = useState('');
+  const [savingCustomTpl, setSavingCustomTpl] = useState(false);
+
+  // Filter only custom templates in protocol dialog
+  const [filterOnlyCustom, setFilterOnlyCustom] = useState(false);
+
   // Fast Patient Autocomplete search
   const handleSearchPatients = async (query: string) => {
     if (!query || query.trim().length < 2) {
@@ -203,7 +297,7 @@ export default function OrthoWorkstation() {
     }
   };
 
-  // Complete reset of all 4 clinical exam cards & workstation state
+  // Complete reset of all clinical exam cards & workstation state
   const resetAllCardsState = () => {
     setProtocolId(null);
     setIsSigned(false);
@@ -211,6 +305,10 @@ export default function OrthoWorkstation() {
     setSignatureHash(undefined);
     setComplaints('');
     setAnamnesis('');
+    setAnamnesisVitae('');
+    setObjectiveStatus('');
+    setSpecialStudies('');
+    setPerformedManipulations('');
     setVasScore(4);
     setSelectedJoint('knee_r');
     setJointExamsMap({
@@ -225,7 +323,6 @@ export default function OrthoWorkstation() {
     });
     setSelectedMkb(null);
     setClinicalDiagnosis('');
-    // Card 4: План лечения, манипуляции и назначенные услуги клиники
     setRecommendations('1. Охранительный двигательный режим, исключение осевых ударных нагрузок.\n2. Ношение разгрузочного ортеза при ходьбе.\n3. Курс ЛФК и кинезиотерапии.');
     setPendingService(null);
     setPrescriptions([]);
@@ -234,7 +331,58 @@ export default function OrthoWorkstation() {
     setBiomechanicsHistory([]);
     setRightPanelTab(0);
     setCurrentSelectedTemplate(null);
+    setActiveSections({
+      complaints: true,
+      anamnesis_morbi: true,
+      anamnesis_vitae: true,
+      objective_status: true,
+      status_localis: true,
+      functional_tests: true,
+      special_studies: true,
+      diagnosis: true,
+      performed_manipulations: true,
+      recommendations: true
+    });
+    setExpandedSections({
+      complaints: true,
+      anamnesis_morbi: true,
+      anamnesis_vitae: true,
+      objective_status: true,
+      status_localis: true,
+      functional_tests: true,
+      special_studies: true,
+      diagnosis: true,
+      performed_manipulations: true,
+      recommendations: true
+    });
   };
+
+  const printSectionsCount = useMemo(() => {
+    let count = 0;
+    if (activeSections.complaints && complaints.trim()) count++;
+    if (activeSections.anamnesis_morbi && anamnesis.trim()) count++;
+    if (activeSections.anamnesis_vitae && anamnesisVitae.trim()) count++;
+    if (activeSections.objective_status && objectiveStatus.trim()) count++;
+    if (activeSections.status_localis) count++;
+    if (activeSections.functional_tests) count++;
+    if (activeSections.special_studies && specialStudies.trim()) count++;
+    if (activeSections.diagnosis && (clinicalDiagnosis.trim() || selectedMkb)) count++;
+    if (activeSections.performed_manipulations && performedManipulations.trim()) count++;
+    if (activeSections.recommendations && (recommendations.trim() || prescriptions.length > 0)) count++;
+    return count;
+  }, [
+    activeSections,
+    complaints,
+    anamnesis,
+    anamnesisVitae,
+    objectiveStatus,
+    specialStudies,
+    clinicalDiagnosis,
+    selectedMkb,
+    performedManipulations,
+    recommendations,
+    prescriptions
+  ]);
 
   // Fetch Appointment & Patient Context
   const fetchContext = async () => {
@@ -303,9 +451,24 @@ export default function OrthoWorkstation() {
 
         const parsedXml = parseProtocolContent(cp.content);
 
-        // Card 1: Hydrate clinical narrative
+        // Hydrate clinical narrative
         setComplaints(parsedJson?.complaints || parsedXml.complaints || cp.title || '');
         setAnamnesis(parsedJson?.anamnesis || parsedXml.anamnesis || '');
+        setAnamnesisVitae(cp.anamnesis_vitae || parsedJson?.anamnesis_vitae || '');
+        setObjectiveStatus(cp.objective_status || parsedJson?.objective_status || '');
+        setSpecialStudies(cp.special_studies || parsedJson?.special_studies || '');
+        setPerformedManipulations(cp.performed_manipulations || parsedJson?.performed_manipulations || '');
+
+        if (cp.active_sections_mask || parsedJson?.active_sections_mask) {
+          try {
+            const rawMask = cp.active_sections_mask || parsedJson?.active_sections_mask;
+            const parsedMask = typeof rawMask === 'string' ? JSON.parse(rawMask) : rawMask;
+            if (parsedMask && typeof parsedMask === 'object') {
+              setActiveSections((prev) => ({ ...prev, ...parsedMask }));
+            }
+          } catch {}
+        }
+
         setRecommendations(
           parsedJson?.recommendations ||
           parsedXml.recommendations ||
@@ -313,7 +476,7 @@ export default function OrthoWorkstation() {
           '1. Охранительный двигательный режим, исключение осевых ударных нагрузок.\n2. Ношение разгрузочного ортеза при ходьбе.\n3. Курс ЛФК и кинезиотерапии.'
         );
 
-        // Card 2: Joint exam & Homunculus
+        // Joint exam & Homunculus
         if (parsedJson) {
           if (parsedJson.vasScore !== undefined) setVasScore(parsedJson.vasScore);
           if (parsedJson.jointArea) setSelectedJoint(parsedJson.jointArea as JointAreaId);
@@ -335,7 +498,7 @@ export default function OrthoWorkstation() {
           setVasScore(cp.vas_score);
         }
 
-        // Card 4: Hydrate prescriptions from parsedJson or fallback to backend currentPrescriptions
+        // Hydrate prescriptions from parsedJson or fallback to backend currentPrescriptions
         if (parsedJson?.prescriptions && Array.isArray(parsedJson.prescriptions) && parsedJson.prescriptions.length > 0) {
           setPrescriptions(
             parsedJson.prescriptions.map((p: any, i: number) => ({
@@ -372,7 +535,7 @@ export default function OrthoWorkstation() {
           setPrescriptions([]);
         }
 
-        // Card 3: Diagnosis
+        // Diagnosis
         const diagText = parsedJson?.clinicalDiagnosis || parsedXml.diagnosis || (parsedXml.isXml ? '' : cp.content) || '';
         setClinicalDiagnosis(diagText);
 
@@ -401,13 +564,15 @@ export default function OrthoWorkstation() {
             tests: { lachman: 'negative', anterior_drawer: 'negative', mcmurray: 'negative' }
           }
         });
-        // Card 4: Clean slate for prescriptions & recommendations
         setRecommendations('1. Охранительный двигательный режим, исключение осевых ударных нагрузок.\n2. Ношение разгрузочного ортеза при ходьбе.\n3. Курс ЛФК и кинезиотерапии.');
         setPendingService(null);
         setPrescriptions([]);
-        // Narrative defaults
         setComplaints('Боль в правом коленном суставе при физической нагрузке и спуске по лестнице, стартовая скованность.');
         setAnamnesis('Считает себя больным около 6 месяцев. Связывает с повышенной нагрузкой. Ранее консервативно не лечился.');
+        setAnamnesisVitae('Аллергоанамнез не отягощен. Хронические заболевания: ГБ I ст. Операций на опорно-двигательном аппарате в анамнезе нет.');
+        setObjectiveStatus('Общее состояние удовлетворительное. Нормостенического телосложения. Кожные покровы физиологической окраски, чистые. Периферических отеков нет.');
+        setSpecialStudies('Рентгенография правого коленного сустава в 2-х проекциях: сужение суставной щели преимущественно в медиальном отделе, субхондральный остеосклероз, краевые остеофиты мыщелков бедренной и большеберцовой костей.');
+        setPerformedManipulations('Внутрисуставная эвакуация синовиального выпота правого коленного сустава (получено 15 мл серозной синовиальной жидкости). Введение пролонгированного ГКС под УЗИ-контролем.');
         setClinicalDiagnosis('Первичный двусторонний гонартроз II стадии (Kellgren-Lawrence). Застарелое повреждение внутреннего мениска правого коленного сустава. Болевой синдром (ВАШ 4).');
       }
     } catch (err: any) {
@@ -448,17 +613,53 @@ export default function OrthoWorkstation() {
     return 'knee_r';
   };
 
-  // Filter templates by selected cluster and search query
+  // Helper to extract custom template status and author name uniformly
+  const getTemplateCustomInfo = (tmpl: any) => {
+    let isCustom = Boolean(tmpl?.is_custom) || tmpl?.category === 'Кастомизированный шаблон';
+    let author = tmpl?.author_doctor_name || '';
+    let clusterId = tmpl?.cluster_id || '';
+
+    if (!isCustom && tmpl?.clinical_tags) {
+      const tagsStr = typeof tmpl.clinical_tags === 'string' ? tmpl.clinical_tags : JSON.stringify(tmpl.clinical_tags);
+      if (/custom|кастом|автор/i.test(tagsStr)) {
+        isCustom = true;
+      }
+    }
+
+    if (tmpl?.template_json) {
+      try {
+        const parsed = typeof tmpl.template_json === 'string' ? JSON.parse(tmpl.template_json) : tmpl.template_json;
+        if (parsed?.is_custom) isCustom = true;
+        if (parsed?.author_doctor_name && !author) author = parsed.author_doctor_name;
+        if (parsed?.cluster_id && !clusterId) clusterId = parsed.cluster_id;
+        if (parsed?.category === 'Кастомизированный шаблон') isCustom = true;
+      } catch {
+        // ignore parse errors
+      }
+    }
+
+    return { isCustom, author, clusterId };
+  };
+
+  // Filter templates by selected cluster, custom toggle, and search query
   const filteredTemplates = useMemo(() => {
     return templates.filter((tmpl) => {
+      const { isCustom, author, clusterId } = getTemplateCustomInfo(tmpl);
+
+      // 0. Only custom filter
+      if (filterOnlyCustom && !isCustom) {
+        return false;
+      }
+
       // 1. Cluster filter
       if (selectedClusterId && selectedClusterId !== 'all') {
+        const effectiveClusterId = tmpl.cluster_id || clusterId;
         const clusterCode = selectedClusterId.replace('cluster_', '').toUpperCase();
-        const tmplCluster = String(tmpl.cluster_id || tmpl.cluster || tmpl.category || '').toUpperCase();
+        const tmplCluster = String(effectiveClusterId || tmpl.cluster || tmpl.category || '').toUpperCase();
         const tmplJoint = String(tmpl.joint_name || '').toLowerCase();
         
         let match = false;
-        if (tmpl.cluster_id === selectedClusterId) {
+        if (effectiveClusterId === selectedClusterId) {
           match = true;
         } else if (tmplCluster.includes(clusterCode)) {
           match = true;
@@ -478,18 +679,166 @@ export default function OrthoWorkstation() {
         if (!match) return false;
       }
 
-      // 2. Search query filter
+      // 2. Search query filter (matches title, mkb, joint, category, author, tags)
       if (protocolSearchQuery.trim()) {
         const q = protocolSearchQuery.toLowerCase();
+        const isCustomKey = ['кастом', 'custom', 'автор'].some(k => q.includes(k));
+        if (isCustomKey && isCustom) {
+          return true;
+        }
+
         const titleMatch = (tmpl.title || '').toLowerCase().includes(q);
         const codeMatch = (tmpl.default_mkb_code || tmpl.mkb_code || '').toLowerCase().includes(q);
         const jointMatch = (tmpl.joint_name || '').toLowerCase().includes(q);
-        return titleMatch || codeMatch || jointMatch;
+        const tagsMatch = tmpl.clinical_tags ? JSON.stringify(tmpl.clinical_tags).toLowerCase().includes(q) : false;
+        const authorMatch = (author || tmpl.author_doctor_name || '').toLowerCase().includes(q);
+        const categoryMatch = (tmpl.category || '').toLowerCase().includes(q);
+
+        return titleMatch || codeMatch || jointMatch || tagsMatch || authorMatch || categoryMatch;
       }
 
       return true;
     });
-  }, [templates, selectedClusterId, protocolSearchQuery]);
+  }, [templates, selectedClusterId, protocolSearchQuery, filterOnlyCustom]);
+
+  // Open Save as Customized Template Dialog
+  const handleOpenSaveCustomTemplate = () => {
+    const clusterForJoint = JOINT_TO_CLUSTER[selectedJoint]?.clusterId || 'cluster_knee';
+    setCustomTplClusterId(clusterForJoint);
+
+    const mkbCode = selectedMkb?.code || '';
+    const diagnosis = clinicalDiagnosis || '';
+    const baseTitle = currentSelectedTemplate?.title
+      ? `${currentSelectedTemplate.title} (авторский)`
+      : mkbCode
+      ? `Протокол ${mkbCode} — ${diagnosis || 'Осмотр'}`
+      : 'Индивидуальный клинический протокол';
+    setCustomTplTitle(baseTitle);
+
+    setCustomTplMkbCode(mkbCode || currentSelectedTemplate?.default_mkb_code || currentSelectedTemplate?.mkb_code || '');
+    setCustomTplCategory('Кастомизированный шаблон');
+    setCustomTplTags('custom, авторский');
+
+    const doctorName = contextData?.doctor?.full_name || contextData?.appointment?.doctor_name || 'Добрушкин Александр Моисеевич';
+    setCustomTplDoctorName(doctorName);
+
+    setSaveCustomDialogOpen(true);
+  };
+
+  // Execute Save as Customized Template to Database
+  const handleSaveCustomTemplate = async () => {
+    if (!customTplTitle.trim()) {
+      setToastMessage('Укажите наименование кастомизированного шаблона');
+      return;
+    }
+
+    setSavingCustomTpl(true);
+    try {
+      const selectedClusterObj = MASTER_CLUSTERS.find((c) => c.id === customTplClusterId);
+      const parsedTags = customTplTags
+        .split(',')
+        .map((t) => t.trim().toLowerCase())
+        .filter(Boolean);
+
+      // Convert tests map to relational array format expected by backend
+      const testsArray = Object.entries(currentJointState.tests || {}).map(([code, result]) => ({
+        test_code: code,
+        expected_result: result,
+        is_mandatory: 1
+      }));
+
+      const payload = {
+        title: customTplTitle.trim(),
+        joint_name: selectedJoint.split('_')[0],
+        cluster_id: customTplClusterId,
+        cluster_name: selectedClusterObj?.name_ru || customTplClusterId,
+        default_mkb_code: customTplMkbCode.trim(),
+        category: customTplCategory.trim() || 'Кастомизированный шаблон',
+        author_doctor_name: customTplDoctorName.trim() || 'Врач травматолог-ортопед',
+        is_custom: 1,
+        clinical_tags: parsedTags,
+        default_side: selectedJoint.endsWith('_l') ? 'left' : 'right',
+        complaints_template: complaints,
+        anamnesis_template: anamnesis,
+        anamnesis_vitae_template: anamnesisVitae,
+        objective_template: objectiveStatus,
+        objective_status_template: objectiveStatus,
+        special_studies_template: specialStudies,
+        performed_manipulations_template: performedManipulations,
+        recommendations_template: recommendations,
+        default_sections_mask: activeSections,
+        rom_norm_preset: currentJointState.rom || null,
+        tests: testsArray,
+        diagnostics: activeTemplateDiagnostics || [],
+        template_json: {
+          is_custom: 1,
+          author_doctor_name: customTplDoctorName.trim() || 'Врач травматолог-ортопед',
+          category: customTplCategory.trim() || 'Кастомизированный шаблон',
+          cluster_id: customTplClusterId,
+          cluster_name: selectedClusterObj?.name_ru || customTplClusterId,
+          complaints,
+          anamnesis,
+          anamnesis_vitae: anamnesisVitae,
+          objective: objectiveStatus,
+          objective_status: objectiveStatus,
+          special_studies: specialStudies,
+          performed_manipulations: performedManipulations,
+          recommendations,
+          rom: currentJointState.rom || null,
+          tests: currentJointState.tests || {},
+          diagnostics: activeTemplateDiagnostics || []
+        }
+      };
+
+      const res = await fetch(`${API_BASE_URL}/api/ortho/templates`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (!res.ok) {
+        const text = await res.text();
+        let errMsg = `Ошибка сервера (${res.status})`;
+        try {
+          const errObj = JSON.parse(text);
+          if (errObj.error) errMsg = errObj.error;
+        } catch {
+          if (text) errMsg = `${errMsg}: ${text.slice(0, 100)}`;
+        }
+        throw new Error(errMsg);
+      }
+
+      const data = await res.json();
+      if (!data.success) {
+        throw new Error(data.error || 'Ошибка при сохранении кастомизированного шаблона');
+      }
+
+      // Reload templates list so new custom template appears immediately in search/dialog
+      const tRes = await fetch(`${API_BASE_URL}/api/ortho/templates`);
+      if (tRes.ok) {
+        const tData = await tRes.json();
+        if (tData.templates) {
+          setTemplates(tData.templates);
+          const found = tData.templates.find(
+            (t: any) => t.rawId === data.id || t.id === `ortho-${data.id}`
+          );
+          if (found) {
+            setCurrentSelectedTemplate(found);
+          }
+        }
+      }
+
+      setSaveCustomDialogOpen(false);
+      setToastMessage(
+        `Кастомизированный шаблон "${customTplTitle.trim()}" успешно сохранен в кластер "${selectedClusterObj?.name_ru || ''}"!`
+      );
+    } catch (err: any) {
+      console.error('Error saving custom template:', err);
+      setToastMessage(err.message || 'Не удалось сохранить шаблон');
+    } finally {
+      setSavingCustomTpl(false);
+    }
+  };
 
   // Current Joint State
   const currentJointState: JointExamState = useMemo(() => {
@@ -579,12 +928,9 @@ export default function OrthoWorkstation() {
         if (parsed.complaints) setComplaints(parsed.complaints);
         if (parsed.anamnesis) setAnamnesis(parsed.anamnesis);
         if (parsed.diagnosis) setClinicalDiagnosis(parsed.diagnosis);
-        if (parsed.recommendations || parsed.performed) {
-          const combinedRec = [
-            parsed.recommendations,
-            parsed.performed ? `Выполнено:\n${parsed.performed}` : ''
-          ].filter(Boolean).join('\n\n');
-          setRecommendations(combinedRec);
+        if (parsed.performed) setPerformedManipulations(parsed.performed);
+        if (parsed.recommendations) {
+          setRecommendations(parsed.recommendations);
         }
 
         const effectiveMkb = tmpl.default_mkb_code || parsed.mkb;
@@ -604,6 +950,28 @@ export default function OrthoWorkstation() {
 
         const anamnesisText = tmpl.anamnesis_template || parsed.anamnesis;
         if (anamnesisText) setAnamnesis(anamnesisText);
+
+        const anamnesisVitaeText = tmpl.anamnesis_vitae_template || tmpl.anamnesis_vitae || parsed.anamnesis_vitae;
+        if (anamnesisVitaeText) setAnamnesisVitae(anamnesisVitaeText);
+
+        const objectiveStatusText = tmpl.objective_status_template || tmpl.objective_status || parsed.objective_status;
+        if (objectiveStatusText) setObjectiveStatus(objectiveStatusText);
+
+        const specialStudiesText = tmpl.special_studies_template || tmpl.special_studies || parsed.special_studies;
+        if (specialStudiesText) setSpecialStudies(specialStudiesText);
+
+        const performedManipulationsText = tmpl.performed_manipulations_template || tmpl.performed_manipulations || parsed.performed_manipulations;
+        if (performedManipulationsText) setPerformedManipulations(performedManipulationsText);
+
+        const sectionsMask = tmpl.default_sections_mask || parsed.active_sections_mask;
+        if (sectionsMask) {
+          try {
+            const parsedMask = typeof sectionsMask === 'string' ? JSON.parse(sectionsMask) : sectionsMask;
+            if (parsedMask && typeof parsedMask === 'object') {
+              setActiveSections((prev) => ({ ...prev, ...parsedMask }));
+            }
+          } catch {}
+        }
 
         if (parsed.vas !== undefined) setVasScore(parsed.vas);
 
@@ -649,6 +1017,18 @@ export default function OrthoWorkstation() {
                 const t = fullData.template;
                 if (t.complaints_template) setComplaints(t.complaints_template);
                 if (t.anamnesis_template) setAnamnesis(t.anamnesis_template);
+                if (t.anamnesis_vitae_template) setAnamnesisVitae(t.anamnesis_vitae_template);
+                if (t.objective_status_template) setObjectiveStatus(t.objective_status_template);
+                if (t.special_studies_template) setSpecialStudies(t.special_studies_template);
+                if (t.performed_manipulations_template) setPerformedManipulations(t.performed_manipulations_template);
+                if (t.default_sections_mask) {
+                  try {
+                    const parsedM = typeof t.default_sections_mask === 'string' ? JSON.parse(t.default_sections_mask) : t.default_sections_mask;
+                    if (parsedM && typeof parsedM === 'object') {
+                      setActiveSections((prev) => ({ ...prev, ...parsedM }));
+                    }
+                  } catch {}
+                }
                 if (t.recommendations_template) setRecommendations(t.recommendations_template);
 
                 if (Array.isArray(t.diagnosticMethods)) {
@@ -743,6 +1123,11 @@ export default function OrthoWorkstation() {
       },
       complaints,
       anamnesis,
+      anamnesisVitae,
+      objectiveStatus,
+      specialStudies,
+      performedManipulations,
+      activeSectionsMask: activeSections,
       vasScore,
       gait,
       posture,
@@ -761,6 +1146,11 @@ export default function OrthoWorkstation() {
     protocolId,
     complaints,
     anamnesis,
+    anamnesisVitae,
+    objectiveStatus,
+    specialStudies,
+    performedManipulations,
+    activeSections,
     vasScore,
     gait,
     posture,
@@ -795,6 +1185,11 @@ export default function OrthoWorkstation() {
         tests: currentJointState.tests,
         complaints,
         anamnesis,
+        anamnesis_vitae: anamnesisVitae,
+        objective_status: objectiveStatus,
+        special_studies: specialStudies,
+        performed_manipulations: performedManipulations,
+        active_sections_mask: activeSections,
         recommendations,
         gait,
         posture,
@@ -1108,6 +1503,31 @@ export default function OrthoWorkstation() {
             </Button>
           </Tooltip>
 
+          <Tooltip
+            title="Сохранить текущие заполненные данные приема в Кластер как Кастомизированный (авторский) шаблон"
+            enterDelay={500}
+            leaveDelay={0}
+            disableInteractive
+          >
+            <Button
+              variant="outlined"
+              size="small"
+              startIcon={<StarIcon sx={{ color: '#F59E0B' }} />}
+              onClick={handleOpenSaveCustomTemplate}
+              sx={{
+                fontWeight: 700,
+                borderColor: '#F59E0B',
+                color: '#B45309',
+                whiteSpace: 'nowrap',
+                textTransform: 'none',
+                bgcolor: '#FFFBEB',
+                '&:hover': { bgcolor: '#FEF3C7', borderColor: '#D97706' }
+              }}
+            >
+              ⭐ В шаблон
+            </Button>
+          </Tooltip>
+
           <Button
             variant="outlined"
             size="small"
@@ -1148,12 +1568,73 @@ export default function OrthoWorkstation() {
       <Box sx={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
         {/* LEFT COLUMN: INTERACTIVE CLINICAL EXAM (55% Width) */}
         <Box sx={{ flex: '0 0 55%', overflowY: 'auto', p: 2, borderRight: '1px solid #CBD5E1' }}>
-          {/* 1. Жалобы, Анамнез, ВАШ */}
-          <Paper sx={{ p: 2, mb: 2, borderRadius: 2 }}>
-            <Typography variant="subtitle2" sx={{ fontWeight: 800, color: '#0F3C64', mb: 1.5, display: 'flex', alignItems: 'center', gap: 1 }}>
-              <MedicalServicesIcon sx={{ fontSize: 20 }} /> 1. Жалобы, анамнез и интенсивность боли
-            </Typography>
+          {/* SANDWICH TOP TOOLBAR: EXPAND/COLLAPSE ALL + PRINT STATUS BADGE */}
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              mb: 2,
+              p: 1.25,
+              bgcolor: '#F8FAFC',
+              borderRadius: 2,
+              border: '1px solid #E2E8F0'
+            }}
+          >
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Typography variant="caption" sx={{ fontWeight: 800, color: '#475569', mr: 0.5, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                Разделы приема:
+              </Typography>
+              <Button
+                size="small"
+                variant="outlined"
+                startIcon={<UnfoldMoreIcon sx={{ fontSize: 16 }} />}
+                onClick={handleExpandAll}
+                sx={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'none', py: 0.3, px: 1 }}
+              >
+                Развернуть все
+              </Button>
+              <Button
+                size="small"
+                variant="outlined"
+                startIcon={<UnfoldLessIcon sx={{ fontSize: 16 }} />}
+                onClick={handleCollapseAll}
+                sx={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'none', py: 0.3, px: 1, color: '#64748B', borderColor: '#CBD5E1' }}
+              >
+                Свернуть все
+              </Button>
+            </Box>
 
+            <Tooltip title="Разделы, отмеченные галочкой и содержащие текст, войдут в официальный протокол и распечатку. Деактивированные или пустые разделы не печатаются.">
+              <Chip
+                icon={<PrintIcon sx={{ fontSize: '0.95rem !important' }} />}
+                label={`В печать: ${printSectionsCount} из 10`}
+                size="small"
+                sx={{
+                  fontWeight: 800,
+                  fontSize: '0.78rem',
+                  bgcolor: printSectionsCount > 0 ? '#E0F2FE' : '#F1F5F9',
+                  color: printSectionsCount > 0 ? '#0369A1' : '#64748B',
+                  border: '1px solid',
+                  borderColor: printSectionsCount > 0 ? '#BAE6FD' : '#E2E8F0'
+                }}
+              />
+            </Tooltip>
+          </Box>
+
+          {/* 1. Жалобы и ВАШ */}
+          <OrthoSandwichCard
+            id="complaints"
+            title="1. Жалобы при обращении и интенсивность боли (ВАШ)"
+            subtitle="Характер боли, триггеры, стартовая скованность, ограничение движений"
+            icon={<MedicalServicesIcon sx={{ fontSize: 20 }} />}
+            expanded={expandedSections.complaints}
+            onToggleExpand={() => handleToggleExpand('complaints')}
+            isActive={activeSections.complaints}
+            onToggleActive={(act) => handleToggleActive('complaints', act)}
+            hasContent={Boolean(complaints.trim())}
+            previewSnippet={complaints.slice(0, 90) + (complaints.length > 90 ? '...' : '')}
+          >
             <Grid container spacing={1.5}>
               <Grid size={{ xs: 12 }}>
                 <TextField
@@ -1164,19 +1645,7 @@ export default function OrthoWorkstation() {
                   minRows={2}
                   value={complaints}
                   onChange={(e) => setComplaints(e.target.value)}
-                  placeholder="Боль, ограничение движений, отек, хруст..."
-                />
-              </Grid>
-              <Grid size={{ xs: 12 }}>
-                <TextField
-                  fullWidth
-                  size="small"
-                  label="Анамнез заболевания (Anamnesis morbi)"
-                  multiline
-                  minRows={2}
-                  value={anamnesis}
-                  onChange={(e) => setAnamnesis(e.target.value)}
-                  placeholder="Длительность, связь с травмой, проводимое ранее лечение..."
+                  placeholder="Боль, ограничение движений, отек, хруст, ощущение нестабильности..."
                 />
               </Grid>
               <Grid size={{ xs: 12 }}>
@@ -1211,18 +1680,140 @@ export default function OrthoWorkstation() {
                 </Box>
               </Grid>
             </Grid>
-          </Paper>
+          </OrthoSandwichCard>
 
-          {/* 2. 2D HOMUNCULUS & ANATOMICAL SELECTION */}
-          <Paper sx={{ p: 2, mb: 2, borderRadius: 2 }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.5 }}>
-              <Typography variant="subtitle2" sx={{ fontWeight: 800, color: '#0F3C64' }}>
-                2. Анатомическая карта (2D Гомункулус)
-              </Typography>
+          {/* 2. Анамнез заболевания */}
+          <OrthoSandwichCard
+            id="anamnesis_morbi"
+            title="2. Анамнез заболевания (Anamnesis morbi)"
+            subtitle="Давность симптомов, связь с нагрузкой или травмой, предшествующее лечение"
+            icon={<HistoryIcon sx={{ fontSize: 20 }} />}
+            expanded={expandedSections.anamnesis_morbi}
+            onToggleExpand={() => handleToggleExpand('anamnesis_morbi')}
+            isActive={activeSections.anamnesis_morbi}
+            onToggleActive={(act) => handleToggleActive('anamnesis_morbi', act)}
+            hasContent={Boolean(anamnesis.trim())}
+            previewSnippet={anamnesis.slice(0, 90) + (anamnesis.length > 90 ? '...' : '')}
+          >
+            <TextField
+              fullWidth
+              size="small"
+              label="Анамнез заболевания (Anamnesis morbi)"
+              multiline
+              minRows={2}
+              value={anamnesis}
+              onChange={(e) => setAnamnesis(e.target.value)}
+              placeholder="Длительность заболевания, связь с травмой, проводимое ранее консервативное лечение..."
+            />
+          </OrthoSandwichCard>
+
+          {/* 3. Анамнез жизни */}
+          <OrthoSandwichCard
+            id="anamnesis_vitae"
+            title="3. Анамнез жизни (Anamnesis vitae)"
+            subtitle="Аллергологический статус, сопутствующие соматические заболевания, перенесенные операции"
+            icon={<ContentPasteIcon sx={{ fontSize: 20 }} />}
+            expanded={expandedSections.anamnesis_vitae}
+            onToggleExpand={() => handleToggleExpand('anamnesis_vitae')}
+            isActive={activeSections.anamnesis_vitae}
+            onToggleActive={(act) => handleToggleActive('anamnesis_vitae', act)}
+            hasContent={Boolean(anamnesisVitae.trim())}
+            previewSnippet={anamnesisVitae.slice(0, 90) + (anamnesisVitae.length > 90 ? '...' : '')}
+          >
+            <Box sx={{ display: 'flex', gap: 0.8, mb: 1.2, flexWrap: 'wrap' }}>
+              <Chip
+                size="small"
+                label="+ Аллергоанамнез не отягощен"
+                onClick={() => setAnamnesisVitae((prev) => (prev ? `${prev} Аллергоанамнез не отягощен.` : 'Аллергоанамнез не отягощен.'))}
+                sx={{ cursor: 'pointer', fontSize: '0.74rem' }}
+              />
+              <Chip
+                size="small"
+                label="+ Хронические соматические отрицает"
+                onClick={() => setAnamnesisVitae((prev) => (prev ? `${prev} Хронические заболевания отрицает.` : 'Хронические соматические заболевания отрицает.'))}
+                sx={{ cursor: 'pointer', fontSize: '0.74rem' }}
+              />
+              <Chip
+                size="small"
+                label="+ Операций на суставах не было"
+                onClick={() => setAnamnesisVitae((prev) => (prev ? `${prev} Операций на опорно-двигательном аппарате в анамнезе нет.` : 'Операций на опорно-двигательном аппарате в анамнезе нет.'))}
+                sx={{ cursor: 'pointer', fontSize: '0.74rem' }}
+              />
+            </Box>
+            <TextField
+              fullWidth
+              size="small"
+              label="Анамнез жизни (Anamnesis vitae)"
+              multiline
+              minRows={2}
+              value={anamnesisVitae}
+              onChange={(e) => setAnamnesisVitae(e.target.value)}
+              placeholder="Аллергоанамнез, соматические патологии, гемотрансфузии, перенесенные вмешательства..."
+            />
+          </OrthoSandwichCard>
+
+          {/* 4. Общий объективный статус */}
+          <OrthoSandwichCard
+            id="objective_status"
+            title="4. Общий объективный статус (Status praesens)"
+            subtitle="Общее состояние, гемодинамика, кожные покровы, периферические отеки, лимфоузлы"
+            icon={<MonitorHeartIcon sx={{ fontSize: 20 }} />}
+            expanded={expandedSections.objective_status}
+            onToggleExpand={() => handleToggleExpand('objective_status')}
+            isActive={activeSections.objective_status}
+            onToggleActive={(act) => handleToggleActive('objective_status', act)}
+            hasContent={Boolean(objectiveStatus.trim())}
+            previewSnippet={objectiveStatus.slice(0, 90) + (objectiveStatus.length > 90 ? '...' : '')}
+          >
+            <Box sx={{ display: 'flex', gap: 0.8, mb: 1.2, flexWrap: 'wrap' }}>
+              <Chip
+                size="small"
+                label="+ Состояние удовл., нормостеник"
+                onClick={() => setObjectiveStatus((prev) => (prev ? `${prev} Состояние удовлетворительное. Нормостеник.` : 'Общее состояние удовлетворительное. Нормостенического телосложения.'))}
+                sx={{ cursor: 'pointer', fontSize: '0.74rem' }}
+              />
+              <Chip
+                size="small"
+                label="+ Кожные покровы физиологические, чистые"
+                onClick={() => setObjectiveStatus((prev) => (prev ? `${prev} Кожные покровы физиологической окраски, чистые.` : 'Кожные покровы физиологической окраски, чистые.'))}
+                sx={{ cursor: 'pointer', fontSize: '0.74rem' }}
+              />
+              <Chip
+                size="small"
+                label="+ Периферических отеков нет"
+                onClick={() => setObjectiveStatus((prev) => (prev ? `${prev} Периферических отеков нет.` : 'Периферических отеков нет.'))}
+                sx={{ cursor: 'pointer', fontSize: '0.74rem' }}
+              />
+            </Box>
+            <TextField
+              fullWidth
+              size="small"
+              label="Общий объективный статус (Status praesens)"
+              multiline
+              minRows={2}
+              value={objectiveStatus}
+              onChange={(e) => setObjectiveStatus(e.target.value)}
+              placeholder="Общее самочувствие, телосложение, гемодинамика, состояние кожных покровов..."
+            />
+          </OrthoSandwichCard>
+
+          {/* 5. Локальный статус и 2D Гомункулус */}
+          <OrthoSandwichCard
+            id="status_localis"
+            title="5. Локальный ортопедический статус и 2D Гомункулус"
+            subtitle="Анатомическая карта тела, выбор сустава, ось конечности, походка, осанка"
+            icon={<AccessibilityNewIcon sx={{ fontSize: 20 }} />}
+            expanded={expandedSections.status_localis}
+            onToggleExpand={() => handleToggleExpand('status_localis')}
+            isActive={activeSections.status_localis}
+            onToggleActive={(act) => handleToggleActive('status_localis', act)}
+            hasContent={true}
+            previewSnippet={`${selectedJoint} • ${currentJointState.side === 'left' ? 'Слева' : 'Справа'}`}
+            headerActions={
               <Button
                 size="small"
                 variant="outlined"
-                startIcon={<AssignmentIcon sx={{ fontSize: 16 }} />}
+                startIcon={<AssignmentIcon sx={{ fontSize: 15 }} />}
                 onClick={() => {
                   if (selectedJoint && JOINT_TO_CLUSTER[selectedJoint]) {
                     setSelectedClusterId(JOINT_TO_CLUSTER[selectedJoint].clusterId);
@@ -1230,17 +1821,18 @@ export default function OrthoWorkstation() {
                   setProtocolDialogOpen(true);
                 }}
                 sx={{
-                  fontSize: '0.75rem',
+                  fontSize: '0.74rem',
                   fontWeight: 700,
                   borderColor: '#0284C7',
                   color: '#0284C7',
-                  textTransform: 'none'
+                  textTransform: 'none',
+                  py: 0.2
                 }}
               >
-                Протоколы кластера ({filteredTemplates.length})
+                Протоколы ({filteredTemplates.length})
               </Button>
-            </Box>
-
+            }
+          >
             <BodyHomunculus
               selectedJoint={selectedJoint}
               onSelectJoint={(j) => setSelectedJoint(j)}
@@ -1263,10 +1855,20 @@ export default function OrthoWorkstation() {
               }}
               showClusterQuickFilters={true}
             />
-          </Paper>
+          </OrthoSandwichCard>
 
-          {/* 3. JOINT EXAMINATION CARD (ROM, AXIS, EFFUSION, TESTS) */}
-          <Box sx={{ mb: 2 }}>
+          {/* 6. Биомеханика и функциональные тесты */}
+          <OrthoSandwichCard
+            id="functional_tests"
+            title="6. Биомеханика и функциональные тесты (ROM / Goniometry)"
+            subtitle="Амплитуда движений Neutral-0, патологическая подвижность, стабильность связок"
+            icon={<BiotechIcon sx={{ fontSize: 20 }} />}
+            expanded={expandedSections.functional_tests}
+            onToggleExpand={() => handleToggleExpand('functional_tests')}
+            isActive={activeSections.functional_tests}
+            onToggleActive={(act) => handleToggleActive('functional_tests', act)}
+            hasContent={true}
+          >
             <JointExamCard
               jointArea={selectedJoint}
               state={currentJointState}
@@ -1281,10 +1883,34 @@ export default function OrthoWorkstation() {
                   : undefined
               }
             />
-          </Box>
+          </OrthoSandwichCard>
 
-          {/* DIAGNOSTIC RECOMMENDATIONS CARD (Methods, X-Ray, MRI, US, Labs with 1-click add to prescriptions) */}
-          <Box sx={{ mb: 2 }}>
+          {/* 7. Специальные методы исследования */}
+          <OrthoSandwichCard
+            id="special_studies"
+            title="7. Специальные методы исследования (МРТ, КТ, рентген, УЗИ, анализы)"
+            subtitle="Инструментальные заключения, рентгенография, УЗИ-данные, МРТ-картина"
+            icon={<ScienceIcon sx={{ fontSize: 20 }} />}
+            expanded={expandedSections.special_studies}
+            onToggleExpand={() => handleToggleExpand('special_studies')}
+            isActive={activeSections.special_studies}
+            onToggleActive={(act) => handleToggleActive('special_studies', act)}
+            hasContent={Boolean(specialStudies.trim())}
+            previewSnippet={specialStudies.slice(0, 90) + (specialStudies.length > 90 ? '...' : '')}
+          >
+            <Box sx={{ mb: 2 }}>
+              <TextField
+                fullWidth
+                size="small"
+                label="Данные специальных методов исследования (МРТ, КТ, рентген, УЗИ, лабораторные анализы)"
+                multiline
+                minRows={3}
+                value={specialStudies}
+                onChange={(e) => setSpecialStudies(e.target.value)}
+                placeholder="Результаты рентгенографии, МРТ сустава, сонографии, клинических и биохимических анализов..."
+              />
+            </Box>
+
             <DiagnosticRecommendationsCard
               jointCategory={selectedJoint.split('_')[0] === 'foot' ? 'ankle' : selectedJoint.split('_')[0]}
               templateDiagnostics={activeTemplateDiagnostics}
@@ -1323,21 +1949,28 @@ export default function OrthoWorkstation() {
                 setToastMessage(`Добавлено в назначения: ${newPresc.title} (${newPresc.unit_price} ₽)`);
               }}
               onAppendRecommendationText={(phrase) => {
-                setRecommendations((prev) => {
+                setSpecialStudies((prev) => {
                   if (prev.includes(phrase)) return prev;
-                  return prev ? `${prev}\n- ${phrase}` : `- ${phrase}`;
+                  return prev ? `${prev}\n• ${phrase}` : `• ${phrase}`;
                 });
-                setToastMessage('Рекомендация добавлена в текст плана лечения');
+                setToastMessage('Назначение исследования добавлено в протокол');
               }}
             />
-          </Box>
+          </OrthoSandwichCard>
 
-          {/* 4. DIAGNOSIS (ICD-10 + EXPANDED CLINICAL) */}
-          <Paper sx={{ p: 2, mb: 2, borderRadius: 2 }}>
-            <Typography variant="subtitle2" sx={{ fontWeight: 800, color: '#0F3C64', mb: 1.5 }}>
-              3. Клинический диагноз
-            </Typography>
-
+          {/* 8. Клинический диагноз */}
+          <OrthoSandwichCard
+            id="diagnosis"
+            title="8. Клинический диагноз"
+            subtitle="Код по МКБ-10 и развернутая клиническая формулировка диагноза"
+            icon={<FactCheckIcon sx={{ fontSize: 20 }} />}
+            expanded={expandedSections.diagnosis}
+            onToggleExpand={() => handleToggleExpand('diagnosis')}
+            isActive={activeSections.diagnosis}
+            onToggleActive={(act) => handleToggleActive('diagnosis', act)}
+            hasContent={Boolean(clinicalDiagnosis.trim() || selectedMkb)}
+            previewSnippet={(selectedMkb?.code ? selectedMkb.code + ': ' : '') + clinicalDiagnosis.slice(0, 80)}
+          >
             <Grid container spacing={1.5}>
               <Grid size={{ xs: 12 }}>
                 <Autocomplete
@@ -1380,14 +2013,72 @@ export default function OrthoWorkstation() {
                 />
               </Grid>
             </Grid>
-          </Paper>
+          </OrthoSandwichCard>
 
-          {/* 5. RECOMMENDATIONS & SERVICES PRESCRIPTIONS */}
-          <Paper sx={{ p: 2, mb: 2, borderRadius: 2 }}>
-            <Typography variant="subtitle2" sx={{ fontWeight: 800, color: '#0F3C64', mb: 1.5 }}>
-              4. План лечения, манипуляции и назначенные услуги клиники
-            </Typography>
+          {/* 9. Выполненные лечебные манипуляции */}
+          <OrthoSandwichCard
+            id="performed_manipulations"
+            title="9. Выполненные манипуляции и процедуры на приеме"
+            subtitle="Внутрисуставные блокады, пункции, введение препаратов гиалуроновой кислоты/PRP, повязки"
+            icon={<HealingIcon sx={{ fontSize: 20 }} />}
+            expanded={expandedSections.performed_manipulations}
+            onToggleExpand={() => handleToggleExpand('performed_manipulations')}
+            isActive={activeSections.performed_manipulations}
+            onToggleActive={(act) => handleToggleActive('performed_manipulations', act)}
+            hasContent={Boolean(performedManipulations.trim())}
+            previewSnippet={performedManipulations.slice(0, 90) + (performedManipulations.length > 90 ? '...' : '')}
+          >
+            <Box sx={{ display: 'flex', gap: 0.8, mb: 1.2, flexWrap: 'wrap' }}>
+              <Chip
+                size="small"
+                label="+ Пункция сустава"
+                onClick={() => setPerformedManipulations((prev) => (prev ? `${prev}\n• Выполнена пункция сустава, эвакуация синовиального выпота.` : 'Выполнена пункция сустава, эвакуация синовиального выпота.'))}
+                sx={{ cursor: 'pointer', fontSize: '0.74rem' }}
+              />
+              <Chip
+                size="small"
+                label="+ Внутрисуставная блокада ГКС"
+                onClick={() => setPerformedManipulations((prev) => (prev ? `${prev}\n• Внутрисуставное введение раствора пролонгированного ГКС с местным анестетиком.` : 'Внутрисуставное введение раствора пролонгированного ГКС с местным анестетиком.'))}
+                sx={{ cursor: 'pointer', fontSize: '0.74rem' }}
+              />
+              <Chip
+                size="small"
+                label="+ Введение гиалуроновой кислоты"
+                onClick={() => setPerformedManipulations((prev) => (prev ? `${prev}\n• Внутрисуставное введение препарата высокомолекулярного гиалуроната натрия.` : 'Внутрисуставное введение препарата высокомолекулярного гиалуроната натрия.'))}
+                sx={{ cursor: 'pointer', fontSize: '0.74rem' }}
+              />
+              <Chip
+                size="small"
+                label="+ PRP-терапия"
+                onClick={() => setPerformedManipulations((prev) => (prev ? `${prev}\n• Внутрисуставное введение аутологичной обогащенной тромбоцитами плазмы (PRP).` : 'Внутрисуставное введение аутологичной обогащенной тромбоцитами плазмы (PRP).'))}
+                sx={{ cursor: 'pointer', fontSize: '0.74rem' }}
+              />
+            </Box>
+            <TextField
+              fullWidth
+              size="small"
+              label="Выполненные лечебные манипуляции"
+              multiline
+              minRows={2}
+              value={performedManipulations}
+              onChange={(e) => setPerformedManipulations(e.target.value)}
+              placeholder="Протокол пункции, объем полученной жидкости, введенный препарат, дозировка, переносимость..."
+            />
+          </OrthoSandwichCard>
 
+          {/* 10. Рекомендации и план лечения */}
+          <OrthoSandwichCard
+            id="recommendations"
+            title="10. План лечения, рекомендации и назначенные услуги клиники"
+            subtitle="Охранительный режим, медикаментозная терапия, услуги клиники"
+            icon={<MedicalServicesIcon sx={{ fontSize: 20 }} />}
+            expanded={expandedSections.recommendations}
+            onToggleExpand={() => handleToggleExpand('recommendations')}
+            isActive={activeSections.recommendations}
+            onToggleActive={(act) => handleToggleActive('recommendations', act)}
+            hasContent={Boolean(recommendations.trim() || prescriptions.length > 0)}
+            previewSnippet={`${recommendations.slice(0, 60)}... (${prescriptions.length} услуг)`}
+          >
             <TextField
               fullWidth
               size="small"
@@ -1457,7 +2148,7 @@ export default function OrthoWorkstation() {
                 </Table>
               </TableContainer>
             )}
-          </Paper>
+          </OrthoSandwichCard>
         </Box>
 
         {/* RIGHT COLUMN: PREVIEW & MEDIA HUB TABS (45% Width) */}
@@ -1647,10 +2338,27 @@ export default function OrthoWorkstation() {
           />
         </DialogTitle>
         <DialogContent dividers sx={{ p: 2 }}>
-          {/* LEVEL 1: CLUSTER SELECTOR PILLS */}
-          <Typography variant="caption" sx={{ fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: 0.5, display: 'block', mb: 1 }}>
-            Уровень 1: Выберите анатомический или нозологический кластер
-          </Typography>
+          {/* LEVEL 1: CLUSTER SELECTOR PILLS & CUSTOM FILTER */}
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+            <Typography variant="caption" sx={{ fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+              Уровень 1: Выберите анатомический или нозологический кластер
+            </Typography>
+            <Chip
+              icon={<StarIcon sx={{ fontSize: '14px !important', color: filterOnlyCustom ? '#FFF !important' : '#D97706 !important' }} />}
+              label="⭐ Только кастомизированные"
+              clickable
+              onClick={() => setFilterOnlyCustom(prev => !prev)}
+              sx={{
+                fontWeight: 800,
+                fontSize: '0.74rem',
+                bgcolor: filterOnlyCustom ? '#D97706' : '#FEF3C7',
+                color: filterOnlyCustom ? '#FFFFFF' : '#92400E',
+                border: '1px solid #F59E0B',
+                cursor: 'pointer',
+                '&:hover': { bgcolor: filterOnlyCustom ? '#B45309' : '#FDE68A' }
+              }}
+            />
+          </Box>
           <Box sx={{ display: 'flex', gap: 0.8, flexWrap: 'wrap', mb: 2.5 }}>
             {MASTER_CLUSTERS.map((cl) => {
               const isSelected = selectedClusterId === cl.id;
@@ -1685,10 +2393,10 @@ export default function OrthoWorkstation() {
             </Typography>
             <TextField
               size="small"
-              placeholder="Поиск по диагнозу, МКБ-10 или симптому..."
+              placeholder="Поиск по диагнозу, МКБ-10, тегам, автору..."
               value={protocolSearchQuery}
               onChange={(e) => setProtocolSearchQuery(e.target.value)}
-              sx={{ width: 320 }}
+              sx={{ width: 340 }}
               slotProps={{
                 input: {
                   startAdornment: (
@@ -1707,18 +2415,20 @@ export default function OrthoWorkstation() {
                 {filteredTemplates.map((tmpl) => {
                   const effectiveMkb = tmpl.default_mkb_code || tmpl.mkb_code || '—';
                   const isCurrent = currentSelectedTemplate?.title === tmpl.title;
+                  const { isCustom, author: customAuthor } = getTemplateCustomInfo(tmpl);
+
                   return (
                     <Grid size={{ xs: 12, sm: 6 }} key={tmpl.id || tmpl.rawId || tmpl.title}>
                       <Card
                         variant="outlined"
                         sx={{
                           borderRadius: 2,
-                          borderColor: isCurrent ? '#0284C7' : '#E2E8F0',
-                          bgcolor: isCurrent ? '#F0F9FF' : '#FFFFFF',
+                          borderColor: isCurrent ? '#0284C7' : isCustom ? '#FCD34D' : '#E2E8F0',
+                          bgcolor: isCurrent ? '#F0F9FF' : isCustom ? '#FFFDF5' : '#FFFFFF',
                           transition: 'all 0.15s ease-in-out',
                           '&:hover': {
-                            borderColor: '#0284C7',
-                            boxShadow: '0 4px 12px rgba(2,132,199,0.1)'
+                            borderColor: isCustom ? '#F59E0B' : '#0284C7',
+                            boxShadow: isCustom ? '0 4px 12px rgba(245,158,11,0.12)' : '0 4px 12px rgba(2,132,199,0.1)'
                           }
                         }}
                       >
@@ -1727,26 +2437,50 @@ export default function OrthoWorkstation() {
                             <Typography variant="body2" sx={{ fontWeight: 700, color: '#0F3C64', lineHeight: 1.3 }}>
                               {tmpl.title}
                             </Typography>
-                            <Chip
-                              label={effectiveMkb}
-                              size="small"
-                              sx={{
-                                fontWeight: 800,
-                                fontSize: '0.72rem',
-                                bgcolor: '#E0F2FE',
-                                color: '#0369A1',
-                                height: 20
-                              }}
-                            />
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0 }}>
+                              {isCustom && (
+                                <Chip
+                                  key="chip-custom-author"
+                                  icon={<StarIcon sx={{ fontSize: '11px !important', color: '#B45309 !important' }} />}
+                                  label="Авторский"
+                                  size="small"
+                                  sx={{
+                                    bgcolor: '#FEF3C7',
+                                    color: '#92400E',
+                                    fontWeight: 800,
+                                    fontSize: '0.68rem',
+                                    height: 20,
+                                    border: '1px solid #FCD34D'
+                                  }}
+                                />
+                              )}
+                              <Chip
+                                key="chip-mkb"
+                                label={effectiveMkb}
+                                size="small"
+                                sx={{
+                                  fontWeight: 800,
+                                  fontSize: '0.72rem',
+                                  bgcolor: '#E0F2FE',
+                                  color: '#0369A1',
+                                  height: 20
+                                }}
+                              />
+                            </Box>
                           </Box>
-                          <Typography variant="caption" sx={{ color: '#64748B', display: 'block', mb: 1 }}>
+                          <Typography variant="caption" sx={{ color: '#64748B', display: 'block', mb: isCustom && customAuthor ? 0.3 : 1 }}>
                             Локализация: <b>{tmpl.joint_name || 'Опорно-двигательный аппарат'}</b>
                           </Typography>
+                          {isCustom && customAuthor && (
+                            <Typography key="custom-author-label" variant="caption" sx={{ color: '#B45309', display: 'block', mb: 1, fontSize: '0.72rem', fontWeight: 600 }}>
+                              ⭐ Автор: {customAuthor}
+                            </Typography>
+                          )}
                           <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
                             <Button
                               size="small"
                               variant={isCurrent ? 'contained' : 'outlined'}
-                              color="primary"
+                              color={isCustom ? 'secondary' : 'primary'}
                               sx={{ fontSize: '0.72rem', fontWeight: 700, py: 0.2, textTransform: 'none' }}
                             >
                               {isCurrent ? '✓ Применён' : 'Применить в прием'}
@@ -1761,7 +2495,9 @@ export default function OrthoWorkstation() {
             ) : (
               <Box sx={{ p: 4, textAlign: 'center' }}>
                 <Typography variant="body2" sx={{ color: '#94A3B8' }}>
-                  В данном кластере нет протоколов, соответствующих запросу. Попробуйте выбрать «Все кластеры» или очистить поиск.
+                  {filterOnlyCustom
+                    ? 'В данном кластере нет кастомизированных шаблонов. Вы можете сохранить текущий прием нажав «⭐ В шаблон» в панели управления.'
+                    : 'В данном кластере нет протоколов, соответствующих запросу. Попробуйте выбрать «Все кластеры» или очистить поиск.'}
                 </Typography>
               </Box>
             )}
@@ -1780,6 +2516,126 @@ export default function OrthoWorkstation() {
           </Button>
           <Button variant="outlined" onClick={() => setProtocolDialogOpen(false)} sx={{ fontWeight: 700 }}>
             Отмена
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* 3. SAVE CUSTOMIZED TEMPLATE TO CLUSTER DIALOG */}
+      <Dialog
+        open={saveCustomDialogOpen}
+        onClose={() => !savingCustomTpl && setSaveCustomDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle sx={{ fontWeight: 800, color: '#0F3C64', display: 'flex', alignItems: 'center', gap: 1 }}>
+          <StarIcon sx={{ color: '#F59E0B' }} /> Сохранить в Кластер как кастомизированный шаблон
+        </DialogTitle>
+        <DialogContent dividers sx={{ p: 2.5 }}>
+          <Alert severity="info" sx={{ mb: 2 }}>
+            Шаблон будет сохранен в выбранный кластер со специальным признаком <b>«Кастомизированный шаблон»</b> (⭐ Авторский) и станет доступен в поиске для всех повторных приемов.
+          </Alert>
+
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <TextField
+              label="Наименование шаблона (переименовать)"
+              value={customTplTitle}
+              onChange={(e) => setCustomTplTitle(e.target.value)}
+              fullWidth
+              size="small"
+              required
+              helperText="Введите понятное клиническое название для быстрого поиска"
+            />
+
+            <Grid container spacing={2}>
+              <Grid size={{ xs: 12, sm: 7 }}>
+                <TextField
+                  select
+                  label="Целевой кластер"
+                  value={customTplClusterId}
+                  onChange={(e) => setCustomTplClusterId(e.target.value)}
+                  fullWidth
+                  size="small"
+                  slotProps={{ select: { native: true } }}
+                >
+                  {MASTER_CLUSTERS.filter(c => c.id !== 'all').map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name_ru}
+                    </option>
+                  ))}
+                </TextField>
+              </Grid>
+              <Grid size={{ xs: 12, sm: 5 }}>
+                <TextField
+                  label="Код МКБ-10"
+                  value={customTplMkbCode}
+                  onChange={(e) => setCustomTplMkbCode(e.target.value.toUpperCase())}
+                  fullWidth
+                  size="small"
+                  placeholder="напр. M17.1"
+                />
+              </Grid>
+            </Grid>
+
+            <Grid container spacing={2}>
+              <Grid size={{ xs: 12, sm: 6 }}>
+                <TextField
+                  label="Категория"
+                  value={customTplCategory}
+                  onChange={(e) => setCustomTplCategory(e.target.value)}
+                  fullWidth
+                  size="small"
+                />
+              </Grid>
+              <Grid size={{ xs: 12, sm: 6 }}>
+                <TextField
+                  label="Автор протокола"
+                  value={customTplDoctorName}
+                  onChange={(e) => setCustomTplDoctorName(e.target.value)}
+                  fullWidth
+                  size="small"
+                />
+              </Grid>
+            </Grid>
+
+            <TextField
+              label="Клинические теги для поиска (через запятую)"
+              value={customTplTags}
+              onChange={(e) => setCustomTplTags(e.target.value)}
+              fullWidth
+              size="small"
+              helperText="По этим тегам шаблон можно будет мгновенно найти в поиске (custom, авторский, блокада, prp...)"
+            />
+
+            <Paper variant="outlined" sx={{ p: 1.5, bgcolor: '#F8FAFC', borderRadius: 1.5 }}>
+              <Typography variant="caption" sx={{ fontWeight: 700, color: '#475569', display: 'block', mb: 0.5 }}>
+                В шаблон будут включены заполненные данные текущего осмотра:
+              </Typography>
+              <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
+                <Chip key="chip-s-complaints" size="small" label={`Жалобы: ${complaints ? '✓ Заполнено' : '—'}`} color={complaints ? 'primary' : 'default'} variant="outlined" />
+                <Chip key="chip-s-anamnesis" size="small" label={`Анамнез: ${anamnesis ? '✓ Заполнено' : '—'}`} color={anamnesis ? 'primary' : 'default'} variant="outlined" />
+                <Chip key="chip-s-objective" size="small" label={`Объективный статус: ${objectiveStatus ? '✓ Заполнено' : '—'}`} color={objectiveStatus ? 'primary' : 'default'} variant="outlined" />
+                <Chip key="chip-s-studies" size="small" label={`Спец. методы: ${specialStudies ? '✓ Заполнено' : '—'}`} color={specialStudies ? 'primary' : 'default'} variant="outlined" />
+                <Chip key="chip-s-manip" size="small" label={`Манипуляции: ${performedManipulations ? '✓ Заполнено' : '—'}`} color={performedManipulations ? 'primary' : 'default'} variant="outlined" />
+                <Chip key="chip-s-recs" size="small" label={`Рекомендации: ${recommendations ? '✓ Заполнено' : '—'}`} color={recommendations ? 'primary' : 'default'} variant="outlined" />
+                <Chip key="chip-s-tests" size="small" label={`Тесты: ${Object.keys(currentJointState.tests || {}).length}`} color="secondary" variant="outlined" />
+                <Chip key="chip-s-diag" size="small" label={`Диагностика: ${activeTemplateDiagnostics?.length || 0}`} color="secondary" variant="outlined" />
+              </Box>
+            </Paper>
+          </Box>
+        </DialogContent>
+        <DialogActions sx={{ px: 2.5, py: 1.5 }}>
+          <Button onClick={() => setSaveCustomDialogOpen(false)} disabled={savingCustomTpl}>
+            Отмена
+          </Button>
+          <Button
+            variant="contained"
+            color="primary"
+            startIcon={savingCustomTpl ? <CircularProgress size={16} color="inherit" /> : <StarIcon />}
+            onClick={handleSaveCustomTemplate}
+            disabled={savingCustomTpl || !customTplTitle.trim()}
+            sx={{ fontWeight: 800, bgcolor: '#D97706', '&:hover': { bgcolor: '#B45309' } }}
+          >
+            {savingCustomTpl ? 'Сохранение...' : 'Сохранить в Кластер'}
           </Button>
         </DialogActions>
       </Dialog>

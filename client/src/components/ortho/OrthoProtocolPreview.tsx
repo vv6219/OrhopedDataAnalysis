@@ -395,6 +395,7 @@ export default function OrthoProtocolPreview({
           {/* Quick Format Action */}
           {activeTab === 0 && (
             <Button
+              key="btn-format-pdf"
               variant="contained"
               size="small"
               startIcon={<PrintIcon />}
@@ -407,6 +408,7 @@ export default function OrthoProtocolPreview({
 
           {activeTab === 1 && (
             <Button
+              key="btn-format-docx"
               variant="contained"
               size="small"
               startIcon={<DownloadIcon />}
@@ -419,6 +421,7 @@ export default function OrthoProtocolPreview({
 
           {activeTab === 2 && (
             <Button
+              key="btn-format-rtf"
               variant="contained"
               size="small"
               startIcon={<DownloadIcon />}
@@ -431,6 +434,7 @@ export default function OrthoProtocolPreview({
 
           {activeTab === 3 && (
             <Button
+              key="btn-format-txt"
               variant="contained"
               size="small"
               startIcon={<ContentCopyIcon />}

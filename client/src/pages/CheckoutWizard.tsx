@@ -428,7 +428,7 @@ export default function CheckoutWizard() {
           : null;
 
         if (candidateItems && candidateItems.length > 0) {
-          const normalize = (s: string) => (s || '').toLowerCase().replace(/[\s(\)\-_.,/]/g, '');
+          const normalize = (s: string) => (s || '').toLowerCase().replace(/[\s()\-_.,/]/g, '');
           const mapped = candidateItems.map((it: any, i: number) => {
             const itemPrice = Number(it.price ?? it.unitPrice ?? it.unit_price ?? 0);
             const itemQty = Number(it.quantity || 1);

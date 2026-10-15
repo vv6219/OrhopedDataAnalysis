@@ -40,6 +40,11 @@ export interface OrthoProtocolData {
   };
   complaints: string;
   anamnesis: string;
+  anamnesisVitae?: string;
+  objectiveStatus?: string;
+  specialStudies?: string;
+  performedManipulations?: string;
+  activeSectionsMask?: Record<string, boolean> | string;
   vasScore: number;
   gait?: string;
   posture?: string;
@@ -213,26 +218,6 @@ export const OrthoProtocolPrintTemplate = React.forwardRef<HTMLDivElement, Ortho
           }
         }}
       >
-        {/* EMBEDDED PRINT STYLES */}
-        <style type="text/css">
-          {`
-            @page {
-              size: A4 portrait;
-              margin: 8mm 10mm 8mm 10mm;
-            }
-            @media print {
-              body {
-                -webkit-print-color-adjust: exact !important;
-                print-color-adjust: exact !important;
-              }
-              .no-page-break {
-                page-break-inside: avoid !important;
-                break-inside: avoid !important;
-              }
-            }
-          `}
-        </style>
-
         {/* CLINIC HEADER */}
         <Box
           sx={{
@@ -340,225 +325,330 @@ export const OrthoProtocolPrintTemplate = React.forwardRef<HTMLDivElement, Ortho
           </Box>
         </Paper>
 
-        {/* 1. COMPLAINTS & ANAMNESIS */}
-        <Box sx={{ mb: 2, pageBreakInside: 'avoid' }}>
-          <Typography variant="subtitle2" sx={{ fontWeight: 800, color: '#0F3C64', borderBottom: '1px solid #E2E8F0', pb: 0.4, mb: 1 }}>
-            1. Жалобы и анамнез заболевания
-          </Typography>
-          <Box sx={{ pl: 1 }}>
-            <Typography variant="body2" sx={{ mb: 0.8, fontSize: '0.86rem', lineHeight: 1.45 }}>
-              <Box component="span" sx={{ fontWeight: 700, color: '#334155' }}>Жалобы: </Box>
-              {cleanComplaints || 'Жалоб на момент осмотра активно не предъявляет.'}
-            </Typography>
-            <Typography variant="body2" sx={{ mb: 0.8, fontSize: '0.86rem', lineHeight: 1.45 }}>
-              <Box component="span" sx={{ fontWeight: 700, color: '#334155' }}>Анамнез заболевания (Anamnesis morbi): </Box>
-              {cleanAnamnesis || 'Считает себя больным в течение последнего времени, ранее за медпомощью не обращался.'}
-            </Typography>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mt: 0.5 }}>
-              <Typography variant="body2" sx={{ fontSize: '0.86rem', fontWeight: 700, color: '#334155' }}>
-                Интенсивность боли по ВАШ (0-10):
-              </Typography>
-              <Chip
-                label={`${data.vasScore || 0} / 10 баллов`}
-                size="small"
-                sx={{
-                  fontWeight: 800,
-                  fontSize: '0.78rem',
-                  bgcolor: (data.vasScore || 0) >= 7 ? '#FEE2E2' : (data.vasScore || 0) >= 4 ? '#FEF3C7' : '#DCFCE7',
-                  color: (data.vasScore || 0) >= 7 ? '#991B1B' : (data.vasScore || 0) >= 4 ? '#92400E' : '#166534',
-                  border: '1px solid currentColor'
-                }}
-              />
-            </Box>
-          </Box>
-        </Box>
+        {(() => {
+          const parsedMask: Record<string, boolean> = (() => {
+            if (!data.activeSectionsMask) return {};
+            if (typeof data.activeSectionsMask === 'object') return data.activeSectionsMask;
+            try {
+              return JSON.parse(data.activeSectionsMask);
+            } catch {
+              return {};
+            }
+          })();
 
-        {/* 2. ORTHOPEDIC STATUS / STATUS LOCALIS */}
-        <Box sx={{ mb: 2 }}>
-          <Typography variant="subtitle2" sx={{ fontWeight: 800, color: '#0F3C64', borderBottom: '1px solid #E2E8F0', pb: 0.4, mb: 1 }}>
-            2. Ортопедический статус (Status Localis)
-          </Typography>
-          
-          <Box sx={{ pl: 1, mb: 1.5 }}>
-            <Typography variant="body2" sx={{ fontSize: '0.86rem', lineHeight: 1.45 }}>
-              <Box component="span" sx={{ fontWeight: 700, color: '#334155' }}>Походка: </Box>
-              {data.gait || 'Свободная, физиологическая, без хромоты, без дополнительной опоры.'}
-            </Typography>
-            {data.posture && (
-              <Typography variant="body2" sx={{ fontSize: '0.86rem', lineHeight: 1.45, mt: 0.4 }}>
-                <Box component="span" sx={{ fontWeight: 700, color: '#334155' }}>Осанка: </Box>
-                {data.posture}
-              </Typography>
-            )}
-          </Box>
+          const isVisible = (key: string, content?: any): boolean => {
+            if (parsedMask[key] === false) return false;
+            if (content === undefined || content === null) return false;
+            if (typeof content === 'string' && content.trim() === '') return false;
+            if (Array.isArray(content) && content.length === 0) return false;
+            return true;
+          };
 
-          {/* JOINTS EXAMINATIONS TABLE/BLOCKS */}
-          {data.jointExams && data.jointExams.length > 0 ? (
-            data.jointExams.map((exam, idx) => (
-              <Paper
-                key={idx}
-                variant="outlined"
-                sx={{
-                  p: 1.25,
-                  mb: 1.5,
-                  borderColor: '#E2E8F0',
-                  bgcolor: '#FAFBFD',
-                  pageBreakInside: 'avoid'
-                }}
-              >
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.8 }}>
-                  <Typography variant="subtitle2" sx={{ fontWeight: 800, color: '#0369A1', fontSize: '0.88rem' }}>
-                    {getJointTitle(exam.jointArea)} ({getSideLabel(exam.side)})
-                  </Typography>
-                  <Typography variant="caption" sx={{ color: '#64748B' }}>
-                    Ось: {getAxisLabel(exam.axis)} • Синовит/выпот: {getEffusionLabel(exam.effusion)}
-                  </Typography>
-                </Box>
+          let sectionCounter = 0;
+          const getNextIndex = () => {
+            sectionCounter += 1;
+            return sectionCounter;
+          };
 
-                {/* ROM Goniometry */}
-                <Box sx={{ mb: 1, p: 0.75, bgcolor: '#FFFFFF', borderRadius: 1, border: '1px solid #EEF2F6' }}>
-                  <Typography variant="caption" sx={{ fontWeight: 700, color: '#475569', display: 'block', mb: 0.4 }}>
-                    Амплитуда движений (Neutral-0 ROM):
+          return (
+            <>
+              {/* 1. COMPLAINTS */}
+              {isVisible('complaints', cleanComplaints) && (
+                <Box key="sec-complaints" sx={{ mb: 2, pageBreakInside: 'avoid' }}>
+                  <Typography variant="subtitle2" sx={{ fontWeight: 800, color: '#0F3C64', borderBottom: '1px solid #E2E8F0', pb: 0.4, mb: 1 }}>
+                    {getNextIndex()}. Жалобы при обращении
                   </Typography>
-                  <Typography variant="body2" sx={{ fontSize: '0.82rem', color: '#1E293B' }}>
-                    • Сгибание активное: <b>{exam.rom?.flexion_active ?? 140}°</b> (пассивное: <b>{exam.rom?.flexion_passive ?? 140}°</b>)
-                    {exam.rom?.extension_deficit !== undefined && exam.rom.extension_deficit > 0
-                      ? ` • Дефицит разгибания: ${exam.rom.extension_deficit}°`
-                      : ' • Разгибание: полное (0°)'}
-                    {exam.rom?.internal_rotation !== undefined && ` • Внутр. ротация: ${exam.rom.internal_rotation}°`}
-                    {exam.rom?.external_rotation !== undefined && ` • Наруж. ротация: ${exam.rom.external_rotation}°`}
-                    {exam.rom?.abduction !== undefined && ` • Отведение: ${exam.rom.abduction}°`}
-                  </Typography>
-                </Box>
-
-                {/* Specialized Clinical Tests */}
-                {exam.tests && Object.keys(exam.tests).length > 0 && (
-                  <Box sx={{ pl: 0.5 }}>
-                    <Typography variant="caption" sx={{ fontWeight: 700, color: '#475569', display: 'block', mb: 0.3 }}>
-                      Специальные клинические тесты:
+                  <Box sx={{ pl: 1 }}>
+                    <Typography variant="body2" sx={{ mb: 0.8, fontSize: '0.86rem', lineHeight: 1.45 }}>
+                      {cleanComplaints}
                     </Typography>
-                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                      {Object.entries(exam.tests).map(([tKey, tRes]) => (
-                        <Typography
-                          key={tKey}
-                          variant="caption"
-                          sx={{
-                            fontSize: '0.78rem',
-                            color: tRes !== 'negative' ? '#B91C1C' : '#334155',
-                            fontWeight: tRes !== 'negative' ? 700 : 500,
-                            bgcolor: tRes !== 'negative' ? '#FEF2F2' : '#F1F5F9',
-                            px: 0.75,
-                            py: 0.25,
-                            borderRadius: 0.75,
-                            border: `1px solid ${tRes !== 'negative' ? '#FECACA' : '#E2E8F0'}`
-                          }}
-                        >
-                          {getTestLabel(tKey, tRes)}
-                        </Typography>
-                      ))}
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mt: 0.5 }}>
+                      <Typography variant="body2" sx={{ fontSize: '0.86rem', fontWeight: 700, color: '#334155' }}>
+                        Интенсивность боли по ВАШ (0-10):
+                      </Typography>
+                      <Chip
+                        label={`${data.vasScore || 0} / 10 баллов`}
+                        size="small"
+                        sx={{
+                          fontWeight: 800,
+                          fontSize: '0.78rem',
+                          bgcolor: (data.vasScore || 0) >= 7 ? '#FEE2E2' : (data.vasScore || 0) >= 4 ? '#FEF3C7' : '#DCFCE7',
+                          color: (data.vasScore || 0) >= 7 ? '#991B1B' : (data.vasScore || 0) >= 4 ? '#92400E' : '#166534',
+                          border: '1px solid currentColor'
+                        }}
+                      />
                     </Box>
                   </Box>
-                )}
-              </Paper>
-            ))
-          ) : (
-            <Typography variant="body2" sx={{ pl: 1, color: '#64748B', fontStyle: 'italic', fontSize: '0.85rem' }}>
-              Локальный суставной статус: без признаков патологической деформации, отека и ограничения движений.
-            </Typography>
-          )}
-        </Box>
+                </Box>
+              )}
 
-        {/* 3. DIAGNOSIS */}
-        <Box sx={{ mb: 2, pageBreakInside: 'avoid' }}>
-          <Typography variant="subtitle2" sx={{ fontWeight: 800, color: '#0F3C64', borderBottom: '1px solid #E2E8F0', pb: 0.4, mb: 1 }}>
-            3. Клинический диагноз
-          </Typography>
-          <Box sx={{ pl: 1 }}>
-            {data.icdCode && (
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
-                <Chip
-                  label={`МКБ-10: ${data.icdCode}`}
-                  size="small"
-                  sx={{ fontWeight: 800, bgcolor: '#0284C7', color: '#FFFFFF', fontSize: '0.78rem' }}
-                />
-                {data.icdName && (
-                  <Typography variant="body2" sx={{ color: '#475569', fontWeight: 600, fontSize: '0.84rem' }}>
-                    {data.icdName}
+              {/* 2. ANAMNESIS MORBI */}
+              {isVisible('anamnesis_morbi', cleanAnamnesis) && (
+                <Box key="sec-anamnesis-morbi" sx={{ mb: 2, pageBreakInside: 'avoid' }}>
+                  <Typography variant="subtitle2" sx={{ fontWeight: 800, color: '#0F3C64', borderBottom: '1px solid #E2E8F0', pb: 0.4, mb: 1 }}>
+                    {getNextIndex()}. Анамнез заболевания (Anamnesis morbi)
                   </Typography>
-                )}
-              </Box>
-            )}
-            <Typography variant="body2" sx={{ fontWeight: 700, color: '#0F172A', fontSize: '0.92rem', lineHeight: 1.45 }}>
-              {cleanDiagnosis || 'Диагноз уточняется по результатам инструментального обследования.'}
-            </Typography>
-          </Box>
-        </Box>
+                  <Box sx={{ pl: 1 }}>
+                    <Typography variant="body2" sx={{ fontSize: '0.86rem', lineHeight: 1.45, whiteSpace: 'pre-line' }}>
+                      {cleanAnamnesis}
+                    </Typography>
+                  </Box>
+                </Box>
+              )}
 
-        {/* 4. RECOMMENDATIONS & PRESCRIPTIONS */}
-        <Box sx={{ mb: 2, pageBreakInside: 'avoid' }}>
-          <Typography variant="subtitle2" sx={{ fontWeight: 800, color: '#0F3C64', borderBottom: '1px solid #E2E8F0', pb: 0.4, mb: 1 }}>
-            4. Рекомендации и план лечения
-          </Typography>
-          <Box sx={{ pl: 1 }}>
-            <Typography variant="body2" sx={{ fontSize: '0.86rem', lineHeight: 1.5, whiteSpace: 'pre-line', mb: 1.5 }}>
-              {data.recommendations || 'Охранительный двигательный режим, разгрузка сустава, ЛФК, физиотерапия по согласованию.'}
-            </Typography>
+              {/* 3. ANAMNESIS VITAE */}
+              {isVisible('anamnesis_vitae', data.anamnesisVitae) && (
+                <Box key="sec-anamnesis-vitae" sx={{ mb: 2, pageBreakInside: 'avoid' }}>
+                  <Typography variant="subtitle2" sx={{ fontWeight: 800, color: '#0F3C64', borderBottom: '1px solid #E2E8F0', pb: 0.4, mb: 1 }}>
+                    {getNextIndex()}. Анамнез жизни (Anamnesis vitae)
+                  </Typography>
+                  <Box sx={{ pl: 1 }}>
+                    <Typography variant="body2" sx={{ fontSize: '0.86rem', lineHeight: 1.45, whiteSpace: 'pre-line' }}>
+                      {data.anamnesisVitae}
+                    </Typography>
+                  </Box>
+                </Box>
+              )}
 
-            {/* Prescribed Services Table */}
-            {data.prescriptions && data.prescriptions.length > 0 && (
-              <Box sx={{ mt: 1, mb: 1.5 }}>
-                <Typography variant="caption" sx={{ fontWeight: 700, color: '#475569', display: 'block', mb: 0.5 }}>
-                  Назначенные медицинские услуги и манипуляции:
-                </Typography>
-                <TableContainer component={Paper} variant="outlined" sx={{ borderColor: '#E2E8F0' }}>
-                  <Table size="small">
-                    <TableHead sx={{ bgcolor: '#F1F5F9' }}>
-                      <TableRow>
-                        <TableCell sx={{ fontWeight: 700, fontSize: '0.78rem', py: 0.5 }}>№</TableCell>
-                        <TableCell sx={{ fontWeight: 700, fontSize: '0.78rem', py: 0.5 }}>Наименование услуги / манипуляции</TableCell>
-                        <TableCell align="center" sx={{ fontWeight: 700, fontSize: '0.78rem', py: 0.5 }}>Кол-во</TableCell>
-                        <TableCell align="right" sx={{ fontWeight: 700, fontSize: '0.78rem', py: 0.5 }}>Стоимость, руб.</TableCell>
-                      </TableRow>
-                    </TableHead>
-                    <TableBody>
-                      {data.prescriptions.map((presc, pIdx) => (
-                        <TableRow key={pIdx}>
-                          <TableCell sx={{ fontSize: '0.78rem', py: 0.5 }}>{pIdx + 1}</TableCell>
-                          <TableCell sx={{ fontSize: '0.82rem', py: 0.5 }}>
-                            <Typography variant="body2" sx={{ fontWeight: 600, fontSize: '0.82rem' }}>
-                              {presc.name || (presc as any).title || 'Медицинская услуга'}
+              {/* 4. OBJECTIVE STATUS (STATUS PRAESENS) */}
+              {isVisible('objective_status', data.objectiveStatus) && (
+                <Box key="sec-objective-status" sx={{ mb: 2, pageBreakInside: 'avoid' }}>
+                  <Typography variant="subtitle2" sx={{ fontWeight: 800, color: '#0F3C64', borderBottom: '1px solid #E2E8F0', pb: 0.4, mb: 1 }}>
+                    {getNextIndex()}. Общий объективный статус (Status praesens)
+                  </Typography>
+                  <Box sx={{ pl: 1 }}>
+                    <Typography variant="body2" sx={{ fontSize: '0.86rem', lineHeight: 1.45, whiteSpace: 'pre-line' }}>
+                      {data.objectiveStatus}
+                    </Typography>
+                  </Box>
+                </Box>
+              )}
+
+              {/* 5. ORTHOPEDIC STATUS / STATUS LOCALIS */}
+              {isVisible('status_localis', data.jointExams?.length ? 'has' : (data.gait || data.posture ? 'has' : '')) && (
+                <Box key="sec-status-localis" sx={{ mb: 2 }}>
+                  <Typography variant="subtitle2" sx={{ fontWeight: 800, color: '#0F3C64', borderBottom: '1px solid #E2E8F0', pb: 0.4, mb: 1 }}>
+                    {getNextIndex()}. Ортопедический статус (Status Localis)
+                  </Typography>
+                  
+                  <Box sx={{ pl: 1, mb: 1.5 }}>
+                    <Typography variant="body2" sx={{ fontSize: '0.86rem', lineHeight: 1.45 }}>
+                      <Box component="span" sx={{ fontWeight: 700, color: '#334155' }}>Походка: </Box>
+                      {data.gait || 'Свободная, физиологическая, без хромоты, без дополнительной опоры.'}
+                    </Typography>
+                    {data.posture && (
+                      <Typography variant="body2" sx={{ fontSize: '0.86rem', lineHeight: 1.45, mt: 0.4 }}>
+                        <Box component="span" sx={{ fontWeight: 700, color: '#334155' }}>Осанка: </Box>
+                        {data.posture}
+                      </Typography>
+                    )}
+                  </Box>
+
+                  {/* JOINTS EXAMINATIONS TABLE/BLOCKS */}
+                  {data.jointExams && data.jointExams.length > 0 ? (
+                    data.jointExams.map((exam, idx) => (
+                      <Paper
+                        key={idx}
+                        variant="outlined"
+                        sx={{
+                          p: 1.25,
+                          mb: 1.5,
+                          borderColor: '#E2E8F0',
+                          bgcolor: '#FAFBFD',
+                          pageBreakInside: 'avoid'
+                        }}
+                      >
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.8 }}>
+                          <Typography variant="subtitle2" sx={{ fontWeight: 800, color: '#0369A1', fontSize: '0.88rem' }}>
+                            {getJointTitle(exam.jointArea)} ({getSideLabel(exam.side)})
+                          </Typography>
+                          <Typography variant="caption" sx={{ color: '#64748B' }}>
+                            Ось: {getAxisLabel(exam.axis)} • Синовит/выпот: {getEffusionLabel(exam.effusion)}
+                          </Typography>
+                        </Box>
+
+                        {/* ROM Goniometry */}
+                        <Box sx={{ mb: 1, p: 0.75, bgcolor: '#FFFFFF', borderRadius: 1, border: '1px solid #EEF2F6' }}>
+                          <Typography variant="caption" sx={{ fontWeight: 700, color: '#475569', display: 'block', mb: 0.4 }}>
+                            Амплитуда движений (Neutral-0 ROM):
+                          </Typography>
+                          <Typography variant="body2" sx={{ fontSize: '0.82rem', color: '#1E293B' }}>
+                            • Сгибание активное: <b>{exam.rom?.flexion_active ?? 140}°</b> (пассивное: <b>{exam.rom?.flexion_passive ?? 140}°</b>)
+                            {exam.rom?.extension_deficit !== undefined && exam.rom.extension_deficit > 0
+                              ? ` • Дефицит разгибания: ${exam.rom.extension_deficit}°`
+                              : ' • Разгибание: полное (0°)'}
+                            {exam.rom?.internal_rotation !== undefined && ` • Внутр. ротация: ${exam.rom.internal_rotation}°`}
+                            {exam.rom?.external_rotation !== undefined && ` • Наруж. ротация: ${exam.rom.external_rotation}°`}
+                            {exam.rom?.abduction !== undefined && ` • Отведение: ${exam.rom.abduction}°`}
+                          </Typography>
+                        </Box>
+
+                        {/* Specialized Clinical Tests */}
+                        {exam.tests && Object.keys(exam.tests).length > 0 && (
+                          <Box sx={{ pl: 0.5 }}>
+                            <Typography variant="caption" sx={{ fontWeight: 700, color: '#475569', display: 'block', mb: 0.3 }}>
+                              Специальные клинические тесты:
                             </Typography>
-                            {presc.dosage_notes && (
-                              <Typography variant="caption" sx={{ color: '#64748B', display: 'block' }}>
-                                {presc.dosage_notes}
-                              </Typography>
-                            )}
-                          </TableCell>
-                          <TableCell align="center" sx={{ fontSize: '0.82rem', py: 0.5 }}>
-                            {presc.quantity || 1}
-                          </TableCell>
-                          <TableCell align="right" sx={{ fontSize: '0.82rem', fontWeight: 600, py: 0.5 }}>
-                            {(((presc.price ?? (presc as any).unitPrice ?? (presc as any).unit_price ?? 0)) * (presc.quantity || 1)).toLocaleString('ru-RU', {
-                              minimumFractionDigits: 2,
-                              maximumFractionDigits: 2
-                            })}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </TableContainer>
-              </Box>
-            )}
+                            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                              {Object.entries(exam.tests).map(([tKey, tRes]) => (
+                                <Typography
+                                  key={tKey}
+                                  variant="caption"
+                                  sx={{
+                                    fontSize: '0.78rem',
+                                    color: tRes !== 'negative' ? '#B91C1C' : '#334155',
+                                    fontWeight: tRes !== 'negative' ? 700 : 500,
+                                    bgcolor: tRes !== 'negative' ? '#FEF2F2' : '#F1F5F9',
+                                    px: 0.75,
+                                    py: 0.25,
+                                    borderRadius: 0.75,
+                                    border: `1px solid ${tRes !== 'negative' ? '#FECACA' : '#E2E8F0'}`
+                                  }}
+                                >
+                                  {getTestLabel(tKey, tRes)}
+                                </Typography>
+                              ))}
+                            </Box>
+                          </Box>
+                        )}
+                      </Paper>
+                    ))
+                  ) : (
+                    <Typography variant="body2" sx={{ pl: 1, color: '#64748B', fontStyle: 'italic', fontSize: '0.85rem' }}>
+                      Локальный суставной статус: без признаков патологической деформации, отека и ограничения движений.
+                    </Typography>
+                  )}
+                </Box>
+              )}
 
-            {data.nextVisitDate && (
-              <Typography variant="body2" sx={{ fontSize: '0.84rem', color: '#1E293B', mt: 1 }}>
-                <Box component="span" sx={{ fontWeight: 700, color: '#475569' }}>Повторный осмотр: </Box>
-                {data.nextVisitDate}
-              </Typography>
-            )}
-          </Box>
-        </Box>
+              {/* 6. SPECIAL STUDIES (МРТ, КТ, рентген, УЗИ, анализы) */}
+              {isVisible('special_studies', data.specialStudies) && (
+                <Box key="sec-special-studies" sx={{ mb: 2, pageBreakInside: 'avoid' }}>
+                  <Typography variant="subtitle2" sx={{ fontWeight: 800, color: '#0F3C64', borderBottom: '1px solid #E2E8F0', pb: 0.4, mb: 1 }}>
+                    {getNextIndex()}. Специальные методы исследования (МРТ, КТ, рентген, УЗИ, анализы)
+                  </Typography>
+                  <Box sx={{ pl: 1 }}>
+                    <Typography variant="body2" sx={{ fontSize: '0.86rem', lineHeight: 1.45, whiteSpace: 'pre-line' }}>
+                      {data.specialStudies}
+                    </Typography>
+                  </Box>
+                </Box>
+              )}
+
+              {/* 7. PERFORMED MANIPULATIONS */}
+              {isVisible('performed_manipulations', data.performedManipulations) && (
+                <Box key="sec-performed-manipulations" sx={{ mb: 2, pageBreakInside: 'avoid' }}>
+                  <Typography variant="subtitle2" sx={{ fontWeight: 800, color: '#0F3C64', borderBottom: '1px solid #E2E8F0', pb: 0.4, mb: 1 }}>
+                    {getNextIndex()}. Выполненные манипуляции и процедуры
+                  </Typography>
+                  <Box sx={{ pl: 1 }}>
+                    <Typography variant="body2" sx={{ fontSize: '0.86rem', lineHeight: 1.45, whiteSpace: 'pre-line' }}>
+                      {data.performedManipulations}
+                    </Typography>
+                  </Box>
+                </Box>
+              )}
+
+              {/* 8. CLINICAL DIAGNOSIS */}
+              {isVisible('diagnosis', cleanDiagnosis) && (
+                <Box key="sec-diagnosis" sx={{ mb: 2, pageBreakInside: 'avoid' }}>
+                  <Typography variant="subtitle2" sx={{ fontWeight: 800, color: '#0F3C64', borderBottom: '1px solid #E2E8F0', pb: 0.4, mb: 1 }}>
+                    {getNextIndex()}. Клинический диагноз
+                  </Typography>
+                  <Box sx={{ pl: 1 }}>
+                    {data.icdCode && (
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+                        <Chip
+                          label={`МКБ-10: ${data.icdCode}`}
+                          size="small"
+                          sx={{ fontWeight: 800, bgcolor: '#0284C7', color: '#FFFFFF', fontSize: '0.78rem' }}
+                        />
+                        {data.icdName && (
+                          <Typography variant="body2" sx={{ color: '#475569', fontWeight: 600, fontSize: '0.84rem' }}>
+                            {data.icdName}
+                          </Typography>
+                        )}
+                      </Box>
+                    )}
+                    <Typography variant="body2" sx={{ fontWeight: 700, color: '#0F172A', fontSize: '0.92rem', lineHeight: 1.45 }}>
+                      {cleanDiagnosis}
+                    </Typography>
+                  </Box>
+                </Box>
+              )}
+
+              {/* 9. RECOMMENDATIONS & PRESCRIPTIONS */}
+              {isVisible('recommendations', data.recommendations || (data.prescriptions && data.prescriptions.length > 0 ? 'has' : '')) && (
+                <Box key="sec-recommendations" sx={{ mb: 2, pageBreakInside: 'avoid' }}>
+                  <Typography variant="subtitle2" sx={{ fontWeight: 800, color: '#0F3C64', borderBottom: '1px solid #E2E8F0', pb: 0.4, mb: 1 }}>
+                    {getNextIndex()}. Рекомендации и план лечения
+                  </Typography>
+                  <Box sx={{ pl: 1 }}>
+                    {data.recommendations && (
+                      <Typography variant="body2" sx={{ fontSize: '0.86rem', lineHeight: 1.5, whiteSpace: 'pre-line', mb: 1.5 }}>
+                        {data.recommendations}
+                      </Typography>
+                    )}
+
+                    {/* Prescribed Services Table */}
+                    {data.prescriptions && data.prescriptions.length > 0 && (
+                      <Box sx={{ mt: 1, mb: 1.5 }}>
+                        <Typography variant="caption" sx={{ fontWeight: 700, color: '#475569', display: 'block', mb: 0.5 }}>
+                          Назначенные медицинские услуги и манипуляции:
+                        </Typography>
+                        <TableContainer component={Paper} variant="outlined" sx={{ borderColor: '#E2E8F0' }}>
+                          <Table size="small">
+                            <TableHead sx={{ bgcolor: '#F1F5F9' }}>
+                              <TableRow>
+                                <TableCell sx={{ fontWeight: 700, fontSize: '0.78rem', py: 0.5 }}>№</TableCell>
+                                <TableCell sx={{ fontWeight: 700, fontSize: '0.78rem', py: 0.5 }}>Наименование услуги / манипуляции</TableCell>
+                                <TableCell align="center" sx={{ fontWeight: 700, fontSize: '0.78rem', py: 0.5 }}>Кол-во</TableCell>
+                                <TableCell align="right" sx={{ fontWeight: 700, fontSize: '0.78rem', py: 0.5 }}>Стоимость, руб.</TableCell>
+                              </TableRow>
+                            </TableHead>
+                            <TableBody>
+                              {data.prescriptions.map((presc, pIdx) => (
+                                <TableRow key={pIdx}>
+                                  <TableCell sx={{ fontSize: '0.78rem', py: 0.5 }}>{pIdx + 1}</TableCell>
+                                  <TableCell sx={{ fontSize: '0.82rem', py: 0.5 }}>
+                                    <Typography variant="body2" sx={{ fontWeight: 600, fontSize: '0.82rem' }}>
+                                      {presc.name || (presc as any).title || 'Медицинская услуга'}
+                                    </Typography>
+                                    {presc.dosage_notes && (
+                                      <Typography variant="caption" sx={{ color: '#64748B', display: 'block' }}>
+                                        {presc.dosage_notes}
+                                      </Typography>
+                                    )}
+                                  </TableCell>
+                                  <TableCell align="center" sx={{ fontSize: '0.82rem', py: 0.5 }}>
+                                    {presc.quantity || 1}
+                                  </TableCell>
+                                  <TableCell align="right" sx={{ fontSize: '0.82rem', fontWeight: 600, py: 0.5 }}>
+                                    {(((presc.price ?? (presc as any).unitPrice ?? (presc as any).unit_price ?? 0)) * (presc.quantity || 1)).toLocaleString('ru-RU', {
+                                      minimumFractionDigits: 2,
+                                      maximumFractionDigits: 2
+                                    })}
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </TableContainer>
+                      </Box>
+                    )}
+
+                    {data.nextVisitDate && (
+                      <Typography variant="body2" sx={{ fontSize: '0.84rem', color: '#1E293B', mt: 1 }}>
+                        <Box component="span" sx={{ fontWeight: 700, color: '#475569' }}>Повторный осмотр: </Box>
+                        {data.nextVisitDate}
+                      </Typography>
+                    )}
+                  </Box>
+                </Box>
+              )}
+            </>
+          );
+        })()}
 
         {/* 5. MANDATORY UNIFIED TOTALS & SIGNATURES BLOCK (CRITICAL SKILL RULE) */}
         <Box

@@ -44,7 +44,12 @@ function initOrthoSchema(db, callback) {
       "ALTER TABLE protocols ADD COLUMN signed_at TEXT",
       "ALTER TABLE protocols ADD COLUMN signed_by_docn INTEGER",
       "ALTER TABLE protocols ADD COLUMN signature_hash TEXT",
-      "ALTER TABLE protocols ADD COLUMN revocation_reason TEXT"
+      "ALTER TABLE protocols ADD COLUMN revocation_reason TEXT",
+      "ALTER TABLE protocols ADD COLUMN anamnesis_vitae TEXT",
+      "ALTER TABLE protocols ADD COLUMN objective_status TEXT",
+      "ALTER TABLE protocols ADD COLUMN special_studies TEXT",
+      "ALTER TABLE protocols ADD COLUMN performed_manipulations TEXT",
+      "ALTER TABLE protocols ADD COLUMN active_sections_mask TEXT"
     ];
 
     protocolCols.forEach((colSql) => {
@@ -182,12 +187,20 @@ function initOrthoSchema(db, callback) {
       "ALTER TABLE ortho_templates ADD COLUMN cluster_id TEXT",
       "ALTER TABLE ortho_templates ADD COLUMN cluster_name TEXT",
       "ALTER TABLE ortho_templates ADD COLUMN stage_or_severity TEXT",
-      "ALTER TABLE ortho_templates ADD COLUMN clinical_tags TEXT"
+      "ALTER TABLE ortho_templates ADD COLUMN clinical_tags TEXT",
+      "ALTER TABLE ortho_templates ADD COLUMN anamnesis_vitae_template TEXT",
+      "ALTER TABLE ortho_templates ADD COLUMN objective_status_template TEXT",
+      "ALTER TABLE ortho_templates ADD COLUMN special_studies_template TEXT",
+      "ALTER TABLE ortho_templates ADD COLUMN performed_manipulations_template TEXT",
+      "ALTER TABLE ortho_templates ADD COLUMN default_sections_mask TEXT",
+      "ALTER TABLE ortho_templates ADD COLUMN is_custom INTEGER DEFAULT 0",
+      "ALTER TABLE ortho_templates ADD COLUMN author_doctor_name TEXT"
     ];
     tmplCols.forEach((colSql) => {
       db.run(colSql, () => {});
     });
     db.run("CREATE INDEX IF NOT EXISTS idx_ot_cluster_id ON ortho_templates(cluster_id);");
+    db.run("CREATE INDEX IF NOT EXISTS idx_ot_is_custom ON ortho_templates(is_custom);");
 
     // 6.0. Clinical Clusters Classification (10 Master Clusters)
     db.run(`CREATE TABLE IF NOT EXISTS ortho_clusters (
