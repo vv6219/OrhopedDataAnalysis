@@ -84,7 +84,7 @@ export interface MasterCluster {
 }
 
 export const MASTER_CLUSTERS: MasterCluster[] = [
-  { id: 'all', code: 'ALL', name_ru: 'Все кластеры (100)', joint_affinity: 'all', badge_color: '#0F3C64', sort_order: 0 },
+  { id: 'all', code: 'ALL', name_ru: 'Все кластеры', joint_affinity: 'all', badge_color: '#0F3C64', sort_order: 0 },
   { id: 'cluster_knee', code: 'KNEE', name_ru: '1. Коленный сустав', joint_affinity: 'knee', badge_color: '#0284C7', sort_order: 10 },
   { id: 'cluster_shoulder', code: 'SHOULDER', name_ru: '2. Плечевой пояс', joint_affinity: 'shoulder', badge_color: '#9333EA', sort_order: 20 },
   { id: 'cluster_hip_pelvis', code: 'HIP_PELVIS', name_ru: '3. Таз и ТБС', joint_affinity: 'hip', badge_color: '#16A34A', sort_order: 30 },
@@ -94,7 +94,8 @@ export const MASTER_CLUSTERS: MasterCluster[] = [
   { id: 'cluster_spine', code: 'SPINE', name_ru: '7. Позвоночник и торакс', joint_affinity: 'spine', badge_color: '#475569', sort_order: 70 },
   { id: 'cluster_pediatric', code: 'PEDIATRIC', name_ru: '8. Детская ортопедия', joint_affinity: 'general', badge_color: '#D97706', sort_order: 80 },
   { id: 'cluster_systemic', code: 'SYSTEMIC', name_ru: '9. Системные синдромы', joint_affinity: 'general', badge_color: '#4F46E5', sort_order: 90 },
-  { id: 'cluster_postop', code: 'POSTOP', name_ru: '10. Постоперационные протоколы', joint_affinity: 'general', badge_color: '#059669', sort_order: 100 }
+  { id: 'cluster_postop', code: 'POSTOP', name_ru: '10. Постоперационный контроль', joint_affinity: 'general', badge_color: '#059669', sort_order: 100 },
+  { id: 'cluster_author', code: 'AUTHOR', name_ru: '11. Авторские протоколы', joint_affinity: 'general', badge_color: '#0D9488', sort_order: 110 }
 ];
 
 // Common ICD-10 Orthopedic options for quick autocomplete
@@ -701,6 +702,40 @@ export default function OrthoWorkstation() {
     });
   }, [templates, selectedClusterId, protocolSearchQuery, filterOnlyCustom]);
 
+  // Cluster counts map for protocol dialog
+  const clusterCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    const orthoList = templates.filter(t => t.source === 'biomechanics' || (t.id && String(t.id).startsWith('ortho-')));
+    const listToCount = orthoList.length > 0 ? orthoList : templates;
+    counts['all'] = listToCount.length > 0 ? listToCount.length : 180;
+
+    MASTER_CLUSTERS.forEach(cl => {
+      if (cl.id !== 'all') {
+        const clusterCode = cl.id.replace('cluster_', '').toUpperCase();
+        counts[cl.id] = listToCount.filter(t => {
+          const effectiveClusterId = t.cluster_id || t.template_json?.cluster_id;
+          const tmplCluster = String(effectiveClusterId || t.cluster || t.category || '').toUpperCase();
+          const tmplJoint = String(t.joint_name || '').toLowerCase();
+          if (effectiveClusterId === cl.id || tmplCluster.includes(clusterCode)) return true;
+          if (cl.id === 'cluster_knee' && /колен|гонартроз|мениск|patell/.test(tmplJoint + ' ' + t.title)) return true;
+          if (cl.id === 'cluster_shoulder' && /плеч|акромион|ротатор/.test(tmplJoint + ' ' + t.title)) return true;
+          if (cl.id === 'cluster_hip_pelvis' && /тазобедр|коксартроз|вертлуж/.test(tmplJoint + ' ' + t.title)) return true;
+          if (cl.id === 'cluster_foot_ankle' && /стоп|голеностоп|ахилл|пяточ/.test(tmplJoint + ' ' + t.title)) return true;
+          if (cl.id === 'cluster_elbow' && /локт|эпикондил|олекранон/.test(tmplJoint + ' ' + t.title)) return true;
+          if (cl.id === 'cluster_wrist_hand' && /кист|запяст|лучезапяст|туннел/.test(tmplJoint + ' ' + t.title)) return true;
+          if (cl.id === 'cluster_spine' && /позвоноч|дорсопат|спондило|грыж|сколиоз/.test(tmplJoint + ' ' + t.title)) return true;
+          if (cl.id === 'cluster_pediatric' && /детск|педиатри|дисплази|врожден/.test(tmplJoint + ' ' + t.title)) return true;
+          if (cl.id === 'cluster_systemic' && /системн|остеопороз|ревматоид|подагр|фибромиал/.test(tmplJoint + ' ' + t.title)) return true;
+          if (cl.id === 'cluster_postop' && /постоперац|реабилит|эндопротез|артроскопи/.test(tmplJoint + ' ' + t.title)) return true;
+          if (cl.id === 'cluster_author' && /автор|кастом/.test(tmplJoint + ' ' + t.title)) return true;
+          return false;
+        }).length;
+      }
+    });
+
+    return counts;
+  }, [templates]);
+
   // Open Save as Customized Template Dialog
   const handleOpenSaveCustomTemplate = () => {
     const clusterForJoint = JOINT_TO_CLUSTER[selectedJoint]?.clusterId || 'cluster_knee';
@@ -1031,6 +1066,12 @@ export default function OrthoWorkstation() {
                 }
                 if (t.recommendations_template) setRecommendations(t.recommendations_template);
 
+                if (t.rom_norm_preset) {
+                  try {
+                    examRom = typeof t.rom_norm_preset === 'string' ? JSON.parse(t.rom_norm_preset) : t.rom_norm_preset;
+                  } catch {}
+                }
+
                 if (Array.isArray(t.diagnosticMethods)) {
                   setActiveTemplateDiagnostics(t.diagnosticMethods);
                 }
@@ -1043,6 +1084,87 @@ export default function OrthoWorkstation() {
                     }
                   });
                   examTests = testsFromDb;
+                }
+
+                // Hydrate treatments from relational tables if available (High priority internal services & prescriptions)
+                const treatmentPrescriptions: any[] = [];
+                if (Array.isArray(t.manipulations) && t.manipulations.length > 0) {
+                  t.manipulations.forEach((m: any, idx: number) => {
+                    treatmentPrescriptions.push({
+                      id: `tpl-man-${m.id || m.item_code || idx}`,
+                      category: 'manipulation',
+                      title: m.name || m.item_code,
+                      name: m.name || m.item_code,
+                      code: m.item_code || '',
+                      serviceCode: m.servdict_code || '',
+                      unitPrice: Number(m.servdict_price || 0),
+                      price: Number(m.servdict_price || 0),
+                      quantity: 1,
+                      serviceId: m.servdict_id || undefined,
+                      details: {
+                        scope: m.service_scope || 'internal',
+                        priority: m.priority_level || 'high',
+                        regimen: m.dosage_or_regimen || m.regimen_standard || ''
+                      }
+                    });
+                  });
+                }
+
+                if (Array.isArray(t.physiotherapy) && t.physiotherapy.length > 0) {
+                  t.physiotherapy.forEach((p: any, idx: number) => {
+                    treatmentPrescriptions.push({
+                      id: `tpl-phys-${p.id || p.item_code || idx}`,
+                      category: 'physio',
+                      title: p.name || p.item_code,
+                      name: p.name || p.item_code,
+                      code: p.item_code || '',
+                      serviceCode: p.servdict_code || '',
+                      unitPrice: Number(p.servdict_price || 0),
+                      price: Number(p.servdict_price || 0),
+                      quantity: 1,
+                      serviceId: p.servdict_id || undefined,
+                      details: {
+                        scope: p.service_scope || 'internal',
+                        priority: p.priority_level || 'high',
+                        regimen: p.dosage_or_regimen || p.regimen_standard || ''
+                      }
+                    });
+                  });
+                }
+
+                if (Array.isArray(t.orthotics) && t.orthotics.length > 0) {
+                  t.orthotics.forEach((o: any, idx: number) => {
+                    treatmentPrescriptions.push({
+                      id: `tpl-orth-${o.id || o.item_code || idx}`,
+                      category: 'orthotics',
+                      title: o.name || o.item_code,
+                      name: o.name || o.item_code,
+                      code: o.item_code || '',
+                      serviceCode: o.servdict_code || '',
+                      unitPrice: Number(o.servdict_price || 0),
+                      price: Number(o.servdict_price || 0),
+                      quantity: 1,
+                      serviceId: o.servdict_id || undefined,
+                      details: {
+                        scope: o.service_scope || 'internal',
+                        priority: o.priority_level || 'high',
+                        regimen: o.dosage_or_regimen || o.regimen_standard || ''
+                      }
+                    });
+                  });
+                }
+
+                if (treatmentPrescriptions.length > 0) {
+                  setPrescriptions((prev) => {
+                    const combined = [...treatmentPrescriptions];
+                    // keep non-conflicting existing
+                    prev.forEach((existing) => {
+                      if (!combined.some((c) => (c.name || c.title) === (existing.name || existing.title))) {
+                        combined.push(existing);
+                      }
+                    });
+                    return combined;
+                  });
                 }
               }
             }
@@ -1481,7 +1603,7 @@ export default function OrthoWorkstation() {
               textTransform: 'none'
             }}
           >
-            Справочник протоколов (100)
+            Справочник протоколов ({clusterCounts['all'] || 180})
           </Button>
 
           <Tooltip title="Открыть Справочник клинических шаблонов 2.0 (CRUD, ортопедические тесты, методы диагностики)">
@@ -2359,24 +2481,51 @@ export default function OrthoWorkstation() {
               }}
             />
           </Box>
-          <Box sx={{ display: 'flex', gap: 0.8, flexWrap: 'wrap', mb: 2.5 }}>
+          <Box sx={{ display: 'flex', gap: 0.65, flexWrap: 'wrap', mb: 2.5 }}>
             {MASTER_CLUSTERS.map((cl) => {
               const isSelected = selectedClusterId === cl.id;
+              const count = clusterCounts[cl.id] || (cl.id === 'all' ? 180 : 0);
               return (
                 <Chip
                   key={cl.id}
-                  label={cl.name_ru}
+                  label={
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6 }}>
+                      {cl.id !== 'all' && (
+                        <Box sx={{ width: 7, height: 7, borderRadius: '50%', bgcolor: isSelected ? '#FFFFFF' : cl.badge_color, flexShrink: 0 }} />
+                      )}
+                      <span>{cl.name_ru}</span>
+                      <span
+                        style={{
+                          backgroundColor: isSelected ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.06)',
+                          color: isSelected ? '#FFFFFF' : '#475569',
+                          padding: '0 5px',
+                          borderRadius: 8,
+                          fontSize: '0.66rem',
+                          fontWeight: 700,
+                          lineHeight: '15px',
+                          height: 15,
+                          display: 'inline-flex',
+                          alignItems: 'center'
+                        }}
+                      >
+                        {count}
+                      </span>
+                    </Box>
+                  }
                   size="small"
                   onClick={() => setSelectedClusterId(cl.id)}
                   sx={{
-                    fontWeight: 700,
-                    fontSize: '0.76rem',
+                    fontWeight: isSelected ? 800 : 600,
+                    fontSize: '0.74rem',
+                    height: 28,
                     bgcolor: isSelected ? cl.badge_color : '#F1F5F9',
                     color: isSelected ? '#FFFFFF' : '#334155',
                     border: `1px solid ${isSelected ? cl.badge_color : '#CBD5E1'}`,
                     cursor: 'pointer',
+                    transition: 'all 0.15s ease-in-out',
                     '&:hover': {
-                      bgcolor: isSelected ? cl.badge_color : '#E2E8F0'
+                      bgcolor: isSelected ? cl.badge_color : '#E2E8F0',
+                      borderColor: isSelected ? cl.badge_color : '#94A3B8'
                     }
                   }}
                 />

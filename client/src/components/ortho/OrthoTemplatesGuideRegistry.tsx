@@ -1751,26 +1751,46 @@ export default function OrthoTemplatesGuideRegistry() {
         </Box>
       </Paper>
 
-      {/* Cluster Horizon Carousel / Strip */}
+      {/* Cluster Master Bar - Multi-Resolution Responsive Layout */}
       <Box
         sx={{
           display: 'flex',
           alignItems: 'center',
-          gap: 1,
-          p: 1.25,
+          flexWrap: 'wrap',
+          gap: 0.65,
+          p: { xs: 0.85, md: 1 },
           bgcolor: '#FFFFFF',
           borderRadius: 2,
-          boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
           border: '1px solid #E2E8F0',
-          overflowX: 'auto',
-          whiteSpace: 'nowrap',
-          '&::-webkit-scrollbar': { height: 5 },
-          '&::-webkit-scrollbar-thumb': { bgcolor: '#CBD5E1', borderRadius: 3 }
+          flexShrink: 0
         }}
       >
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, pl: 0.5, pr: 1, borderRight: '1px solid #E2E8F0', flexShrink: 0 }}>
-          <LayersIcon sx={{ fontSize: 18, color: '#0F3C64' }} />
-          <Typography variant="caption" sx={{ fontWeight: 800, color: '#0F3C64', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+        <Box
+          sx={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 0.6,
+            px: 1,
+            py: 0.35,
+            bgcolor: '#F1F5F9',
+            borderRadius: 1.5,
+            border: '1px solid #CBD5E1',
+            flexShrink: 0,
+            height: 28
+          }}
+        >
+          <LayersIcon sx={{ fontSize: 16, color: '#0F3C64' }} />
+          <Typography
+            variant="caption"
+            sx={{
+              fontWeight: 800,
+              color: '#0F3C64',
+              textTransform: 'uppercase',
+              letterSpacing: 0.5,
+              fontSize: '0.7rem'
+            }}
+          >
             Кластеры:
           </Typography>
         </Box>
@@ -1782,18 +1802,19 @@ export default function OrthoTemplatesGuideRegistry() {
             <Chip
               key={c.id}
               label={
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6 }}>
                   {c.id !== 'all' && (
-                    <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: isSelected ? '#FFFFFF' : c.badge_color }} />
+                    <Box sx={{ width: 7, height: 7, borderRadius: '50%', bgcolor: isSelected ? '#FFFFFF' : c.badge_color, flexShrink: 0 }} />
                   )}
                   <span>{c.name_ru}</span>
                   <span
                     style={{
                       backgroundColor: isSelected ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.06)',
-                      padding: '1px 6px',
+                      padding: '1px 5px',
                       borderRadius: 10,
-                      fontSize: '0.7rem',
-                      fontWeight: 800
+                      fontSize: '0.68rem',
+                      fontWeight: 800,
+                      lineHeight: 1.2
                     }}
                   >
                     {count}
@@ -1805,16 +1826,16 @@ export default function OrthoTemplatesGuideRegistry() {
               onClick={() => setSelectedCluster(c.id)}
               sx={{
                 fontWeight: isSelected ? 800 : 600,
-                fontSize: '0.76rem',
-                height: 30,
-                px: 0.5,
-                flexShrink: 0,
+                fontSize: '0.74rem',
+                height: 28,
+                px: 0.4,
                 color: isSelected ? '#FFFFFF' : '#334155',
                 bgcolor: isSelected ? c.badge_color : '#F8FAFC',
                 border: `1px solid ${isSelected ? c.badge_color : '#E2E8F0'}`,
-                transition: 'all 0.15s',
+                transition: 'all 0.15s ease-in-out',
                 '&:hover': {
-                  bgcolor: isSelected ? c.badge_color : '#E2E8F0'
+                  bgcolor: isSelected ? c.badge_color : '#E2E8F0',
+                  borderColor: isSelected ? c.badge_color : '#CBD5E1'
                 }
               }}
             />

@@ -16,6 +16,7 @@
     "@mui/material": "^9.4.0",
     "@mui/x-data-grid": "^9.14.0",
     "docx": "^9.10.0",
+    "katex": "^0.19.0",
     "qrcode.react": "^4.2.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
@@ -24,6 +25,7 @@
     "recharts": "^3.10.1"
   },
   "devDependencies": {
+    "@types/katex": "^0.16.8",
     "@types/node": "^24.13.3",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.7",

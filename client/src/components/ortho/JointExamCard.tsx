@@ -12,15 +12,25 @@ import {
   Switch,
   Divider,
   IconButton,
-  Tooltip
+  Tooltip,
+  Collapse
 } from '@mui/material';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import GoniometerInput from './GoniometerInput';
 import type { RomValues } from './GoniometerInput';
 import type { JointAreaId } from './BodyHomunculus';
 import OrthoTestGuidanceModal from './OrthoTestGuidanceModal';
 import { API_BASE_URL } from '../../config/apiConfig';
+
+const TEST_TYPE_CONFIG: Record<string, { label: string; short: string; color: string; bg: string }> = {
+  provocative: { label: 'Провокационный (боль/стресс)', short: 'Провокац.', color: '#DC2626', bg: '#FEF2F2' },
+  relocation: { label: 'Релокационный / вправление', short: 'Релокац.', color: '#2563EB', bg: '#EFF6FF' },
+  neurodynamic: { label: 'Нейродинамический (натяжение)', short: 'Нейродин.', color: '#D97706', bg: '#FFFBEB' },
+  multifactor_cluster: { label: 'Многофакторный кластер', short: 'Кластер', color: '#7C3AED', bg: '#F5F3FF' }
+};
 
 export type { RomValues };
 
@@ -179,8 +189,47 @@ export default function JointExamCard({
   }, []);
 
   const jointCatalogTests = useMemo(() => {
-    return Object.values(testCatalog).filter((t: any) => t.target_joint === category);
+    return Object.values(testCatalog).filter((t: any) => t.joint_category === category || t.target_joint === category);
   }, [testCatalog, category]);
+
+  const tier1Tests = useMemo(() => {
+    return jointCatalogTests.filter((t: any) => (t.priority_level === 'high' || t.priority_level === 'tier1'));
+  }, [jointCatalogTests]);
+
+  const tier2Tests = useMemo(() => {
+    return jointCatalogTests.filter((t: any) => (t.priority_level === 'medium' || t.priority_level === 'tier2' || (!t.priority_level && !tier1Tests.some((x: any) => x.code === t.code))));
+  }, [jointCatalogTests, tier1Tests]);
+
+  const tier3Tests = useMemo(() => {
+    return jointCatalogTests.filter((t: any) => (t.priority_level === 'low' || t.priority_level === 'tier3'));
+  }, [jointCatalogTests]);
+
+  const [tier2Expanded, setTier2Expanded] = useState(false);
+  const [tier3Expanded, setTier3Expanded] = useState(false);
+
+  const hasPositiveTier1 = useMemo(() => {
+    return tier1Tests.some((t: any) => {
+      const val = state.tests[t.code];
+      return val === 'positive' || val === 'positive_medial' || val === 'positive_lateral';
+    });
+  }, [tier1Tests, state.tests]);
+
+  useEffect(() => {
+    if (hasPositiveTier1) {
+      setTier2Expanded(true);
+    }
+  }, [hasPositiveTier1]);
+
+  const handleSetTier1Normal = () => {
+    const updated = { ...state.tests };
+    tier1Tests.forEach((t: any) => {
+      updated[t.code] = 'negative';
+    });
+    onChange({
+      ...state,
+      tests: updated
+    });
+  };
 
   const handleTestToggle = (testKey: string) => {
     const currentVal = state.tests[testKey] || 'negative';
@@ -194,7 +243,9 @@ export default function JointExamCard({
   const renderTestItem = (testKey: string, defaultLabel: string) => {
     const catItem = testCatalog[testKey];
     const isPositive = state.tests[testKey] === 'positive' || state.tests[testKey] === 'positive_medial' || state.tests[testKey] === 'positive_lateral';
-    const displayName = catItem ? catItem.name : defaultLabel;
+    const displayName = catItem ? (catItem.name_ru || catItem.name) : defaultLabel;
+    const typeTag = catItem?.test_type || catItem?.test_type_tag;
+    const typeConf = typeTag ? TEST_TYPE_CONFIG[typeTag] : null;
 
     return (
       <Grid size={{ xs: 12, sm: 6 }} key={testKey}>
@@ -203,7 +254,7 @@ export default function JointExamCard({
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            p: 1,
+            p: 1.25,
             borderRadius: 1.5,
             border: '1px solid',
             borderColor: isPositive ? '#FCA5A5' : '#E2E8F0',
@@ -223,12 +274,54 @@ export default function JointExamCard({
             }
             label={
               <Box sx={{ ml: 0.5 }}>
-                <Typography sx={{ fontSize: '0.82rem', fontWeight: 600, color: isPositive ? '#991B1B' : '#1E293B', lineHeight: 1.25 }}>
-                  {displayName}
-                </Typography>
-                <Typography sx={{ fontSize: '0.72rem', color: isPositive ? '#DC2626' : '#64748B', fontWeight: isPositive ? 700 : 500 }}>
-                  {isPositive ? 'Положительный (+)' : 'Отрицательный (-)'}
-                </Typography>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'wrap', mb: 0.25 }}>
+                  <Typography sx={{ fontSize: '0.82rem', fontWeight: 700, color: isPositive ? '#991B1B' : '#1E293B', lineHeight: 1.25 }}>
+                    {displayName}
+                  </Typography>
+                  {typeConf && (
+                    <Chip
+                      label={typeConf.short}
+                      size="small"
+                      sx={{
+                        height: 16,
+                        fontSize: '0.58rem',
+                        fontWeight: 700,
+                        bgcolor: typeConf.bg,
+                        color: typeConf.color,
+                        border: `1px solid ${typeConf.color}30`
+                      }}
+                    />
+                  )}
+                  {Boolean(catItem?.is_supplemented) && (
+                    <Chip
+                      label="ДОПОЛНЕНО"
+                      size="small"
+                      sx={{
+                        height: 16,
+                        fontSize: '0.58rem',
+                        fontWeight: 800,
+                        bgcolor: '#FEF3C7',
+                        color: '#92400E',
+                        border: '1px solid #FCD34D'
+                      }}
+                    />
+                  )}
+                </Box>
+                {catItem?.name_lat && (
+                  <Typography sx={{ fontSize: '0.68rem', fontStyle: 'italic', color: '#64748B' }}>
+                    {catItem.name_lat}
+                  </Typography>
+                )}
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.25 }}>
+                  <Typography sx={{ fontSize: '0.72rem', color: isPositive ? '#DC2626' : '#16A34A', fontWeight: 700 }}>
+                    {isPositive ? 'Положительный (+)' : 'Отрицательный (-)'}
+                  </Typography>
+                  {(catItem?.sensitivity_pct || catItem?.specificity_pct) && (
+                    <Typography sx={{ fontSize: '0.68rem', color: '#059669', fontWeight: 600 }}>
+                      {catItem.sensitivity_pct ? `Se:${catItem.sensitivity_pct}%` : ''} {catItem.specificity_pct ? `Sp:${catItem.specificity_pct}%` : ''}
+                    </Typography>
+                  )}
+                </Box>
               </Box>
             }
           />
@@ -346,95 +439,161 @@ export default function JointExamCard({
 
       <Divider sx={{ my: 2 }} />
 
-      {/* Section 3: Specialized Clinical Tests (Dynamic from Knowledge Base 2.0 Catalog) */}
+      {/* Section 3: Specialized Clinical Tests (3 EBM Tiers) */}
       <Box>
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5, flexWrap: 'wrap', gap: 1 }}>
-          <Typography variant="subtitle2" sx={{ fontWeight: 700, color: '#0F3C64' }}>
-            Специальные ортопедические тесты (Клинические пробы):
-          </Typography>
-          <Typography variant="caption" sx={{ color: '#64748B' }}>
-            Нажмите <b>(i)</b> для просмотра методики и чувствительности
-          </Typography>
+          <Box>
+            <Typography variant="subtitle2" sx={{ fontWeight: 800, color: '#0F3C64' }}>
+              Специальные ортопедические тесты (3-уровневая EBM система):
+            </Typography>
+            <Typography variant="caption" sx={{ color: '#64748B' }}>
+              Tier 1 (скрининг), Tier 2 (верификация при патологии), Tier 3 (экспертный)
+            </Typography>
+          </Box>
+          <Button
+            size="small"
+            variant="outlined"
+            color="success"
+            onClick={handleSetTier1Normal}
+            sx={{ textTransform: 'none', fontSize: '0.75rem', fontWeight: 700 }}
+          >
+            Все тесты Tier 1 в норме (-)
+          </Button>
         </Box>
 
-        <Grid container spacing={1.5}>
-          {jointCatalogTests.length > 0 ? (
-            jointCatalogTests.map((t: any) => renderTestItem(t.code, t.name))
-          ) : (
-            // Fallback hardcoded list if catalog is loading
-            <>
-              {category === 'knee' && (
-                <>
-                  {renderTestItem('lachman', 'Тест Лахмана (Lachman test)')}
-                  {renderTestItem('anterior_drawer', 'Передний «выдвижной ящик»')}
-                  {renderTestItem('posterior_drawer', 'Задний «выдвижной ящик»')}
-                  {renderTestItem('pivot_shift', 'Pivot-shift тест')}
-                  {renderTestItem('mcmurray', 'Тест Мак-Мюррея (мениски)')}
-                  {renderTestItem('appley', 'Тест Эпли (компрессионный)')}
-                  {renderTestItem('patella_ballottement', 'Баллотирование надколенника')}
-                  {renderTestItem('clarke_patellar_grind', 'Тест Кларка (пателлофеморальный)')}
-                </>
-              )}
-              {category === 'elbow' && (
-                <>
-                  {renderTestItem('cozen', 'Тест Козена (латеральный эпикондилит)')}
-                  {renderTestItem('mill', 'Тест Милля (растяжение разгибателей)')}
-                  {renderTestItem('golfer', 'Тест «локтя гольфиста» (медиальный эпикондилит)')}
-                  {renderTestItem('tinel_cubital', 'Симптом Тиннеля (кубитальный канал)')}
-                  {renderTestItem('valgus_stress_elbow', 'Вальгус-стресс тест локтя (MCL)')}
-                  {renderTestItem('varus_stress_elbow', 'Варус-стресс тест локтя (LCL)')}
-                </>
-              )}
-              {category === 'shoulder' && (
-                <>
-                  {renderTestItem('neer', 'Импиджмент-тест Нира (Neer)')}
-                  {renderTestItem('hawkins', 'Тест Хокинса-Кеннеди')}
-                  {renderTestItem('empty_can_jobe', 'Тест Джобса (надостная м.)')}
-                  {renderTestItem('speed_biceps', 'Тест Спида (длинная головка бицепса)')}
-                  {renderTestItem('yergason', 'Тест Яргасона (супинация предплечья)')}
-                  {renderTestItem('apprehension_relocation', 'Тест предчувствия вывиха')}
-                  {renderTestItem('lift_off_gerber', 'Тест Гербера (подлопаточная м.)')}
-                  {renderTestItem('drop_arm', 'Тест падающей руки (массивный разрыв)')}
-                </>
-              )}
-              {category === 'hip' && (
-                <>
-                  {renderTestItem('faber', 'Тест FABER / Патрика (ТБС / КПС)')}
-                  {renderTestItem('fadir', 'Тест FADIR (импинджмент / вертлужная губа)')}
-                  {renderTestItem('thomas', 'Тест Томаса (сгибательная контрактура)')}
-                  {renderTestItem('trendelenburg', 'Симптом Тренделенбурга')}
-                  {renderTestItem('scour', 'Тест Scour (квадрант-тест ТБС)')}
-                </>
-              )}
-              {category === 'wrist' && (
-                <>
-                  {renderTestItem('phalen', 'Тест Фалена (карпальный канал)')}
-                  {renderTestItem('tinel_wrist', 'Симптом Тиннеля на запястье')}
-                  {renderTestItem('finkelstein', 'Тест Финкельштейна (болезнь де Кервена)')}
-                  {renderTestItem('piano_key', 'Симптом «клавиши пианино» (DRUJ)')}
-                </>
-              )}
-              {category === 'spine' && (
-                <>
-                  {renderTestItem('lasegue', 'Симптом Ласега (Lasegue test)')}
-                  {renderTestItem('bragard', 'Тест Брагарда (дифференциация радикулопатии)')}
-                  {renderTestItem('slump', 'Slump-тест (нейродинамическое натяжение)')}
-                  {renderTestItem('adams', 'Проба Адамса (структурный сколиоз)')}
-                  {renderTestItem('schober', 'Тест Шобера (подвижность поясничного отдела)')}
-                </>
-              )}
-              {category === 'ankle' && (
-                <>
-                  {renderTestItem('anterior_drawer_ankle', 'Передний выдвижной ящик голеностопа')}
-                  {renderTestItem('talar_tilt', 'Тест наклона таранной кости')}
-                  {renderTestItem('thompson', 'Тест Томпсона (разрыв ахиллова сухожилия)')}
-                  {renderTestItem('windlass', 'Тест Уиндласса (плантарный фасциит)')}
-                  {renderTestItem('kleiger', 'Тест Клейгера (синдесмоз голеностопа)')}
-                </>
-              )}
-            </>
-          )}
-        </Grid>
+        {/* Tier 1: Обязательный первичный скрининг */}
+        <Paper variant="outlined" sx={{ p: 1.5, mb: 1.5, borderRadius: 2, borderColor: '#FCA5A5', bgcolor: '#FEF2F2' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Chip label="Tier 1: Скрининг" size="small" sx={{ bgcolor: '#DC2626', color: '#FFF', fontWeight: 800, fontSize: '0.68rem', height: 20 }} />
+              <Typography sx={{ fontWeight: 800, fontSize: '0.82rem', color: '#991B1B' }}>
+                Обязательные тесты первичного скрининга ({tier1Tests.length > 0 ? tier1Tests.length : (jointCatalogTests.length > 0 ? jointCatalogTests.length : 'базовые')})
+              </Typography>
+            </Box>
+          </Box>
+          <Grid container spacing={1.25}>
+            {tier1Tests.length > 0
+              ? tier1Tests.map((t: any) => renderTestItem(t.code, t.name || t.name_ru))
+              : jointCatalogTests.length > 0
+                ? jointCatalogTests.map((t: any) => renderTestItem(t.code, t.name || t.name_ru))
+                : (
+                  // Fallback hardcoded list if catalog is loading
+                  <>
+                    {category === 'knee' && (
+                      <>
+                        {renderTestItem('lachman', 'Тест Лахмана (Lachman test)')}
+                        {renderTestItem('anterior_drawer', 'Передний «выдвижной ящик»')}
+                        {renderTestItem('posterior_drawer', 'Задний «выдвижной ящик»')}
+                        {renderTestItem('pivot_shift', 'Pivot-shift тест')}
+                        {renderTestItem('mcmurray', 'Тест Мак-Мюррея (мениски)')}
+                        {renderTestItem('appley', 'Тест Эпли (компрессионный)')}
+                      </>
+                    )}
+                    {category === 'elbow' && (
+                      <>
+                        {renderTestItem('cozen', 'Тест Козена (латеральный эпикондилит)')}
+                        {renderTestItem('mill', 'Тест Милля (растяжение разгибателей)')}
+                        {renderTestItem('tinel_cubital', 'Симптом Тиннеля (кубитальный канал)')}
+                      </>
+                    )}
+                    {category === 'shoulder' && (
+                      <>
+                        {renderTestItem('neer', 'Импиджмент-тест Нира (Neer)')}
+                        {renderTestItem('hawkins', 'Тест Хокинса-Кеннеди')}
+                        {renderTestItem('empty_can_jobe', 'Тест Джобса (надостная м.)')}
+                        {renderTestItem('drop_arm', 'Тест падающей руки')}
+                      </>
+                    )}
+                    {category === 'hip' && (
+                      <>
+                        {renderTestItem('faber', 'Тест FABER / Патрика (ТБС / КПС)')}
+                        {renderTestItem('fadir', 'Тест FADIR (импинджмент / губа)')}
+                        {renderTestItem('thomas', 'Тест Томаса')}
+                      </>
+                    )}
+                    {category === 'wrist' && (
+                      <>
+                        {renderTestItem('phalen', 'Тест Фалена (карпальный канал)')}
+                        {renderTestItem('tinel_wrist', 'Симптом Тиннеля на запястье')}
+                        {renderTestItem('finkelstein', 'Тест Финкельштейна')}
+                      </>
+                    )}
+                    {category === 'spine' && (
+                      <>
+                        {renderTestItem('lasegue', 'Симптом Ласега (Lasegue test)')}
+                        {renderTestItem('bragard', 'Тест Брагарда')}
+                        {renderTestItem('slump', 'Slump-тест')}
+                      </>
+                    )}
+                    {category === 'ankle' && (
+                      <>
+                        {renderTestItem('anterior_drawer_ankle', 'Передний выдвижной ящик')}
+                        {renderTestItem('talar_tilt', 'Тест наклона таранной кости')}
+                        {renderTestItem('thompson', 'Тест Томпсона')}
+                      </>
+                    )}
+                  </>
+                )
+            }
+          </Grid>
+        </Paper>
+
+        {/* Tier 2: Верификация диагноза (Collapsible, auto-expands on positive Tier 1) */}
+        {tier2Tests.length > 0 && (
+          <Paper variant="outlined" sx={{ p: 1.5, mb: 1.5, borderRadius: 2, borderColor: '#FCD34D', bgcolor: '#FFFBEB' }}>
+            <Box
+              onClick={() => setTier2Expanded(prev => !prev)}
+              sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', userSelect: 'none' }}
+            >
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Chip label="Tier 2: Верификация" size="small" sx={{ bgcolor: '#D97706', color: '#FFF', fontWeight: 800, fontSize: '0.68rem', height: 20 }} />
+                <Typography sx={{ fontWeight: 800, fontSize: '0.82rem', color: '#92400E' }}>
+                  Тесты подтверждения и верификации ({tier2Tests.length})
+                </Typography>
+                {hasPositiveTier1 && (
+                  <Chip label="Авто-раскрыто по (+) Tier 1" size="small" color="error" sx={{ height: 18, fontSize: '0.62rem', fontWeight: 700 }} />
+                )}
+              </Box>
+              <IconButton size="small">
+                {tier2Expanded ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
+              </IconButton>
+            </Box>
+            <Collapse in={tier2Expanded}>
+              <Box sx={{ pt: 1.25 }}>
+                <Grid container spacing={1.25}>
+                  {tier2Tests.map((t: any) => renderTestItem(t.code, t.name || t.name_ru))}
+                </Grid>
+              </Box>
+            </Collapse>
+          </Paper>
+        )}
+
+        {/* Tier 3: Экспертный дифференциальный уровень (Collapsible) */}
+        {tier3Tests.length > 0 && (
+          <Paper variant="outlined" sx={{ p: 1.5, borderRadius: 2, borderColor: '#93C5FD', bgcolor: '#EFF6FF' }}>
+            <Box
+              onClick={() => setTier3Expanded(prev => !prev)}
+              sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', userSelect: 'none' }}
+            >
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Chip label="Tier 3: Экспертный" size="small" sx={{ bgcolor: '#2563EB', color: '#FFF', fontWeight: 800, fontSize: '0.68rem', height: 20 }} />
+                <Typography sx={{ fontWeight: 800, fontSize: '0.82rem', color: '#1E40AF' }}>
+                  Специализированные и экспертные пробы ({tier3Tests.length})
+                </Typography>
+              </Box>
+              <IconButton size="small">
+                {tier3Expanded ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
+              </IconButton>
+            </Box>
+            <Collapse in={tier3Expanded}>
+              <Box sx={{ pt: 1.25 }}>
+                <Grid container spacing={1.25}>
+                  {tier3Tests.map((t: any) => renderTestItem(t.code, t.name || t.name_ru))}
+                </Grid>
+              </Box>
+            </Collapse>
+          </Paper>
+        )}
       </Box>
 
       {/* ON-SCREEN CLINICAL TEST GUIDANCE MODAL */}

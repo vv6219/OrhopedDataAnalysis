@@ -1305,7 +1305,7 @@ router.delete('/media/:mediaId', (req, res) => {
 
 // 9.1. GET /api/ortho/tests/catalog - List all validated clinical tests with search, filter, counts, and aliases
 router.get('/tests/catalog', (req, res) => {
-  const { joint, search, includeInactive } = req.query;
+  const { joint, search, includeInactive, test_type, only_supplemented } = req.query;
   const allowInactive = includeInactive === 'true' || includeInactive === '1' ? 1 : 0;
 
   let sql = `
@@ -1323,6 +1323,15 @@ router.get('/tests/catalog', (req, res) => {
   if (joint && joint !== 'all') {
     sql += ` AND t.joint_category = ?`;
     params.push(joint);
+  }
+
+  if (test_type && test_type !== 'all') {
+    sql += ` AND t.test_type = ?`;
+    params.push(test_type);
+  }
+
+  if (only_supplemented === 'true' || only_supplemented === '1') {
+    sql += ` AND t.is_supplemented = 1`;
   }
 
   if (search) {
@@ -1598,7 +1607,8 @@ router.post('/diagnostics/catalog', (req, res) => {
   const {
     code, name, modality, target_joint, servdict_id,
     clinical_indications, protocol_phrase, priority_level = 'primary',
-    is_active = 1, sort_order = 0
+    is_active = 1, sort_order = 0,
+    description, technique_details, patient_preparation, diagnostic_criteria, contraindications
   } = req.body;
 
   if (!code || !name || !modality || !target_joint || !protocol_phrase) {
@@ -1610,13 +1620,16 @@ router.post('/diagnostics/catalog', (req, res) => {
   db.run(`
     INSERT INTO diagnostic_methods_catalog (
       code, name, modality, target_joint, servdict_id,
-      clinical_indications, protocol_phrase, priority_level, is_active, sort_order
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      clinical_indications, protocol_phrase, priority_level, is_active, sort_order,
+      description, technique_details, patient_preparation, diagnostic_criteria, contraindications
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `, [
     cleanCode, name.trim(), modality, target_joint,
     servdict_id ? Number(servdict_id) : null,
     clinical_indications || null, protocol_phrase.trim(),
-    priority_level, is_active ? 1 : 0, Number(sort_order) || 0
+    priority_level, is_active ? 1 : 0, Number(sort_order) || 0,
+    description || null, technique_details || null, patient_preparation || null,
+    diagnostic_criteria || null, contraindications || null
   ], function(err) {
     if (err) {
       if (err.message.includes('UNIQUE') || err.message.includes('PRIMARY')) {
@@ -1634,7 +1647,8 @@ router.put('/diagnostics/catalog/:code', (req, res) => {
   const {
     name, modality, target_joint, servdict_id,
     clinical_indications, protocol_phrase, priority_level,
-    is_active, sort_order
+    is_active, sort_order,
+    description, technique_details, patient_preparation, diagnostic_criteria, contraindications
   } = req.body;
 
   db.run(`
@@ -1647,7 +1661,12 @@ router.put('/diagnostics/catalog/:code', (req, res) => {
         protocol_phrase = COALESCE(?, protocol_phrase),
         priority_level = COALESCE(?, priority_level),
         is_active = COALESCE(?, is_active),
-        sort_order = COALESCE(?, sort_order)
+        sort_order = COALESCE(?, sort_order),
+        description = COALESCE(?, description),
+        technique_details = COALESCE(?, technique_details),
+        patient_preparation = COALESCE(?, patient_preparation),
+        diagnostic_criteria = COALESCE(?, diagnostic_criteria),
+        contraindications = COALESCE(?, contraindications)
     WHERE code = ?
   `, [
     name ? name.trim() : null,
@@ -1659,6 +1678,11 @@ router.put('/diagnostics/catalog/:code', (req, res) => {
     priority_level || null,
     is_active !== undefined ? (is_active ? 1 : 0) : null,
     sort_order !== undefined ? Number(sort_order) : null,
+    description !== undefined ? description : null,
+    technique_details !== undefined ? technique_details : null,
+    patient_preparation !== undefined ? patient_preparation : null,
+    diagnostic_criteria !== undefined ? diagnostic_criteria : null,
+    contraindications !== undefined ? contraindications : null,
     targetCode
   ], function(err) {
     if (err) return res.status(500).json({ success: false, error: err.message });
@@ -1712,13 +1736,99 @@ router.get('/clusters', (req, res) => {
   });
 });
 
+// 9.2.6. GET /api/ortho/treatments/manipulations - List manipulations catalog with servdict
+router.get('/treatments/manipulations', (req, res) => {
+  const { joint, search } = req.query;
+  let sql = `
+    SELECT m.*, sd.name AS servdict_name, sd.price AS servdict_price
+    FROM ortho_manipulations_catalog m
+    LEFT JOIN servdict sd ON sd.id = m.servdict_id
+    WHERE m.is_active = 1
+  `;
+  const params = [];
+  if (joint && joint !== 'all') {
+    sql += ` AND (m.target_joint = ? OR m.target_joint = 'general')`;
+    params.push(joint);
+  }
+  if (search && search.trim()) {
+    sql += ` AND (m.name LIKE ? OR m.code LIKE ? OR m.description LIKE ?)`;
+    params.push(`%${search.trim()}%`, `%${search.trim()}%`, `%${search.trim()}%`);
+  }
+  sql += ` ORDER BY m.sort_order ASC, m.name ASC`;
+  db.all(sql, params, (err, rows) => {
+    if (err) return res.status(500).json({ success: false, error: err.message });
+    res.json({ success: true, total: (rows || []).length, manipulations: rows || [] });
+  });
+});
+
+// 9.2.7. GET /api/ortho/treatments/physiotherapy - List physiotherapy catalog with servdict
+router.get('/treatments/physiotherapy', (req, res) => {
+  const { joint, search } = req.query;
+  let sql = `
+    SELECT p.*, sd.name AS servdict_name, sd.price AS servdict_price
+    FROM ortho_physiotherapy_catalog p
+    LEFT JOIN servdict sd ON sd.id = p.servdict_id
+    WHERE p.is_active = 1
+  `;
+  const params = [];
+  if (joint && joint !== 'all') {
+    sql += ` AND (p.target_joint = ? OR p.target_joint = 'general')`;
+    params.push(joint);
+  }
+  if (search && search.trim()) {
+    sql += ` AND (p.name LIKE ? OR p.code LIKE ? OR p.description LIKE ?)`;
+    params.push(`%${search.trim()}%`, `%${search.trim()}%`, `%${search.trim()}%`);
+  }
+  sql += ` ORDER BY p.sort_order ASC, p.name ASC`;
+  db.all(sql, params, (err, rows) => {
+    if (err) return res.status(500).json({ success: false, error: err.message });
+    res.json({ success: true, total: (rows || []).length, physiotherapy: rows || [] });
+  });
+});
+
+// 9.2.8. GET /api/ortho/treatments/orthotics - List orthotics catalog with servdict
+router.get('/treatments/orthotics', (req, res) => {
+  const { joint, search } = req.query;
+  let sql = `
+    SELECT o.*, sd.name AS servdict_name, sd.price AS servdict_price
+    FROM ortho_orthotics_catalog o
+    LEFT JOIN servdict sd ON sd.id = o.servdict_id
+    WHERE o.is_active = 1
+  `;
+  const params = [];
+  if (joint && joint !== 'all') {
+    sql += ` AND (o.target_joint = ? OR o.target_joint = 'general')`;
+    params.push(joint);
+  }
+  if (search && search.trim()) {
+    sql += ` AND (o.name LIKE ? OR o.code LIKE ? OR o.description LIKE ?)`;
+    params.push(`%${search.trim()}%`, `%${search.trim()}%`, `%${search.trim()}%`);
+  }
+  sql += ` ORDER BY o.sort_order ASC, o.name ASC`;
+  db.all(sql, params, (err, rows) => {
+    if (err) return res.status(500).json({ success: false, error: err.message });
+    res.json({ success: true, total: (rows || []).length, orthotics: rows || [] });
+  });
+});
+
+// 9.2.9. GET /api/ortho/cdss/physio-blocks - List CDSS safety and risk constraint blocks
+router.get('/cdss/physio-blocks', (req, res) => {
+  db.all('SELECT * FROM ortho_cdss_physio_blocks ORDER BY id ASC', [], (err, rows) => {
+    if (err) return res.status(500).json({ success: false, error: err.message });
+    res.json({ success: true, blocks: rows || [] });
+  });
+});
+
 // 9.3. GET /api/ortho/templates/detailed - List templates with counts, cluster metadata & filters
 router.get('/templates/detailed', (req, res) => {
-  const { joint, search, cluster, with_details, only_custom } = req.query;
+  const { joint, search, cluster, with_details, only_custom, rom_priority, manipulations_priority } = req.query;
   let sql = `
     SELECT ot.*,
       (SELECT COUNT(*) FROM ortho_template_tests WHERE template_id = ot.id) AS tests_count,
-      (SELECT COUNT(*) FROM ortho_template_diagnostics WHERE template_id = ot.id) AS diagnostics_count
+      (SELECT COUNT(*) FROM ortho_template_diagnostics WHERE template_id = ot.id) AS diagnostics_count,
+      (SELECT COUNT(*) FROM ortho_template_manipulations WHERE template_id = ot.id) AS manipulations_count,
+      (SELECT COUNT(*) FROM ortho_template_physiotherapy WHERE template_id = ot.id) AS physiotherapy_count,
+      (SELECT COUNT(*) FROM ortho_template_orthotics WHERE template_id = ot.id) AS orthotics_count
     FROM ortho_templates ot
     WHERE (ot.is_active = 1 OR ot.is_active IS NULL)
   `;
@@ -1730,6 +1840,14 @@ router.get('/templates/detailed', (req, res) => {
   if (joint && joint !== 'all') {
     sql += ` AND ot.joint_name = ?`;
     params.push(joint);
+  }
+  if (rom_priority && rom_priority !== 'all') {
+    sql += ` AND ot.rom_priority = ?`;
+    params.push(rom_priority);
+  }
+  if (manipulations_priority && manipulations_priority !== 'all') {
+    sql += ` AND ot.manipulations_priority = ?`;
+    params.push(manipulations_priority);
   }
   if (only_custom === 'true' || only_custom === '1') {
     sql += ` AND ot.is_custom = 1`;
@@ -1760,20 +1878,29 @@ router.get('/templates/detailed', (req, res) => {
 
     const testsSql = `
       SELECT ott.template_id, ott.test_code, ott.expected_result, ott.is_mandatory,
-             otc.name_ru, otc.name_lat
+             ott.priority_level, ott.test_type_tag, ott.is_supplemented,
+             otc.name_ru, otc.name_lat, otc.test_type, otc.sensitivity_pct, otc.specificity_pct,
+             otc.target_structure, otc.evidence_level
       FROM ortho_template_tests ott
       JOIN ortho_test_catalog otc ON otc.code = ott.test_code
       WHERE ott.template_id IN (${placeholders})
-      ORDER BY ott.sort_order ASC
+      ORDER BY 
+        CASE ott.priority_level WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 ELSE 4 END ASC,
+        ott.sort_order ASC
     `;
 
     const diagSql = `
-      SELECT otd.template_id, otd.diagnostic_code, otd.urgency, otd.is_primary,
-             dmc.name, dmc.modality
+      SELECT otd.template_id, otd.diagnostic_code, otd.urgency, otd.is_primary, otd.priority_level,
+             dmc.name, dmc.modality, dmc.target_joint, dmc.clinical_indications, dmc.protocol_phrase,
+             dmc.priority_level AS catalog_priority_level,
+             dmc.description, dmc.technique_details, dmc.patient_preparation,
+             dmc.diagnostic_criteria, dmc.contraindications
       FROM ortho_template_diagnostics otd
       JOIN diagnostic_methods_catalog dmc ON dmc.code = otd.diagnostic_code
       WHERE otd.template_id IN (${placeholders})
-      ORDER BY otd.sort_order ASC
+      ORDER BY 
+        CASE otd.priority_level WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 ELSE 4 END ASC,
+        otd.sort_order ASC
     `;
 
     db.all(testsSql, tIds, (errTests, testRows) => {
@@ -1783,8 +1910,17 @@ router.get('/templates/detailed', (req, res) => {
         testsMap[tr.template_id].push({
           code: tr.test_code,
           name: tr.name_ru,
+          name_lat: tr.name_lat,
           expected: tr.expected_result,
-          mandatory: tr.is_mandatory
+          mandatory: tr.is_mandatory,
+          priority_level: tr.priority_level || 'medium',
+          test_type: tr.test_type || tr.test_type_tag || 'provocative',
+          test_type_tag: tr.test_type_tag || tr.test_type || 'provocative',
+          is_supplemented: Boolean(tr.is_supplemented),
+          sensitivity_pct: tr.sensitivity_pct,
+          specificity_pct: tr.specificity_pct,
+          target_structure: tr.target_structure,
+          evidence_level: tr.evidence_level
         });
       });
 
@@ -1796,8 +1932,17 @@ router.get('/templates/detailed', (req, res) => {
             code: dr.diagnostic_code,
             name: dr.name,
             modality: dr.modality,
+            target_joint: dr.target_joint,
+            clinical_indications: dr.clinical_indications,
+            protocol_phrase: dr.protocol_phrase,
             urgency: dr.urgency,
-            is_primary: dr.is_primary
+            is_primary: dr.is_primary,
+            priority_level: dr.priority_level || dr.catalog_priority_level || 'medium',
+            description: dr.description,
+            technique_details: dr.technique_details,
+            patient_preparation: dr.patient_preparation,
+            diagnostic_criteria: dr.diagnostic_criteria,
+            contraindications: dr.contraindications
           });
         });
 
@@ -1856,12 +2001,19 @@ router.get('/templates/:id/full', (req, res) => {
     // Fetch tests
     const testsSql = `
       SELECT ott.id, ott.test_code, ott.expected_result, ott.is_mandatory, ott.sort_order,
+             ott.priority_level, ott.test_type_tag, ott.is_supplemented,
              otc.name_ru, otc.name_lat, otc.joint_category, otc.target_structure,
-             otc.methodology, otc.positive_criteria, otc.sensitivity_specificity, otc.icon_type
+             otc.methodology, otc.positive_criteria, otc.sensitivity_specificity, otc.icon_type,
+             otc.test_type, otc.is_supplemented AS catalog_is_supplemented,
+             otc.patient_position, otc.doctor_hand_placement, otc.applied_force_direction,
+             otc.false_positive_factors, otc.clinical_interpretation,
+             otc.sensitivity_pct, otc.specificity_pct, otc.evidence_level
       FROM ortho_template_tests ott
       JOIN ortho_test_catalog otc ON otc.code = ott.test_code
       WHERE ott.template_id = ?
-      ORDER BY ott.sort_order ASC, ott.id ASC
+      ORDER BY 
+        CASE ott.priority_level WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 ELSE 4 END ASC,
+        ott.sort_order ASC, ott.id ASC
     `;
     db.all(testsSql, [templateId], (tErr, tests) => {
       if (tErr) return res.status(500).json({ success: false, error: tErr.message });
@@ -1869,25 +2021,105 @@ router.get('/templates/:id/full', (req, res) => {
       // Fetch diagnostics
       const diagSql = `
         SELECT otd.id, otd.diagnostic_code, otd.urgency, otd.default_side, otd.is_primary, otd.sort_order,
+               otd.priority_level,
                dmc.name, dmc.modality, dmc.target_joint, dmc.servdict_id, dmc.clinical_indications,
-               dmc.protocol_phrase, dmc.priority_level,
+               dmc.protocol_phrase, dmc.priority_level AS catalog_priority_level,
+               dmc.description, dmc.technique_details, dmc.patient_preparation,
+               dmc.diagnostic_criteria, dmc.contraindications,
                sd.price AS servdict_price, sd.name AS servdict_name
         FROM ortho_template_diagnostics otd
         JOIN diagnostic_methods_catalog dmc ON dmc.code = otd.diagnostic_code
         LEFT JOIN servdict sd ON sd.id = dmc.servdict_id
         WHERE otd.template_id = ?
-        ORDER BY otd.sort_order ASC, otd.id ASC
+        ORDER BY 
+          CASE otd.priority_level WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 ELSE 4 END ASC,
+          otd.sort_order ASC, otd.id ASC
       `;
       db.all(diagSql, [templateId], (dErr, diagnostics) => {
         if (dErr) return res.status(500).json({ success: false, error: dErr.message });
 
-        res.json({
-          success: true,
-          template: {
-            ...template,
-            tests: tests || [],
-            diagnostics: diagnostics || []
-          }
+        const manSql = `
+          SELECT otm.id, otm.manipulation_code, otm.dosage_or_regimen, otm.is_mandatory, otm.sort_order,
+                 otm.priority_level, otm.service_scope,
+                 otm.ebm_priority, otm.navigation_type, otm.anatomical_access, otm.drug_class,
+                 otm.is_stop_warning, otm.stop_rationale, otm.clinical_indications AS otm_clinical_indications,
+                 mc.name, mc.subcategory, mc.target_joint, mc.description, mc.technique_details,
+                 mc.regimen_standard, mc.patient_preparation, mc.post_procedure_care,
+                 mc.clinical_indications, mc.contraindications, mc.servdict_id, mc.servdict_code,
+                 mc.ebm_priority AS cat_ebm_priority, mc.navigation_type AS cat_navigation_type,
+                 mc.anatomical_access AS cat_anatomical_access, mc.drug_class AS cat_drug_class,
+                 mc.is_stop_warning AS cat_is_stop_warning, mc.stop_rationale AS cat_stop_rationale,
+                 mc.cdss_contraindication_tags,
+                 sd.price AS servdict_price, sd.name AS servdict_name
+          FROM ortho_template_manipulations otm
+          JOIN ortho_manipulations_catalog mc ON mc.code = otm.manipulation_code
+          LEFT JOIN servdict sd ON sd.id = mc.servdict_id
+          WHERE otm.template_id = ?
+          ORDER BY 
+            CASE otm.ebm_priority WHEN 'P1' THEN 1 WHEN 'P2' THEN 2 WHEN 'P3' THEN 3 WHEN 'P0-STOP' THEN 4 ELSE 5 END ASC,
+            CASE otm.priority_level WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 ELSE 4 END ASC,
+            otm.sort_order ASC, otm.id ASC
+        `;
+
+        const physSql = `
+          SELECT otp.id, otp.physiotherapy_code, otp.dosage_or_regimen, otp.is_mandatory, otp.sort_order,
+                 otp.priority_level, otp.service_scope,
+                 otp.ebm_priority, otp.line_order, otp.target_anatomical_landmark, otp.exact_dosimetry,
+                 otp.is_stop_warning, otp.stop_rationale,
+                 pc.name, pc.subcategory, pc.target_joint, pc.description, pc.technique_details,
+                 pc.regimen_standard, pc.patient_preparation, pc.post_procedure_care,
+                 pc.clinical_indications, pc.contraindications, pc.servdict_id, pc.servdict_code,
+                 pc.modality_tag, pc.evidence_level, pc.apparatus_examples, pc.biophysical_profile, pc.cdss_contraindication_tags,
+                 sd.price AS servdict_price, sd.name AS servdict_name
+          FROM ortho_template_physiotherapy otp
+          JOIN ortho_physiotherapy_catalog pc ON pc.code = otp.physiotherapy_code
+          LEFT JOIN servdict sd ON sd.id = pc.servdict_id
+          WHERE otp.template_id = ?
+          ORDER BY 
+            CASE otp.ebm_priority WHEN 'P1' THEN 1 WHEN 'P2' THEN 2 WHEN 'STOP' THEN 3 ELSE 4 END ASC,
+            otp.line_order ASC,
+            CASE otp.priority_level WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 ELSE 4 END ASC,
+            otp.sort_order ASC, otp.id ASC
+        `;
+
+        const orthSql = `
+          SELECT oto.id, oto.orthotics_code, oto.dosage_or_regimen, oto.is_mandatory, oto.sort_order,
+                 oto.priority_level, oto.service_scope,
+                 oc.name, oc.subcategory, oc.target_joint, oc.description, oc.technique_details,
+                 oc.regimen_standard, oc.patient_preparation, oc.post_procedure_care,
+                 oc.clinical_indications, oc.contraindications, oc.servdict_id, oc.servdict_code,
+                 sd.price AS servdict_price, sd.name AS servdict_name
+          FROM ortho_template_orthotics oto
+          JOIN ortho_orthotics_catalog oc ON oc.code = oto.orthotics_code
+          LEFT JOIN servdict sd ON sd.id = oc.servdict_id
+          WHERE oto.template_id = ?
+          ORDER BY 
+            CASE oto.priority_level WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 ELSE 4 END ASC,
+            oto.sort_order ASC, oto.id ASC
+        `;
+
+        db.all(manSql, [templateId], (mErr, manipulations) => {
+          if (mErr) return res.status(500).json({ success: false, error: mErr.message });
+
+          db.all(physSql, [templateId], (pErr, physiotherapy) => {
+            if (pErr) return res.status(500).json({ success: false, error: pErr.message });
+
+            db.all(orthSql, [templateId], (oErr, orthotics) => {
+              if (oErr) return res.status(500).json({ success: false, error: oErr.message });
+
+              res.json({
+                success: true,
+                template: {
+                  ...template,
+                  tests: tests || [],
+                  diagnostics: diagnostics || [],
+                  manipulations: manipulations || [],
+                  physiotherapy: physiotherapy || [],
+                  orthotics: orthotics || []
+                }
+              });
+            });
+          });
         });
       });
     });
@@ -1901,8 +2133,11 @@ router.post('/templates', (req, res) => {
     default_side, complaints_template, anamnesis_template, objective_template,
     anamnesis_vitae_template, objective_status_template, special_studies_template,
     performed_manipulations_template, default_sections_mask,
-    rom_norm_preset, recommendations_template, cluster_id, cluster_name,
-    stage_or_severity, clinical_tags, tests = [], diagnostics = []
+    rom_norm_preset, rom_priority, rom_sftr_preview, rom_end_feel, rom_has_stop_warning,
+    manipulations_priority, manipulations_summary, manipulations_has_stop, manipulations_stop_rationale,
+    recommendations_template, cluster_id, cluster_name,
+    stage_or_severity, clinical_tags, tests = [], diagnostics = [],
+    manipulations = [], physiotherapy = [], orthotics = []
   } = req.body;
 
   if (!title || !joint_name) {
@@ -1923,17 +2158,21 @@ router.post('/templates', (req, res) => {
       default_side, complaints_template, anamnesis_template, objective_template,
       anamnesis_vitae_template, objective_status_template, special_studies_template,
       performed_manipulations_template, default_sections_mask,
-      rom_norm_preset, recommendations_template, is_active, sort_order,
+      rom_norm_preset, rom_priority, rom_sftr_preview, rom_end_feel, rom_has_stop_warning,
+      manipulations_priority, manipulations_summary, manipulations_has_stop, manipulations_stop_rationale,
+      recommendations_template, is_active, sort_order,
       cluster_id, cluster_name, stage_or_severity, clinical_tags,
       is_custom, author_doctor_name
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, ?, ?, ?, ?, ?, ?)
   `, [
     title, joint_name, default_mkb_code || null, rawJson, category || null,
     default_side || 'right', complaints_template || null, anamnesis_template || null,
     objective_template || null,
     anamnesis_vitae_template || null, objective_status_template || null, special_studies_template || null,
     performed_manipulations_template || null, maskStr,
-    romPresetStr || null, recommendations_template || null,
+    romPresetStr || null, rom_priority || 'P2', rom_sftr_preview || '', rom_end_feel || '', rom_has_stop_warning ? 1 : 0,
+    manipulations_priority || 'P2', manipulations_summary || '', manipulations_has_stop ? 1 : 0, manipulations_stop_rationale || '',
+    recommendations_template || null,
     cluster_id || null, cluster_name || null, stage_or_severity || null, tagsStr,
     isCustomVal, authorDoctorNameVal
   ], function(err) {
@@ -1943,11 +2182,22 @@ router.post('/templates', (req, res) => {
     // Insert tests
     if (Array.isArray(tests) && tests.length > 0) {
       const tStmt = db.prepare(`
-        INSERT INTO ortho_template_tests (template_id, test_code, expected_result, is_mandatory, sort_order)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO ortho_template_tests (
+          template_id, test_code, expected_result, is_mandatory, sort_order,
+          priority_level, test_type_tag, is_supplemented
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       `);
       tests.forEach((t, i) => {
-        tStmt.run([newId, t.test_code || t.code, t.expected_result || t.expected || 'positive', t.is_mandatory ?? 1, i * 10]);
+        tStmt.run([
+          newId,
+          t.test_code || t.code,
+          t.expected_result || t.expected || 'positive',
+          t.is_mandatory ?? 1,
+          i * 10,
+          t.priority_level || 'medium',
+          t.test_type_tag || t.test_type || null,
+          t.is_supplemented ? 1 : 0
+        ]);
       });
       tStmt.finalize();
     }
@@ -1955,13 +2205,106 @@ router.post('/templates', (req, res) => {
     // Insert diagnostics
     if (Array.isArray(diagnostics) && diagnostics.length > 0) {
       const dStmt = db.prepare(`
-        INSERT INTO ortho_template_diagnostics (template_id, diagnostic_code, urgency, default_side, is_primary, sort_order)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT INTO ortho_template_diagnostics (
+          template_id, diagnostic_code, urgency, default_side, is_primary, sort_order, priority_level
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
       `);
       diagnostics.forEach((d, i) => {
-        dStmt.run([newId, d.diagnostic_code || d.code, d.urgency || 'routine', d.default_side || default_side || 'affected', d.is_primary ?? 1, i * 10]);
+        dStmt.run([
+          newId,
+          d.diagnostic_code || d.code,
+          d.urgency || 'routine',
+          d.default_side || default_side || 'affected',
+          d.is_primary ?? 1,
+          i * 10,
+          d.priority_level || 'medium'
+        ]);
       });
       dStmt.finalize();
+    }
+
+    // Insert manipulations
+    if (Array.isArray(manipulations) && manipulations.length > 0) {
+      const mStmt = db.prepare(`
+        INSERT INTO ortho_template_manipulations (
+          template_id, manipulation_code, dosage_or_regimen, is_mandatory, sort_order, priority_level, service_scope,
+          ebm_priority, navigation_type, anatomical_access, drug_class, is_stop_warning, stop_rationale, clinical_indications
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+      manipulations.forEach((m, i) => {
+        const scope = m.service_scope || 'internal';
+        const priority = scope === 'internal' ? 'high' : (m.priority_level || 'medium');
+        mStmt.run([
+          newId,
+          m.manipulation_code || m.code,
+          m.dosage_or_regimen || m.regimen || null,
+          m.is_mandatory ?? 1,
+          i * 10,
+          priority,
+          scope,
+          m.ebm_priority || 'P2',
+          m.navigation_type || 'us_guided',
+          m.anatomical_access || '',
+          m.drug_class || '',
+          m.is_stop_warning ? 1 : 0,
+          m.stop_rationale || '',
+          m.clinical_indications || ''
+        ]);
+      });
+      mStmt.finalize();
+    }
+
+    // Insert physiotherapy
+    if (Array.isArray(physiotherapy) && physiotherapy.length > 0) {
+      const pStmt = db.prepare(`
+        INSERT INTO ortho_template_physiotherapy (
+          template_id, physiotherapy_code, dosage_or_regimen, is_mandatory, sort_order, priority_level, service_scope,
+          ebm_priority, line_order, target_anatomical_landmark, exact_dosimetry, is_stop_warning, stop_rationale
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+      physiotherapy.forEach((p, i) => {
+        const scope = p.service_scope || 'internal';
+        const priority = scope === 'internal' ? 'high' : (p.priority_level || 'medium');
+        pStmt.run([
+          newId,
+          p.physiotherapy_code || p.code,
+          p.dosage_or_regimen || p.regimen || null,
+          p.is_mandatory ?? 1,
+          p.sort_order ?? (i * 10),
+          priority,
+          scope,
+          p.ebm_priority || null,
+          p.line_order || (i + 1),
+          p.target_anatomical_landmark || null,
+          p.exact_dosimetry || null,
+          p.is_stop_warning ? 1 : 0,
+          p.stop_rationale || null
+        ]);
+      });
+      pStmt.finalize();
+    }
+
+    // Insert orthotics
+    if (Array.isArray(orthotics) && orthotics.length > 0) {
+      const oStmt = db.prepare(`
+        INSERT INTO ortho_template_orthotics (
+          template_id, orthotics_code, dosage_or_regimen, is_mandatory, sort_order, priority_level, service_scope
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+      `);
+      orthotics.forEach((o, i) => {
+        const scope = o.service_scope || 'internal';
+        const priority = scope === 'internal' ? 'high' : (o.priority_level || 'medium');
+        oStmt.run([
+          newId,
+          o.orthotics_code || o.code,
+          o.dosage_or_regimen || o.regimen || null,
+          o.is_mandatory ?? 1,
+          i * 10,
+          priority,
+          scope
+        ]);
+      });
+      oStmt.finalize();
     }
 
     logOrthoAudit({
@@ -2054,13 +2397,24 @@ router.post('/templates/save-from-workstation', (req, res) => {
     // Save relational tests if provided
     if (Array.isArray(tests) && tests.length > 0) {
       const tStmt = db.prepare(`
-        INSERT INTO ortho_template_tests (template_id, test_code, expected_result, is_mandatory, sort_order)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO ortho_template_tests (
+          template_id, test_code, expected_result, is_mandatory, sort_order,
+          priority_level, test_type_tag, is_supplemented
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       `);
       tests.forEach((t, i) => {
         const code = t.test_code || t.code;
         if (code) {
-          tStmt.run([newId, code, t.expected_result || t.expected || 'positive', t.is_mandatory ?? 1, i * 10]);
+          tStmt.run([
+            newId,
+            code,
+            t.expected_result || t.expected || 'positive',
+            t.is_mandatory ?? 1,
+            i * 10,
+            t.priority_level || 'medium',
+            t.test_type_tag || t.test_type || null,
+            t.is_supplemented ? 1 : 0
+          ]);
         }
       });
       tStmt.finalize();
@@ -2069,13 +2423,22 @@ router.post('/templates/save-from-workstation', (req, res) => {
     // Save relational diagnostics if provided
     if (Array.isArray(diagnostics) && diagnostics.length > 0) {
       const dStmt = db.prepare(`
-        INSERT INTO ortho_template_diagnostics (template_id, diagnostic_code, urgency, default_side, is_primary, sort_order)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT INTO ortho_template_diagnostics (
+          template_id, diagnostic_code, urgency, default_side, is_primary, sort_order, priority_level
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
       `);
       diagnostics.forEach((d, i) => {
         const code = d.diagnostic_code || d.code;
         if (code) {
-          dStmt.run([newId, code, d.urgency || 'routine', d.default_side || default_side, d.is_primary ? 1 : 0, i * 10]);
+          dStmt.run([
+            newId,
+            code,
+            d.urgency || 'routine',
+            d.default_side || default_side,
+            d.is_primary ? 1 : 0,
+            i * 10,
+            d.priority_level || 'medium'
+          ]);
         }
       });
       dStmt.finalize();
@@ -2113,8 +2476,11 @@ router.put('/templates/:id', (req, res) => {
     default_side, complaints_template, anamnesis_template, objective_template,
     anamnesis_vitae_template, objective_status_template, special_studies_template,
     performed_manipulations_template, default_sections_mask,
-    rom_norm_preset, recommendations_template, cluster_id, cluster_name,
-    stage_or_severity, clinical_tags, tests = [], diagnostics = []
+    rom_norm_preset, rom_priority, rom_sftr_preview, rom_end_feel, rom_has_stop_warning,
+    manipulations_priority, manipulations_summary, manipulations_has_stop, manipulations_stop_rationale,
+    recommendations_template, cluster_id, cluster_name,
+    stage_or_severity, clinical_tags, tests = [], diagnostics = [],
+    manipulations = [], physiotherapy = [], orthotics = []
   } = req.body;
 
   const rawJson = typeof template_json === 'object' ? JSON.stringify(template_json) : (template_json || '{}');
@@ -2139,6 +2505,14 @@ router.put('/templates/:id', (req, res) => {
       performed_manipulations_template = COALESCE(?, performed_manipulations_template),
       default_sections_mask = COALESCE(?, default_sections_mask),
       rom_norm_preset = ?,
+      rom_priority = COALESCE(?, rom_priority),
+      rom_sftr_preview = COALESCE(?, rom_sftr_preview),
+      rom_end_feel = COALESCE(?, rom_end_feel),
+      rom_has_stop_warning = COALESCE(?, rom_has_stop_warning),
+      manipulations_priority = COALESCE(?, manipulations_priority),
+      manipulations_summary = COALESCE(?, manipulations_summary),
+      manipulations_has_stop = COALESCE(?, manipulations_has_stop),
+      manipulations_stop_rationale = COALESCE(?, manipulations_stop_rationale),
       recommendations_template = ?,
       cluster_id = COALESCE(?, cluster_id),
       cluster_name = COALESCE(?, cluster_name),
@@ -2150,7 +2524,9 @@ router.put('/templates/:id', (req, res) => {
     default_side, complaints_template, anamnesis_template, objective_template,
     anamnesis_vitae_template, objective_status_template, special_studies_template,
     performed_manipulations_template, maskStr,
-    romPresetStr, recommendations_template,
+    romPresetStr, rom_priority || null, rom_sftr_preview || null, rom_end_feel || null, rom_has_stop_warning !== undefined ? (rom_has_stop_warning ? 1 : 0) : null,
+    manipulations_priority || null, manipulations_summary || null, manipulations_has_stop !== undefined ? (manipulations_has_stop ? 1 : 0) : null, manipulations_stop_rationale || null,
+    recommendations_template,
     cluster_id || null, cluster_name || null, stage_or_severity || null, tagsStr,
     templateId
   ], (err) => {
@@ -2160,11 +2536,22 @@ router.put('/templates/:id', (req, res) => {
     db.run(`DELETE FROM ortho_template_tests WHERE template_id = ?`, [templateId], () => {
       if (Array.isArray(tests) && tests.length > 0) {
         const tStmt = db.prepare(`
-          INSERT INTO ortho_template_tests (template_id, test_code, expected_result, is_mandatory, sort_order)
-          VALUES (?, ?, ?, ?, ?)
+          INSERT INTO ortho_template_tests (
+            template_id, test_code, expected_result, is_mandatory, sort_order,
+            priority_level, test_type_tag, is_supplemented
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         `);
         tests.forEach((t, i) => {
-          tStmt.run([templateId, t.test_code || t.code, t.expected_result || t.expected || 'positive', t.is_mandatory ?? 1, i * 10]);
+          tStmt.run([
+            templateId,
+            t.test_code || t.code,
+            t.expected_result || t.expected || 'positive',
+            t.is_mandatory ?? 1,
+            i * 10,
+            t.priority_level || 'medium',
+            t.test_type_tag || t.test_type || null,
+            t.is_supplemented ? 1 : 0
+          ]);
         });
         tStmt.finalize();
       }
@@ -2174,13 +2561,112 @@ router.put('/templates/:id', (req, res) => {
     db.run(`DELETE FROM ortho_template_diagnostics WHERE template_id = ?`, [templateId], () => {
       if (Array.isArray(diagnostics) && diagnostics.length > 0) {
         const dStmt = db.prepare(`
-          INSERT INTO ortho_template_diagnostics (template_id, diagnostic_code, urgency, default_side, is_primary, sort_order)
-          VALUES (?, ?, ?, ?, ?, ?)
+          INSERT INTO ortho_template_diagnostics (
+            template_id, diagnostic_code, urgency, default_side, is_primary, sort_order, priority_level
+          ) VALUES (?, ?, ?, ?, ?, ?, ?)
         `);
         diagnostics.forEach((d, i) => {
-          dStmt.run([templateId, d.diagnostic_code || d.code, d.urgency || 'routine', d.default_side || default_side || 'affected', d.is_primary ?? 1, i * 10]);
+          dStmt.run([
+            templateId,
+            d.diagnostic_code || d.code,
+            d.urgency || 'routine',
+            d.default_side || default_side || 'affected',
+            d.is_primary ?? 1,
+            i * 10,
+            d.priority_level || 'medium'
+          ]);
         });
         dStmt.finalize();
+      }
+    });
+
+    // Sync manipulations
+    db.run(`DELETE FROM ortho_template_manipulations WHERE template_id = ?`, [templateId], () => {
+      if (Array.isArray(manipulations) && manipulations.length > 0) {
+        const mStmt = db.prepare(`
+          INSERT INTO ortho_template_manipulations (
+            template_id, manipulation_code, dosage_or_regimen, is_mandatory, sort_order, priority_level, service_scope,
+            ebm_priority, navigation_type, anatomical_access, drug_class, is_stop_warning, stop_rationale, clinical_indications
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `);
+        manipulations.forEach((m, i) => {
+          const scope = m.service_scope || 'internal';
+          const priority = scope === 'internal' ? 'high' : (m.priority_level || 'medium');
+          mStmt.run([
+            templateId,
+            m.manipulation_code || m.code,
+            m.dosage_or_regimen || m.regimen || null,
+            m.is_mandatory ?? 1,
+            i * 10,
+            priority,
+            scope,
+            m.ebm_priority || 'P2',
+            m.navigation_type || 'us_guided',
+            m.anatomical_access || '',
+            m.drug_class || '',
+            m.is_stop_warning ? 1 : 0,
+            m.stop_rationale || '',
+            m.clinical_indications || ''
+          ]);
+        });
+        mStmt.finalize();
+      }
+    });
+
+    // Sync physiotherapy
+    db.run(`DELETE FROM ortho_template_physiotherapy WHERE template_id = ?`, [templateId], () => {
+      if (Array.isArray(physiotherapy) && physiotherapy.length > 0) {
+        const pStmt = db.prepare(`
+          INSERT INTO ortho_template_physiotherapy (
+            template_id, physiotherapy_code, dosage_or_regimen, is_mandatory, sort_order, priority_level, service_scope,
+            ebm_priority, line_order, target_anatomical_landmark, exact_dosimetry, is_stop_warning, stop_rationale
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `);
+        physiotherapy.forEach((p, i) => {
+          const scope = p.service_scope || 'internal';
+          const priority = scope === 'internal' ? 'high' : (p.priority_level || 'medium');
+          pStmt.run([
+            templateId,
+            p.physiotherapy_code || p.code,
+            p.dosage_or_regimen || p.regimen || null,
+            p.is_mandatory ?? 1,
+            p.sort_order ?? (i * 10),
+            priority,
+            scope,
+            p.ebm_priority || null,
+            p.line_order || (i + 1),
+            p.target_anatomical_landmark || null,
+            p.exact_dosimetry || null,
+            p.is_stop_warning ? 1 : 0,
+            p.stop_rationale || null
+          ]);
+        });
+        pStmt.finalize();
+      }
+    });
+
+    // Sync orthotics
+    db.run(`DELETE FROM ortho_template_orthotics WHERE template_id = ?`, [templateId], () => {
+      if (Array.isArray(orthotics) && orthotics.length > 0) {
+        const oStmt = db.prepare(`
+          INSERT INTO ortho_template_orthotics (
+            template_id, orthotics_code, dosage_or_regimen, is_mandatory, sort_order, priority_level, service_scope
+          ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        `);
+        orthotics.forEach((o, i) => {
+          const scope = o.service_scope || 'internal';
+          const priority = scope === 'internal' ? 'high' : (o.priority_level || 'medium');
+          oStmt.run([
+            templateId,
+            o.orthotics_code || o.code,
+            o.dosage_or_regimen || o.regimen || null,
+            o.is_mandatory ?? 1,
+            i * 10,
+            priority,
+            scope
+          ]);
+        });
+        oStmt.finalize();
       }
     });
 
@@ -2222,10 +2708,21 @@ router.post('/templates/:id/clone', (req, res) => {
       db.all(`SELECT * FROM ortho_template_tests WHERE template_id = ?`, [sourceId], (tErr, tests) => {
         if (!tErr && tests && tests.length > 0) {
           const tStmt = db.prepare(`
-            INSERT INTO ortho_template_tests (template_id, test_code, expected_result, is_mandatory, sort_order)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO ortho_template_tests (
+              template_id, test_code, expected_result, is_mandatory, sort_order,
+              priority_level, test_type_tag, is_supplemented
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
           `);
-          tests.forEach(t => tStmt.run([newId, t.test_code, t.expected_result, t.is_mandatory, t.sort_order]));
+          tests.forEach(t => tStmt.run([
+            newId,
+            t.test_code,
+            t.expected_result,
+            t.is_mandatory,
+            t.sort_order,
+            t.priority_level || 'medium',
+            t.test_type_tag || null,
+            t.is_supplemented || 0
+          ]));
           tStmt.finalize();
         }
       });
@@ -2234,10 +2731,19 @@ router.post('/templates/:id/clone', (req, res) => {
       db.all(`SELECT * FROM ortho_template_diagnostics WHERE template_id = ?`, [sourceId], (dErr, diags) => {
         if (!dErr && diags && diags.length > 0) {
           const dStmt = db.prepare(`
-            INSERT INTO ortho_template_diagnostics (template_id, diagnostic_code, urgency, default_side, is_primary, sort_order)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO ortho_template_diagnostics (
+              template_id, diagnostic_code, urgency, default_side, is_primary, sort_order, priority_level
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
           `);
-          diags.forEach(d => dStmt.run([newId, d.diagnostic_code, d.urgency, d.default_side, d.is_primary, d.sort_order]));
+          diags.forEach(d => dStmt.run([
+            newId,
+            d.diagnostic_code,
+            d.urgency,
+            d.default_side,
+            d.is_primary,
+            d.sort_order,
+            d.priority_level || 'medium'
+          ]));
           dStmt.finalize();
         }
       });

@@ -25,6 +25,7 @@ import {
   CheckCircle as CheckCircleIcon,
   ErrorOutlined as ErrorOutlineIcon
 } from '@mui/icons-material';
+import LatexText from './LatexText';
 
 export interface OrthoTestGuidanceModalProps {
   open: boolean;
@@ -135,7 +136,7 @@ export const OrthoTestGuidanceModal: React.FC<OrthoTestGuidanceModalProps> = ({
             </Typography>
           </Box>
           <Typography variant="h5" sx={{ fontWeight: 800, color: '#FFFFFF', lineHeight: 1.2 }}>
-            {displayName}
+            <LatexText text={displayName} />
           </Typography>
           {test.name_lat && (
             <Typography variant="subtitle2" sx={{ color: '#93C5FD', fontStyle: 'italic', mt: 0.2 }}>
@@ -179,7 +180,7 @@ export const OrthoTestGuidanceModal: React.FC<OrthoTestGuidanceModalProps> = ({
                 Анатомический субстрат теста:
               </Typography>
               <Typography variant="body1" sx={{ fontWeight: 700, color: '#0F3C64' }}>
-                {targetStructure}
+                <LatexText text={targetStructure} />
               </Typography>
             </Box>
 
@@ -262,7 +263,7 @@ export const OrthoTestGuidanceModal: React.FC<OrthoTestGuidanceModalProps> = ({
                   </Typography>
                 </Box>
                 <Typography variant="body2" sx={{ color: '#1E293B', lineHeight: 1.6, pl: 3.7 }}>
-                  {patientPos}
+                  <LatexText text={patientPos} />
                 </Typography>
               </Paper>
 
@@ -284,7 +285,7 @@ export const OrthoTestGuidanceModal: React.FC<OrthoTestGuidanceModalProps> = ({
                   </Typography>
                 </Box>
                 <Typography variant="body2" sx={{ color: '#1E293B', lineHeight: 1.6, pl: 3.7 }}>
-                  {handPlacement}
+                  <LatexText text={handPlacement} />
                 </Typography>
               </Paper>
 
@@ -306,7 +307,7 @@ export const OrthoTestGuidanceModal: React.FC<OrthoTestGuidanceModalProps> = ({
                   </Typography>
                 </Box>
                 <Typography variant="body2" sx={{ color: '#1E293B', lineHeight: 1.6, pl: 3.7 }}>
-                  {forceDir}
+                  <LatexText text={forceDir} />
                 </Typography>
               </Paper>
             </Stack>
@@ -332,7 +333,7 @@ export const OrthoTestGuidanceModal: React.FC<OrthoTestGuidanceModalProps> = ({
                 </Typography>
               </Box>
               <Typography variant="body2" sx={{ color: '#7F1D1D', fontWeight: 600, lineHeight: 1.5 }}>
-                {positiveCrit}
+                <LatexText text={positiveCrit} />
               </Typography>
             </Paper>
 
@@ -354,7 +355,7 @@ export const OrthoTestGuidanceModal: React.FC<OrthoTestGuidanceModalProps> = ({
                 </Typography>
               </Box>
               <Typography variant="body2" sx={{ color: '#312E81', lineHeight: 1.5 }}>
-                {clinInterp}
+                <LatexText text={clinInterp} />
               </Typography>
             </Paper>
           </Box>
@@ -377,7 +378,7 @@ export const OrthoTestGuidanceModal: React.FC<OrthoTestGuidanceModalProps> = ({
                 Дифференциальный диагноз и ложные результаты:
               </Typography>
               <Typography variant="body2" sx={{ color: '#78350F', mt: 0.3, lineHeight: 1.5 }}>
-                {falsePositives}
+                <LatexText text={falsePositives} />
               </Typography>
             </Box>
           </Paper>

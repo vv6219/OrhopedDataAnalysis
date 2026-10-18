@@ -58,6 +58,8 @@ export interface OrthopedicTestItem {
   clinical_interpretation?: string | null;
   illustration_key?: string | null;
   icon_type?: string;
+  test_type?: string | null;
+  is_supplemented?: number | null;
   is_active: number;
   sort_order: number;
   templates_count?: number;
@@ -67,8 +69,15 @@ interface OrthopedicTestsCatalogManagerProps {
   onCatalogChanged?: () => void;
 }
 
+export const TEST_TYPE_CONFIG: Record<string, { label: string; short: string; color: string; bg: string }> = {
+  provocative: { label: 'Провокационный (боль/стресс)', short: 'Провокац.', color: '#DC2626', bg: '#FEF2F2' },
+  relocation: { label: 'Релокационный / вправление', short: 'Релокац.', color: '#2563EB', bg: '#EFF6FF' },
+  neurodynamic: { label: 'Нейродинамический (натяжение)', short: 'Нейродин.', color: '#D97706', bg: '#FFFBEB' },
+  multifactor_cluster: { label: 'Многофакторный кластер', short: 'Кластер', color: '#7C3AED', bg: '#F5F3FF' }
+};
+
 const JOINT_OPTIONS = [
-  { key: 'all', label: 'Все суставы (39)', color: '#0F3C64' },
+  { key: 'all', label: 'Все суставы', color: '#0F3C64' },
   { key: 'knee', label: 'Коленный', color: '#156C9C' },
   { key: 'elbow', label: 'Локтевой', color: '#E65100' },
   { key: 'shoulder', label: 'Плечевой', color: '#6A1B9A' },
@@ -100,6 +109,8 @@ export default function OrthopedicTestsCatalogManager({ onCatalogChanged }: Orth
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedJoint, setSelectedJoint] = useState('all');
+  const [selectedTestType, setSelectedTestType] = useState<string>('all');
+  const [onlySupplemented, setOnlySupplemented] = useState<boolean>(false);
   const [selectedCode, setSelectedCode] = useState<string | null>(null);
 
   // Detail / Form State
@@ -167,6 +178,8 @@ export default function OrthopedicTestsCatalogManager({ onCatalogChanged }: Orth
       specificity_pct: 85,
       evidence_level: 'B',
       icon_type: 'joint_stress',
+      test_type: 'provocative',
+      is_supplemented: 0,
       is_active: 1,
       sort_order: 50,
       templates_count: 0
@@ -277,6 +290,8 @@ export default function OrthopedicTestsCatalogManager({ onCatalogChanged }: Orth
   const filteredTests = useMemo(() => {
     return tests.filter(t => {
       if (selectedJoint !== 'all' && t.joint_category !== selectedJoint) return false;
+      if (selectedTestType !== 'all' && (t.test_type || 'provocative') !== selectedTestType) return false;
+      if (onlySupplemented && !t.is_supplemented) return false;
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
         const inRu = (t.name_ru || '').toLowerCase().includes(q);
@@ -288,7 +303,7 @@ export default function OrthopedicTestsCatalogManager({ onCatalogChanged }: Orth
       }
       return true;
     });
-  }, [tests, selectedJoint, searchQuery]);
+  }, [tests, selectedJoint, selectedTestType, onlySupplemented, searchQuery]);
 
   const jointCounts = useMemo(() => {
     const counts: Record<string, number> = { all: tests.length };
@@ -331,7 +346,7 @@ export default function OrthopedicTestsCatalogManager({ onCatalogChanged }: Orth
             />
 
             {/* Joint Category Chips */}
-            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mb: 1.5 }}>
+            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mb: 1 }}>
               {JOINT_OPTIONS.map(j => {
                 const count = jointCounts[j.key] || 0;
                 const isSelected = selectedJoint === j.key;
@@ -352,6 +367,51 @@ export default function OrthopedicTestsCatalogManager({ onCatalogChanged }: Orth
                   />
                 );
               })}
+            </Box>
+
+            {/* Biomechanical Type & Supplemented Filters */}
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5, flexWrap: 'wrap', gap: 0.5, p: 0.75, bgcolor: '#F8FAFC', borderRadius: 1.5, border: '1px solid #E2E8F0' }}>
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                <Chip
+                  label="Все биомех."
+                  size="small"
+                  clickable
+                  variant={selectedTestType === 'all' ? 'filled' : 'outlined'}
+                  color={selectedTestType === 'all' ? 'primary' : 'default'}
+                  onClick={() => setSelectedTestType('all')}
+                  sx={{ fontSize: '0.68rem', height: 22 }}
+                />
+                {Object.entries(TEST_TYPE_CONFIG).map(([k, v]) => (
+                  <Chip
+                    key={k}
+                    label={v.short}
+                    size="small"
+                    clickable
+                    variant={selectedTestType === k ? 'filled' : 'outlined'}
+                    onClick={() => setSelectedTestType(k)}
+                    sx={{
+                      fontSize: '0.68rem',
+                      height: 22,
+                      bgcolor: selectedTestType === k ? v.color : 'transparent',
+                      color: selectedTestType === k ? '#FFFFFF' : v.color,
+                      borderColor: v.color,
+                      fontWeight: selectedTestType === k ? 700 : 500
+                    }}
+                  />
+                ))}
+              </Box>
+              <FormControlLabel
+                control={
+                  <Switch
+                    size="small"
+                    checked={onlySupplemented}
+                    onChange={(e) => setOnlySupplemented(e.target.checked)}
+                    color="warning"
+                  />
+                }
+                label={<Typography sx={{ fontSize: '0.72rem', fontWeight: 800, color: '#B45309' }}>[ДОПОЛНЕНО]</Typography>}
+                sx={{ m: 0 }}
+              />
             </Box>
 
             {/* Master Header & Create Button */}
@@ -411,6 +471,7 @@ export default function OrthopedicTestsCatalogManager({ onCatalogChanged }: Orth
               ) : (
                 filteredTests.map(t => {
                   const isSelected = !isNewMode && selectedCode === t.code;
+                  const typeConf = TEST_TYPE_CONFIG[t.test_type || 'provocative'];
                   return (
                     <Box
                       key={t.code}
@@ -443,21 +504,51 @@ export default function OrthopedicTestsCatalogManager({ onCatalogChanged }: Orth
                             </Typography>
                           )}
                         </Box>
-                        {t.is_active === 0 ? (
-                          <Chip label="Архив" size="small" color="default" sx={{ height: 18, fontSize: '0.65rem' }} />
-                        ) : (
-                          <Chip
-                            label={t.joint_category}
-                            size="small"
-                            sx={{
-                              height: 18,
-                              fontSize: '0.65rem',
-                              fontWeight: 700,
-                              bgcolor: '#F1F5F9',
-                              color: '#334155'
-                            }}
-                          />
-                        )}
+                        <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', justifyContent: 'flex-end', alignItems: 'center' }}>
+                          {typeConf && (
+                            <Chip
+                              label={typeConf.short}
+                              size="small"
+                              sx={{
+                                height: 18,
+                                fontSize: '0.62rem',
+                                fontWeight: 700,
+                                bgcolor: typeConf.bg,
+                                color: typeConf.color,
+                                border: `1px solid ${typeConf.color}40`
+                              }}
+                            />
+                          )}
+                          {Boolean(t.is_supplemented) && (
+                            <Chip
+                              label="ДОПОЛНЕНО"
+                              size="small"
+                              sx={{
+                                height: 18,
+                                fontSize: '0.62rem',
+                                fontWeight: 800,
+                                bgcolor: '#FEF3C7',
+                                color: '#92400E',
+                                border: '1px solid #FCD34D'
+                              }}
+                            />
+                          )}
+                          {t.is_active === 0 ? (
+                            <Chip label="Архив" size="small" color="default" sx={{ height: 18, fontSize: '0.65rem' }} />
+                          ) : (
+                            <Chip
+                              label={t.joint_category}
+                              size="small"
+                              sx={{
+                                height: 18,
+                                fontSize: '0.65rem',
+                                fontWeight: 700,
+                                bgcolor: '#F1F5F9',
+                                color: '#334155'
+                              }}
+                            />
+                          )}
+                        </Box>
                       </Box>
 
                       {t.target_structure && (
@@ -660,6 +751,36 @@ export default function OrthopedicTestsCatalogManager({ onCatalogChanged }: Orth
                       value={editorTest.target_structure}
                       onChange={(e) => setEditorTest({ ...editorTest, target_structure: e.target.value })}
                       placeholder="Например: Передняя крестообразная связка (ПКС)"
+                    />
+                  </Grid>
+
+                  <Grid size={{ xs: 12, sm: 6 }}>
+                    <FormControl fullWidth size="small">
+                      <InputLabel>Биомеханический тип теста</InputLabel>
+                      <Select
+                        label="Биомеханический тип теста"
+                        value={editorTest.test_type || 'provocative'}
+                        onChange={(e) => setEditorTest({ ...editorTest, test_type: e.target.value })}
+                      >
+                        <MenuItem value="provocative">Провокационный (боль / стресс)</MenuItem>
+                        <MenuItem value="relocation">Релокационный / вправление / стабилизация</MenuItem>
+                        <MenuItem value="neurodynamic">Нейродинамический (натяжение нерва)</MenuItem>
+                        <MenuItem value="multifactor_cluster">Многофакторный кластер тестов</MenuItem>
+                      </Select>
+                    </FormControl>
+                  </Grid>
+
+                  <Grid size={{ xs: 12, sm: 6 }}>
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          checked={Boolean(editorTest.is_supplemented)}
+                          onChange={(e) => setEditorTest({ ...editorTest, is_supplemented: e.target.checked ? 1 : 0 })}
+                          color="warning"
+                        />
+                      }
+                      label={<Typography sx={{ fontSize: '0.82rem', fontWeight: 700, color: '#B45309' }}>Дополнен EBM доказательной базой [ДОПОЛНЕНО]</Typography>}
+                      sx={{ mt: 0.5 }}
                     />
                   </Grid>
 

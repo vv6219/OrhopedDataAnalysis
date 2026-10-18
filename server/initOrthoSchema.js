@@ -167,6 +167,10 @@ function initOrthoSchema(db, callback) {
       anamnesis_template TEXT,
       objective_template TEXT,
       rom_norm_preset TEXT,
+      rom_priority TEXT DEFAULT 'P2',
+      rom_sftr_preview TEXT DEFAULT '',
+      rom_end_feel TEXT DEFAULT '',
+      rom_has_stop_warning INTEGER DEFAULT 0,
       recommendations_template TEXT,
       is_active INTEGER DEFAULT 1,
       sort_order INTEGER DEFAULT 0,
@@ -181,6 +185,10 @@ function initOrthoSchema(db, callback) {
       "ALTER TABLE ortho_templates ADD COLUMN anamnesis_template TEXT",
       "ALTER TABLE ortho_templates ADD COLUMN objective_template TEXT",
       "ALTER TABLE ortho_templates ADD COLUMN rom_norm_preset TEXT",
+      "ALTER TABLE ortho_templates ADD COLUMN rom_priority TEXT DEFAULT 'P2'",
+      "ALTER TABLE ortho_templates ADD COLUMN rom_sftr_preview TEXT DEFAULT ''",
+      "ALTER TABLE ortho_templates ADD COLUMN rom_end_feel TEXT DEFAULT ''",
+      "ALTER TABLE ortho_templates ADD COLUMN rom_has_stop_warning INTEGER DEFAULT 0",
       "ALTER TABLE ortho_templates ADD COLUMN recommendations_template TEXT",
       "ALTER TABLE ortho_templates ADD COLUMN is_active INTEGER DEFAULT 1",
       "ALTER TABLE ortho_templates ADD COLUMN sort_order INTEGER DEFAULT 0",
@@ -194,13 +202,20 @@ function initOrthoSchema(db, callback) {
       "ALTER TABLE ortho_templates ADD COLUMN performed_manipulations_template TEXT",
       "ALTER TABLE ortho_templates ADD COLUMN default_sections_mask TEXT",
       "ALTER TABLE ortho_templates ADD COLUMN is_custom INTEGER DEFAULT 0",
-      "ALTER TABLE ortho_templates ADD COLUMN author_doctor_name TEXT"
+      "ALTER TABLE ortho_templates ADD COLUMN author_doctor_name TEXT",
+      "ALTER TABLE ortho_templates ADD COLUMN manipulations_priority TEXT DEFAULT 'P2'",
+      "ALTER TABLE ortho_templates ADD COLUMN manipulations_summary TEXT DEFAULT ''",
+      "ALTER TABLE ortho_templates ADD COLUMN manipulations_has_stop INTEGER DEFAULT 0",
+      "ALTER TABLE ortho_templates ADD COLUMN manipulations_stop_rationale TEXT DEFAULT ''"
     ];
     tmplCols.forEach((colSql) => {
       db.run(colSql, () => {});
     });
     db.run("CREATE INDEX IF NOT EXISTS idx_ot_cluster_id ON ortho_templates(cluster_id);");
     db.run("CREATE INDEX IF NOT EXISTS idx_ot_is_custom ON ortho_templates(is_custom);");
+    db.run("CREATE INDEX IF NOT EXISTS idx_ot_rom_priority ON ortho_templates(rom_priority);");
+    db.run("CREATE INDEX IF NOT EXISTS idx_ot_man_priority ON ortho_templates(manipulations_priority);");
+    db.run("CREATE INDEX IF NOT EXISTS idx_ot_man_stop ON ortho_templates(manipulations_has_stop);");
 
     // 6.0. Clinical Clusters Classification (10 Master Clusters)
     db.run(`CREATE TABLE IF NOT EXISTS ortho_clusters (
@@ -268,11 +283,15 @@ function initOrthoSchema(db, callback) {
       "ALTER TABLE ortho_test_catalog ADD COLUMN applied_force_direction TEXT",
       "ALTER TABLE ortho_test_catalog ADD COLUMN false_positive_factors TEXT",
       "ALTER TABLE ortho_test_catalog ADD COLUMN clinical_interpretation TEXT",
-      "ALTER TABLE ortho_test_catalog ADD COLUMN illustration_key TEXT DEFAULT 'default_joint'"
+      "ALTER TABLE ortho_test_catalog ADD COLUMN illustration_key TEXT DEFAULT 'default_joint'",
+      "ALTER TABLE ortho_test_catalog ADD COLUMN test_type TEXT DEFAULT 'provocative'",
+      "ALTER TABLE ortho_test_catalog ADD COLUMN is_supplemented INTEGER DEFAULT 0"
     ];
     testCols.forEach((colSql) => {
       db.run(colSql, () => {});
     });
+    db.run("CREATE INDEX IF NOT EXISTS idx_otc_type ON ortho_test_catalog(test_type);");
+    db.run("CREATE INDEX IF NOT EXISTS idx_otc_suppl ON ortho_test_catalog(is_supplemented);");
 
     db.all("SELECT code, sensitivity_specificity FROM ortho_test_catalog WHERE sensitivity_pct IS NULL AND sensitivity_specificity IS NOT NULL", (err, rows) => {
       if (!err && rows && rows.length > 0) {
@@ -300,10 +319,26 @@ function initOrthoSchema(db, callback) {
       priority_level TEXT DEFAULT 'primary',
       is_active INTEGER DEFAULT 1,
       sort_order INTEGER DEFAULT 0,
+      description TEXT,
+      technique_details TEXT,
+      patient_preparation TEXT,
+      diagnostic_criteria TEXT,
+      contraindications TEXT,
       FOREIGN KEY(servdict_id) REFERENCES servdict(id) ON DELETE SET NULL
     )`);
     db.run("CREATE INDEX IF NOT EXISTS idx_dmc_joint ON diagnostic_methods_catalog(target_joint);");
     db.run("CREATE INDEX IF NOT EXISTS idx_dmc_serv ON diagnostic_methods_catalog(servdict_id);");
+
+    const dmcCols = [
+      "ALTER TABLE diagnostic_methods_catalog ADD COLUMN description TEXT",
+      "ALTER TABLE diagnostic_methods_catalog ADD COLUMN technique_details TEXT",
+      "ALTER TABLE diagnostic_methods_catalog ADD COLUMN patient_preparation TEXT",
+      "ALTER TABLE diagnostic_methods_catalog ADD COLUMN diagnostic_criteria TEXT",
+      "ALTER TABLE diagnostic_methods_catalog ADD COLUMN contraindications TEXT"
+    ];
+    dmcCols.forEach((colSql) => {
+      db.run(colSql, () => {});
+    });
 
     // 6.3. Template -> Orthopedic Tests Relation
     db.run(`CREATE TABLE IF NOT EXISTS ortho_template_tests (
@@ -313,10 +348,22 @@ function initOrthoSchema(db, callback) {
       expected_result TEXT DEFAULT 'positive',
       is_mandatory INTEGER DEFAULT 1,
       sort_order INTEGER DEFAULT 0,
+      priority_level TEXT DEFAULT 'high',
+      test_type_tag TEXT,
+      is_supplemented INTEGER DEFAULT 0,
       FOREIGN KEY(template_id) REFERENCES ortho_templates(id) ON DELETE CASCADE,
       FOREIGN KEY(test_code) REFERENCES ortho_test_catalog(code) ON DELETE CASCADE
     )`);
     db.run("CREATE INDEX IF NOT EXISTS idx_ott_tmpl ON ortho_template_tests(template_id);");
+
+    const ottCols = [
+      "ALTER TABLE ortho_template_tests ADD COLUMN priority_level TEXT DEFAULT 'high'",
+      "ALTER TABLE ortho_template_tests ADD COLUMN test_type_tag TEXT",
+      "ALTER TABLE ortho_template_tests ADD COLUMN is_supplemented INTEGER DEFAULT 0"
+    ];
+    ottCols.forEach(sql => db.run(sql, () => {}));
+    db.run("CREATE INDEX IF NOT EXISTS idx_ott_priority ON ortho_template_tests(priority_level);");
+    db.run("CREATE INDEX IF NOT EXISTS idx_ott_type ON ortho_template_tests(test_type_tag);");
 
     // 6.4. Template -> Diagnostic Methods Relation
     db.run(`CREATE TABLE IF NOT EXISTS ortho_template_diagnostics (
@@ -327,19 +374,267 @@ function initOrthoSchema(db, callback) {
       default_side TEXT DEFAULT 'affected',
       is_primary INTEGER DEFAULT 1,
       sort_order INTEGER DEFAULT 0,
+      priority_level TEXT DEFAULT 'high',
       FOREIGN KEY(template_id) REFERENCES ortho_templates(id) ON DELETE CASCADE,
       FOREIGN KEY(diagnostic_code) REFERENCES diagnostic_methods_catalog(code) ON DELETE CASCADE
     )`);
     db.run("CREATE INDEX IF NOT EXISTS idx_otd_tmpl ON ortho_template_diagnostics(template_id);");
 
-    // Seed/sync 100 master clinical templates across 10 clusters if not already populated
-    db.get("SELECT COUNT(*) AS count FROM ortho_templates", (cntErr, row) => {
-      if (!cntErr && (!row || row.count < 100)) {
+    const otdCols = [
+      "ALTER TABLE ortho_template_diagnostics ADD COLUMN priority_level TEXT DEFAULT 'high'"
+    ];
+    otdCols.forEach(sql => db.run(sql, () => {}));
+    db.run("CREATE INDEX IF NOT EXISTS idx_otd_priority ON ortho_template_diagnostics(priority_level);");
+
+    // -------------------------------------------------------------------------
+    // 6.5. Manipulations & Injections Catalog & Template Junction
+    // -------------------------------------------------------------------------
+    db.run(`CREATE TABLE IF NOT EXISTS ortho_manipulations_catalog (
+      code TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      subcategory TEXT NOT NULL,
+      target_joint TEXT NOT NULL,
+      service_scope TEXT NOT NULL DEFAULT 'internal',
+      default_priority TEXT NOT NULL DEFAULT 'high',
+      description TEXT NOT NULL,
+      technique_details TEXT NOT NULL,
+      regimen_standard TEXT NOT NULL,
+      patient_preparation TEXT NOT NULL,
+      post_procedure_care TEXT NOT NULL,
+      clinical_indications TEXT NOT NULL,
+      contraindications TEXT NOT NULL,
+      servdict_id INTEGER,
+      servdict_code TEXT,
+      is_active INTEGER DEFAULT 1,
+      sort_order INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT (datetime('now', 'localtime')),
+      FOREIGN KEY (servdict_id) REFERENCES servdict(id) ON DELETE SET NULL
+    )`);
+    db.run("CREATE INDEX IF NOT EXISTS idx_man_joint ON ortho_manipulations_catalog(target_joint);");
+    db.run("CREATE INDEX IF NOT EXISTS idx_man_scope ON ortho_manipulations_catalog(service_scope);");
+    db.run("CREATE INDEX IF NOT EXISTS idx_man_subcat ON ortho_manipulations_catalog(subcategory);");
+
+    const manCols = [
+      "ALTER TABLE ortho_manipulations_catalog ADD COLUMN ebm_priority TEXT DEFAULT 'P2'",
+      "ALTER TABLE ortho_manipulations_catalog ADD COLUMN navigation_type TEXT DEFAULT 'us_guided'",
+      "ALTER TABLE ortho_manipulations_catalog ADD COLUMN anatomical_access TEXT DEFAULT ''",
+      "ALTER TABLE ortho_manipulations_catalog ADD COLUMN drug_class TEXT DEFAULT ''",
+      "ALTER TABLE ortho_manipulations_catalog ADD COLUMN is_stop_warning INTEGER DEFAULT 0",
+      "ALTER TABLE ortho_manipulations_catalog ADD COLUMN stop_rationale TEXT DEFAULT ''",
+      "ALTER TABLE ortho_manipulations_catalog ADD COLUMN cdss_contraindication_tags TEXT DEFAULT ''"
+    ];
+    manCols.forEach(sql => db.run(sql, () => {}));
+    db.run("CREATE INDEX IF NOT EXISTS idx_man_ebm_prio ON ortho_manipulations_catalog(ebm_priority);");
+    db.run("CREATE INDEX IF NOT EXISTS idx_man_nav ON ortho_manipulations_catalog(navigation_type);");
+    db.run("CREATE INDEX IF NOT EXISTS idx_man_drug ON ortho_manipulations_catalog(drug_class);");
+
+    db.run(`CREATE TABLE IF NOT EXISTS ortho_template_manipulations (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      template_id INTEGER NOT NULL,
+      manipulation_code TEXT NOT NULL,
+      dosage_or_regimen TEXT,
+      is_mandatory INTEGER DEFAULT 1,
+      sort_order INTEGER DEFAULT 0,
+      priority_level TEXT DEFAULT 'high',
+      service_scope TEXT DEFAULT 'internal',
+      FOREIGN KEY(template_id) REFERENCES ortho_templates(id) ON DELETE CASCADE,
+      FOREIGN KEY(manipulation_code) REFERENCES ortho_manipulations_catalog(code) ON DELETE CASCADE
+    )`);
+    db.run("CREATE INDEX IF NOT EXISTS idx_otm_tmpl ON ortho_template_manipulations(template_id);");
+    db.run("CREATE INDEX IF NOT EXISTS idx_otm_code ON ortho_template_manipulations(manipulation_code);");
+
+    const otmCols = [
+      "ALTER TABLE ortho_template_manipulations ADD COLUMN ebm_priority TEXT DEFAULT 'P2'",
+      "ALTER TABLE ortho_template_manipulations ADD COLUMN navigation_type TEXT DEFAULT 'us_guided'",
+      "ALTER TABLE ortho_template_manipulations ADD COLUMN anatomical_access TEXT DEFAULT ''",
+      "ALTER TABLE ortho_template_manipulations ADD COLUMN drug_class TEXT DEFAULT ''",
+      "ALTER TABLE ortho_template_manipulations ADD COLUMN is_stop_warning INTEGER DEFAULT 0",
+      "ALTER TABLE ortho_template_manipulations ADD COLUMN stop_rationale TEXT DEFAULT ''",
+      "ALTER TABLE ortho_template_manipulations ADD COLUMN clinical_indications TEXT DEFAULT ''"
+    ];
+    otmCols.forEach(sql => db.run(sql, () => {}));
+    db.run("CREATE INDEX IF NOT EXISTS idx_otm_ebm ON ortho_template_manipulations(ebm_priority);");
+    db.run("CREATE INDEX IF NOT EXISTS idx_otm_stop ON ortho_template_manipulations(is_stop_warning);");
+
+    // -------------------------------------------------------------------------
+    // 6.6. Physiotherapy & Instrument Treatments Catalog & Template Junction
+    // -------------------------------------------------------------------------
+    db.run(`CREATE TABLE IF NOT EXISTS ortho_physiotherapy_catalog (
+      code TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      subcategory TEXT NOT NULL,
+      target_joint TEXT NOT NULL,
+      service_scope TEXT NOT NULL DEFAULT 'internal',
+      default_priority TEXT NOT NULL DEFAULT 'high',
+      modality_tag TEXT,
+      biophysical_profile TEXT,
+      evidence_level TEXT DEFAULT '1A',
+      cdss_contraindication_tags TEXT,
+      apparatus_examples TEXT,
+      description TEXT NOT NULL,
+      technique_details TEXT NOT NULL,
+      regimen_standard TEXT NOT NULL,
+      patient_preparation TEXT NOT NULL,
+      post_procedure_care TEXT NOT NULL,
+      clinical_indications TEXT NOT NULL,
+      contraindications TEXT NOT NULL,
+      servdict_id INTEGER,
+      servdict_code TEXT,
+      is_active INTEGER DEFAULT 1,
+      sort_order INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT (datetime('now', 'localtime')),
+      FOREIGN KEY (servdict_id) REFERENCES servdict(id) ON DELETE SET NULL
+    )`);
+    db.run("CREATE INDEX IF NOT EXISTS idx_phys_joint ON ortho_physiotherapy_catalog(target_joint);");
+    db.run("CREATE INDEX IF NOT EXISTS idx_phys_scope ON ortho_physiotherapy_catalog(service_scope);");
+    db.run("CREATE INDEX IF NOT EXISTS idx_phys_subcat ON ortho_physiotherapy_catalog(subcategory);");
+
+    db.run(`CREATE TABLE IF NOT EXISTS ortho_template_physiotherapy (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      template_id INTEGER NOT NULL,
+      physiotherapy_code TEXT NOT NULL,
+      dosage_or_regimen TEXT,
+      is_mandatory INTEGER DEFAULT 1,
+      sort_order INTEGER DEFAULT 0,
+      priority_level TEXT DEFAULT 'high',
+      service_scope TEXT DEFAULT 'internal',
+      ebm_priority TEXT DEFAULT 'P1',
+      line_order INTEGER DEFAULT 1,
+      target_anatomical_landmark TEXT,
+      exact_dosimetry TEXT,
+      is_stop_warning INTEGER DEFAULT 0,
+      stop_rationale TEXT,
+      FOREIGN KEY(template_id) REFERENCES ortho_templates(id) ON DELETE CASCADE,
+      FOREIGN KEY(physiotherapy_code) REFERENCES ortho_physiotherapy_catalog(code) ON DELETE CASCADE
+    )`);
+    db.run("CREATE INDEX IF NOT EXISTS idx_otp_tmpl ON ortho_template_physiotherapy(template_id);");
+    db.run("CREATE INDEX IF NOT EXISTS idx_otp_code ON ortho_template_physiotherapy(physiotherapy_code);");
+
+    // -------------------------------------------------------------------------
+    // 6.6.1. CDSS Safety Constraints Matrix (Physiotherapy & Hardware Locks)
+    // -------------------------------------------------------------------------
+    db.run(`CREATE TABLE IF NOT EXISTS ortho_cdss_physio_blocks (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      risk_category_code TEXT NOT NULL UNIQUE,
+      risk_category_name TEXT NOT NULL,
+      affected_template_ids TEXT NOT NULL,
+      blocked_modality_tags TEXT NOT NULL,
+      allowed_modality_tags TEXT,
+      cdss_message_ru TEXT NOT NULL,
+      severity TEXT NOT NULL DEFAULT 'danger',
+      created_at TEXT DEFAULT (datetime('now', 'localtime'))
+    )`);
+    db.run("CREATE INDEX IF NOT EXISTS idx_cdss_risk ON ortho_cdss_physio_blocks(risk_category_code);");
+
+    // Dynamic Column Migration for existing databases
+    db.all("PRAGMA table_info(ortho_physiotherapy_catalog)", (err, cols) => {
+      if (!err && cols) {
+        const colNames = cols.map(c => c.name);
+        const addCol = (col, type) => {
+          if (!colNames.includes(col)) {
+            db.run(`ALTER TABLE ortho_physiotherapy_catalog ADD COLUMN ${col} ${type};`);
+          }
+        };
+        addCol('modality_tag', 'TEXT');
+        addCol('biophysical_profile', 'TEXT');
+        addCol('evidence_level', "TEXT DEFAULT '1A'");
+        addCol('cdss_contraindication_tags', 'TEXT');
+        addCol('apparatus_examples', 'TEXT');
+
+        setTimeout(() => {
+          db.run("CREATE INDEX IF NOT EXISTS idx_phys_modtag ON ortho_physiotherapy_catalog(modality_tag);");
+        }, 300);
+      }
+    });
+
+    db.all("PRAGMA table_info(ortho_template_physiotherapy)", (err, cols) => {
+      if (!err && cols) {
+        const colNames = cols.map(c => c.name);
+        const addCol = (col, type) => {
+          if (!colNames.includes(col)) {
+            db.run(`ALTER TABLE ortho_template_physiotherapy ADD COLUMN ${col} ${type};`);
+          }
+        };
+        addCol('ebm_priority', "TEXT DEFAULT 'P1'");
+        addCol('line_order', 'INTEGER DEFAULT 1');
+        addCol('target_anatomical_landmark', 'TEXT');
+        addCol('exact_dosimetry', 'TEXT');
+        addCol('is_stop_warning', 'INTEGER DEFAULT 0');
+        addCol('stop_rationale', 'TEXT');
+
+        setTimeout(() => {
+          db.run("CREATE INDEX IF NOT EXISTS idx_otp_ebm ON ortho_template_physiotherapy(ebm_priority);");
+        }, 300);
+      }
+    });
+
+    // -------------------------------------------------------------------------
+    // 6.7. Orthotic Devices & Offloading Catalog & Template Junction
+    // -------------------------------------------------------------------------
+    db.run(`CREATE TABLE IF NOT EXISTS ortho_orthotics_catalog (
+      code TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      subcategory TEXT NOT NULL,
+      target_joint TEXT NOT NULL,
+      service_scope TEXT NOT NULL DEFAULT 'internal',
+      default_priority TEXT NOT NULL DEFAULT 'high',
+      description TEXT NOT NULL,
+      technique_details TEXT NOT NULL,
+      regimen_standard TEXT NOT NULL,
+      patient_preparation TEXT NOT NULL,
+      post_procedure_care TEXT NOT NULL,
+      clinical_indications TEXT NOT NULL,
+      contraindications TEXT NOT NULL,
+      servdict_id INTEGER,
+      servdict_code TEXT,
+      is_active INTEGER DEFAULT 1,
+      sort_order INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT (datetime('now', 'localtime')),
+      FOREIGN KEY (servdict_id) REFERENCES servdict(id) ON DELETE SET NULL
+    )`);
+    db.run("CREATE INDEX IF NOT EXISTS idx_orth_joint ON ortho_orthotics_catalog(target_joint);");
+    db.run("CREATE INDEX IF NOT EXISTS idx_orth_scope ON ortho_orthotics_catalog(service_scope);");
+    db.run("CREATE INDEX IF NOT EXISTS idx_orth_subcat ON ortho_orthotics_catalog(subcategory);");
+
+    db.run(`CREATE TABLE IF NOT EXISTS ortho_template_orthotics (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      template_id INTEGER NOT NULL,
+      orthotics_code TEXT NOT NULL,
+      dosage_or_regimen TEXT,
+      is_mandatory INTEGER DEFAULT 1,
+      sort_order INTEGER DEFAULT 0,
+      priority_level TEXT DEFAULT 'high',
+      service_scope TEXT DEFAULT 'internal',
+      FOREIGN KEY(template_id) REFERENCES ortho_templates(id) ON DELETE CASCADE,
+      FOREIGN KEY(orthotics_code) REFERENCES ortho_orthotics_catalog(code) ON DELETE CASCADE
+    )`);
+    db.run("CREATE INDEX IF NOT EXISTS idx_oto_tmpl ON ortho_template_orthotics(template_id);");
+    db.run("CREATE INDEX IF NOT EXISTS idx_oto_code ON ortho_template_orthotics(orthotics_code);");
+
+    // Seed/sync 180 master clinical templates across clusters if not already populated
+    db.get("SELECT COUNT(*) AS count FROM ortho_templates WHERE is_active = 1", (cntErr, row) => {
+      if (!cntErr && (!row || row.count < 180)) {
         try {
-          const { seedAll100OrthoTemplates } = require('./seedAll100OrthoTemplates');
-          seedAll100OrthoTemplates(db);
+          const { syncAll180TemplatesKnowledgeBase } = require('./scripts/syncAll180TemplatesKnowledgeBase');
+          if (syncAll180TemplatesKnowledgeBase) {
+            syncAll180TemplatesKnowledgeBase(db);
+          }
         } catch (e) {
-          console.warn('[OrthoSchema] 100 Templates seeder warning:', e.message);
+          console.warn('[OrthoSchema] 180 Templates sync warning:', e.message);
+        }
+      }
+    });
+
+    // Seed/sync 3 treatment catalogs and template links if empty
+    db.get("SELECT COUNT(*) AS count FROM ortho_manipulations_catalog", (cntErr, row) => {
+      if (!cntErr && (!row || row.count < 10)) {
+        try {
+          const { syncTreatmentsKnowledgeBase180 } = require('./scripts/syncTreatmentsKnowledgeBase180');
+          if (syncTreatmentsKnowledgeBase180) {
+            syncTreatmentsKnowledgeBase180(db);
+          }
+        } catch (e) {
+          console.warn('[OrthoSchema] Treatments catalog sync warning:', e.message);
         }
       }
     });

@@ -38,6 +38,8 @@ import {
   MenuBook as MenuBookIcon
 } from '@mui/icons-material';
 
+import DiagnosticMethodGuidanceModal from './DiagnosticMethodGuidanceModal';
+
 export interface DiagnosticMethodItem {
   code: string;
   name: string;
@@ -53,6 +55,11 @@ export interface DiagnosticMethodItem {
   servdict_price?: number | null;
   servdict_code?: string | null;
   templates_count?: number;
+  description?: string | null;
+  technique_details?: string | null;
+  patient_preparation?: string | null;
+  diagnostic_criteria?: string | null;
+  contraindications?: string | null;
 }
 
 interface DiagnosticMethodsCatalogManagerProps {
@@ -103,6 +110,7 @@ export default function DiagnosticMethodsCatalogManager({ onCatalogChanged }: Di
 
   // Delete Confirm Dialog
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [guidanceModalOpen, setGuidanceModalOpen] = useState(false);
 
   useEffect(() => {
     fetchMethods();
@@ -260,6 +268,17 @@ export default function DiagnosticMethodsCatalogManager({ onCatalogChanged }: Di
     };
   }, [editorMethod, servicesOptions]);
 
+  // Joint counts map
+  const jointCounts = useMemo(() => {
+    const counts: Record<string, number> = { all: methods.length };
+    methods.forEach((m) => {
+      if (m.target_joint) {
+        counts[m.target_joint] = (counts[m.target_joint] || 0) + 1;
+      }
+    });
+    return counts;
+  }, [methods]);
+
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
       {/* Top Banner / Stats */}
@@ -386,24 +405,27 @@ export default function DiagnosticMethodsCatalogManager({ onCatalogChanged }: Di
               })}
             </Box>
 
-            {/* Joint Filter Chips */}
+            {/* Joint Filter Chips with counted numbers */}
             <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mb: 1.5 }}>
-              {JOINT_OPTIONS.map((j) => (
-                <Chip
-                  key={j.key}
-                  label={j.label}
-                  size="small"
-                  clickable
-                  onClick={() => setSelectedJoint(j.key)}
-                  color={selectedJoint === j.key ? 'secondary' : 'default'}
-                  variant={selectedJoint === j.key ? 'filled' : 'outlined'}
-                  sx={{
-                    fontWeight: selectedJoint === j.key ? 700 : 500,
-                    fontSize: '0.68rem',
-                    height: 20
-                  }}
-                />
-              ))}
+              {JOINT_OPTIONS.map((j) => {
+                const count = jointCounts[j.key] || 0;
+                return (
+                  <Chip
+                    key={j.key}
+                    label={`${j.label} (${count})`}
+                    size="small"
+                    clickable
+                    onClick={() => setSelectedJoint(j.key)}
+                    color={selectedJoint === j.key ? 'secondary' : 'default'}
+                    variant={selectedJoint === j.key ? 'filled' : 'outlined'}
+                    sx={{
+                      fontWeight: selectedJoint === j.key ? 700 : 500,
+                      fontSize: '0.68rem',
+                      height: 20
+                    }}
+                  />
+                );
+              })}
             </Box>
 
             <Divider sx={{ mb: 1 }} />
@@ -810,6 +832,71 @@ export default function DiagnosticMethodsCatalogManager({ onCatalogChanged }: Di
                       helperText="Именно этот текст подставляется в протокол и лист рекомендаций при нажатии кнопки «+ В план»"
                     />
                   </Grid>
+
+                  <Grid size={{ xs: 12 }}>
+                    <TextField
+                      fullWidth
+                      size="small"
+                      label="Клиническое описание и физическая сущность исследования (EBM)"
+                      multiline
+                      minRows={3}
+                      value={editorMethod.description || ''}
+                      onChange={(e) => setEditorMethod({ ...editorMethod, description: e.target.value })}
+                      placeholder="Подробное описание: что визуализирует, физический принцип, точность, диагностическая роль..."
+                    />
+                  </Grid>
+
+                  <Grid size={{ xs: 12 }}>
+                    <TextField
+                      fullWidth
+                      size="small"
+                      label="Методика проведения, укладки и протоколы сканирования"
+                      multiline
+                      minRows={3}
+                      value={editorMethod.technique_details || ''}
+                      onChange={(e) => setEditorMethod({ ...editorMethod, technique_details: e.target.value })}
+                      placeholder="Укладки (Розенберг, Merchant, Saltzman, Dunn, Zanca), последовательности МРТ (PD-FS, T1, STIR), датчики УЗИ..."
+                    />
+                  </Grid>
+
+                  <Grid size={{ xs: 12, md: 6 }}>
+                    <TextField
+                      fullWidth
+                      size="small"
+                      label="Подготовка пациента к исследованию"
+                      multiline
+                      minRows={2.5}
+                      value={editorMethod.patient_preparation || ''}
+                      onChange={(e) => setEditorMethod({ ...editorMethod, patient_preparation: e.target.value })}
+                      placeholder="Натощак, снятие металла, свободная одежда, подготовка к контрасту..."
+                    />
+                  </Grid>
+
+                  <Grid size={{ xs: 12, md: 6 }}>
+                    <TextField
+                      fullWidth
+                      size="small"
+                      label="Противопоказания и клинические ограничения"
+                      multiline
+                      minRows={2.5}
+                      value={editorMethod.contraindications || ''}
+                      onChange={(e) => setEditorMethod({ ...editorMethod, contraindications: e.target.value })}
+                      placeholder="Кардиостимуляторы, беременность, аллергия на йод, СКФ < 30 мл/мин, клаустрофобия..."
+                    />
+                  </Grid>
+
+                  <Grid size={{ xs: 12 }}>
+                    <TextField
+                      fullWidth
+                      size="small"
+                      label="Диагностические критерии и валидированные шкалы (EBM)"
+                      multiline
+                      minRows={3}
+                      value={editorMethod.diagnostic_criteria || ''}
+                      onChange={(e) => setEditorMethod({ ...editorMethod, diagnostic_criteria: e.target.value })}
+                      placeholder="Шкалы Kellgren-Lawrence, Stoller, Rockwood, Outerbridge, Walch, Dejour, TT-TG, HKA..."
+                    />
+                  </Grid>
                 </Grid>
 
                 {/* Section 4: Live Preview of Doctor Workstation Card */}
@@ -822,9 +909,20 @@ export default function DiagnosticMethodsCatalogManager({ onCatalogChanged }: Di
                     border: '1px dashed #CBD5E1'
                   }}
                 >
-                  <Typography variant="caption" sx={{ fontWeight: 800, color: '#475569', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: 0.5, mb: 1 }}>
-                    <PreviewIcon sx={{ fontSize: 16 }} /> Превью карточки в АРМ врача (блок «Рекомендованная диагностика»):
-                  </Typography>
+                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+                    <Typography variant="caption" sx={{ fontWeight: 800, color: '#475569', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                      <PreviewIcon sx={{ fontSize: 16 }} /> Превью карточки в АРМ врача:
+                    </Typography>
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      startIcon={<MenuBookIcon />}
+                      onClick={() => setGuidanceModalOpen(true)}
+                      sx={{ textTransform: 'none', fontWeight: 700, fontSize: '0.72rem' }}
+                    >
+                      Посмотреть полное окно описания (i)
+                    </Button>
+                  </Box>
 
                   <Paper
                     elevation={0}
@@ -937,6 +1035,14 @@ export default function DiagnosticMethodsCatalogManager({ onCatalogChanged }: Di
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Full Detailed Guidance Modal */}
+      <DiagnosticMethodGuidanceModal
+        open={guidanceModalOpen}
+        onClose={() => setGuidanceModalOpen(false)}
+        diagnostic={editorMethod}
+        readOnly={true}
+      />
     </Box>
   );
 }

@@ -13,6 +13,7 @@ import {
 } from '@mui/material';
 import type { JointExamState } from '../ortho/JointExamCard';
 import { parseProtocolContent } from '../../utils/protocolXmlParser';
+import LatexText from '../ortho/LatexText';
 
 export interface OrthoPrescriptionItem {
   id?: string | number;
@@ -360,7 +361,7 @@ export const OrthoProtocolPrintTemplate = React.forwardRef<HTMLDivElement, Ortho
                   </Typography>
                   <Box sx={{ pl: 1 }}>
                     <Typography variant="body2" sx={{ mb: 0.8, fontSize: '0.86rem', lineHeight: 1.45 }}>
-                      {cleanComplaints}
+                      <LatexText text={cleanComplaints} />
                     </Typography>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mt: 0.5 }}>
                       <Typography variant="body2" sx={{ fontSize: '0.86rem', fontWeight: 700, color: '#334155' }}>
@@ -390,7 +391,7 @@ export const OrthoProtocolPrintTemplate = React.forwardRef<HTMLDivElement, Ortho
                   </Typography>
                   <Box sx={{ pl: 1 }}>
                     <Typography variant="body2" sx={{ fontSize: '0.86rem', lineHeight: 1.45, whiteSpace: 'pre-line' }}>
-                      {cleanAnamnesis}
+                      <LatexText text={cleanAnamnesis} />
                     </Typography>
                   </Box>
                 </Box>
@@ -404,7 +405,7 @@ export const OrthoProtocolPrintTemplate = React.forwardRef<HTMLDivElement, Ortho
                   </Typography>
                   <Box sx={{ pl: 1 }}>
                     <Typography variant="body2" sx={{ fontSize: '0.86rem', lineHeight: 1.45, whiteSpace: 'pre-line' }}>
-                      {data.anamnesisVitae}
+                      <LatexText text={data.anamnesisVitae} />
                     </Typography>
                   </Box>
                 </Box>
@@ -418,7 +419,7 @@ export const OrthoProtocolPrintTemplate = React.forwardRef<HTMLDivElement, Ortho
                   </Typography>
                   <Box sx={{ pl: 1 }}>
                     <Typography variant="body2" sx={{ fontSize: '0.86rem', lineHeight: 1.45, whiteSpace: 'pre-line' }}>
-                      {data.objectiveStatus}
+                      <LatexText text={data.objectiveStatus} />
                     </Typography>
                   </Box>
                 </Box>
@@ -529,7 +530,7 @@ export const OrthoProtocolPrintTemplate = React.forwardRef<HTMLDivElement, Ortho
                   </Typography>
                   <Box sx={{ pl: 1 }}>
                     <Typography variant="body2" sx={{ fontSize: '0.86rem', lineHeight: 1.45, whiteSpace: 'pre-line' }}>
-                      {data.specialStudies}
+                      <LatexText text={data.specialStudies} />
                     </Typography>
                   </Box>
                 </Box>
@@ -543,7 +544,7 @@ export const OrthoProtocolPrintTemplate = React.forwardRef<HTMLDivElement, Ortho
                   </Typography>
                   <Box sx={{ pl: 1 }}>
                     <Typography variant="body2" sx={{ fontSize: '0.86rem', lineHeight: 1.45, whiteSpace: 'pre-line' }}>
-                      {data.performedManipulations}
+                      <LatexText text={data.performedManipulations} />
                     </Typography>
                   </Box>
                 </Box>
@@ -565,13 +566,13 @@ export const OrthoProtocolPrintTemplate = React.forwardRef<HTMLDivElement, Ortho
                         />
                         {data.icdName && (
                           <Typography variant="body2" sx={{ color: '#475569', fontWeight: 600, fontSize: '0.84rem' }}>
-                            {data.icdName}
+                            <LatexText text={data.icdName} />
                           </Typography>
                         )}
                       </Box>
                     )}
                     <Typography variant="body2" sx={{ fontWeight: 700, color: '#0F172A', fontSize: '0.92rem', lineHeight: 1.45 }}>
-                      {cleanDiagnosis}
+                      <LatexText text={cleanDiagnosis} />
                     </Typography>
                   </Box>
                 </Box>
@@ -586,7 +587,7 @@ export const OrthoProtocolPrintTemplate = React.forwardRef<HTMLDivElement, Ortho
                   <Box sx={{ pl: 1 }}>
                     {data.recommendations && (
                       <Typography variant="body2" sx={{ fontSize: '0.86rem', lineHeight: 1.5, whiteSpace: 'pre-line', mb: 1.5 }}>
-                        {data.recommendations}
+                        <LatexText text={data.recommendations} />
                       </Typography>
                     )}
 

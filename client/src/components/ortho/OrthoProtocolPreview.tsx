@@ -28,6 +28,7 @@ import {
 } from 'docx';
 import OrthoProtocolPrintTemplate from '../reports/OrthoProtocolPrintTemplate';
 import type { OrthoProtocolData } from '../reports/OrthoProtocolPrintTemplate';
+import { cleanLatexText } from './LatexText';
 
 interface OrthoProtocolPreviewProps {
   data: OrthoProtocolData;
@@ -133,7 +134,7 @@ export default function OrthoProtocolPreview({
       lines.push(`[ЭЦП валидна: ${data.signedAt || ''} | ${data.signatureHash || ''}]`);
     }
 
-    return lines.join('\n');
+    return cleanLatexText(lines.join('\n'));
   };
 
   // 2. Word (.docx) Generator via docx library
