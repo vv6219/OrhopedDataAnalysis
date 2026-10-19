@@ -135,6 +135,10 @@ export interface TemplateTreatmentRelItem {
   drug_class?: string | null;
   is_stop_warning?: number | boolean;
   stop_rationale?: string | null;
+  weight_bearing_mode?: 'NWB' | 'TTWB' | 'PWB' | 'WBAT' | 'FWB' | 'N/A' | string;
+  device_type_iso?: string | null;
+  hinge_settings?: string | null;
+  wearing_regimen?: string | null;
   modality_tag?: string;
   evidence_level?: string;
   apparatus_examples?: string;
@@ -325,6 +329,37 @@ export function getManipPriorityBadge(priority?: string): { label: string; bg: s
       return { label: 'P3 АДЪЮВАНТНЫЕ ПОСОБИЯ / ПИР', bg: '#F0FDFA', color: '#0D9488', border: '#99F6E4', icon: '🔍' };
     default:
       return { label: 'P2 ТАРГЕТНАЯ ИНТЕРВЕНЦИЯ / ОРТОБИОЛОГИЯ', bg: '#F0F9FF', color: '#0284C7', border: '#BAE6FD', icon: '🎯' };
+  }
+}
+
+export function getOrthoticsPriorityBadge(priority?: string): { label: string; bg: string; color: string; border: string; icon: string } {
+  switch (priority) {
+    case 'P0-STOP':
+    case 'P0-CONTRA':
+      return { label: 'P0-STOP КАТЕГОРИЧЕСКИЙ ЗАПРЕТ', bg: '#FEF2F2', color: '#DC2626', border: '#FCA5A5', icon: '🚨' };
+    case 'P1':
+      return { label: 'P1 СТРУКТУРНО-СПАСАЮЩАЯ / ОБЯЗАТЕЛЬНАЯ', bg: '#FEF2F2', color: '#DC2626', border: '#FCA5A5', icon: '⭐' };
+    case 'P3':
+      return { label: 'P3 АДАПТИВНО-ПРОФИЛАКТИЧЕСКАЯ', bg: '#F0FDFA', color: '#0D9488', border: '#99F6E4', icon: '🔍' };
+    default:
+      return { label: 'P2 ФУНКЦИОНАЛЬНОЕ ОРТЕЗИРОВАНИЕ', bg: '#ECFDF5', color: '#059669', border: '#A7F3D0', icon: '🛡️' };
+  }
+}
+
+export function getWeightBearingBadge(mode?: string): { label: string; fullTitle: string; bg: string; color: string; border: string; icon: string } {
+  switch (mode) {
+    case 'NWB':
+      return { label: 'NWB (0% массы)', fullTitle: 'Non-Weight Bearing: Строгая разгрузка без опоры (0%)', bg: '#FEF2F2', color: '#DC2626', border: '#FCA5A5', icon: '🚫' };
+    case 'TTWB':
+      return { label: 'TTWB (5–10% массы)', fullTitle: 'Toe-Touch Weight Bearing: Касание носком для баланса (5-10%)', bg: '#FFF7ED', color: '#EA580C', border: '#FDBA74', icon: '🦶' };
+    case 'PWB':
+      return { label: 'PWB (20–50% массы)', fullTitle: 'Partial Weight Bearing: Частичная опора на костылях (20-50%)', bg: '#FEF9C3', color: '#CA8A04', border: '#FDE047', icon: '⚖️' };
+    case 'WBAT':
+      return { label: 'WBAT (по переносимости)', fullTitle: 'Weight Bearing As Tolerated: Опора по переносимости боли', bg: '#EFF6FF', color: '#2563EB', border: '#BFDBFE', icon: '🚶' };
+    case 'FWB':
+      return { label: 'FWB (100% полная опора)', fullTitle: 'Full Weight Bearing: Полная свободная опора (100%)', bg: '#ECFDF5', color: '#059669', border: '#A7F3D0', icon: '✅' };
+    default:
+      return { label: 'N/A (верхняя кон./позвоночник)', fullTitle: 'Осевая нагрузка не лимитирована или не применима', bg: '#F1F5F9', color: '#475569', border: '#CBD5E1', icon: 'ℹ️' };
   }
 }
 
@@ -619,6 +654,11 @@ interface FullTemplate {
   manipulations_summary?: string;
   manipulations_has_stop?: number | boolean;
   manipulations_stop_rationale?: string;
+  orthotics_priority?: 'P1' | 'P2' | 'P3' | 'P0-STOP' | string;
+  orthotics_weight_bearing?: 'NWB' | 'TTWB' | 'PWB' | 'WBAT' | 'FWB' | 'N/A' | string;
+  orthotics_summary?: string;
+  orthotics_has_stop?: number | boolean;
+  orthotics_stop_rationale?: string;
   template_json?: any;
   tests: TemplateTestItem[];
   diagnostics: TemplateDiagnosticItem[];
@@ -682,6 +722,9 @@ export default function OrthoTemplatesManager() {
   const [copiedManipProtocol, setCopiedManipProtocol] = useState(false);
   const [physioFilter, setPhysioFilter] = useState<string>('all');
   const [orthoFilter, setOrthoFilter] = useState<string>('all');
+  const [orthoPriorityFilter, setOrthoPriorityFilter] = useState<'all' | 'P1' | 'P2' | 'P3' | 'P0-STOP'>('all');
+  const [orthoWbFilter, setOrthoWbFilter] = useState<string>('all');
+  const [copiedOrthoProtocol, setCopiedOrthoProtocol] = useState(false);
 
   // Modality counts for Tab 3 Diagnostics
   const diagModalityCounts = useMemo(() => {
@@ -964,6 +1007,11 @@ export default function OrthoTemplatesManager() {
         manipulations_summary: currentTemplate.manipulations_summary || '',
         manipulations_has_stop: currentTemplate.manipulations_has_stop ? 1 : 0,
         manipulations_stop_rationale: currentTemplate.manipulations_stop_rationale || '',
+        orthotics_priority: currentTemplate.orthotics_priority || 'P2',
+        orthotics_weight_bearing: currentTemplate.orthotics_weight_bearing || 'WBAT',
+        orthotics_summary: currentTemplate.orthotics_summary || '',
+        orthotics_has_stop: currentTemplate.orthotics_has_stop ? 1 : 0,
+        orthotics_stop_rationale: currentTemplate.orthotics_stop_rationale || '',
         recommendations_template: currentTemplate.recommendations_template,
         is_custom: currentTemplate.is_custom ? 1 : 0,
         author_doctor_name: currentTemplate.author_doctor_name || null,
@@ -5214,76 +5262,253 @@ export default function OrthoTemplatesManager() {
                 {/* TAB 6: Orthotics & External Support */}
                 {activeTab === 6 && (
                   <Box>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, flexWrap: 'wrap', gap: 1 }}>
-                      <Box>
-                        <Typography variant="subtitle1" sx={{ fontWeight: 800, color: '#0F3C64', display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <ShieldIcon sx={{ color: '#059669' }} />
-                          7. Ортопедические изделия, ортезирование и разгрузка
-                          <Chip
-                            label={`${currentTemplate.orthotics?.length || 0} назн.`}
-                            size="small"
-                            sx={{ fontWeight: 800, bgcolor: '#D1FAE5', color: '#047857' }}
-                          />
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary">
-                          Индивидуальные стельки Formthotics, шарнирные брейсы, туторы, индивидуальные лонгеты TurboCast, бандажи
-                        </Typography>
-                      </Box>
-                      <Button
-                        variant="contained"
-                        size="small"
-                        startIcon={<AddIcon />}
-                        onClick={() => setOrthoticsModalOpen(true)}
-                        sx={{ bgcolor: '#059669', '&:hover': { bgcolor: '#047857' }, textTransform: 'none', fontWeight: 700 }}
-                      >
-                        + Добавить ортез / стельки
-                      </Button>
-                    </Box>
-
-                    {/* Quick Filters for Orthotics */}
+                    {/* Header Card with EBM Priority & Weight Bearing Badges */}
                     {(() => {
                       const allO = currentTemplate.orthotics || [];
-                      const intCount = allO.filter(o => o.service_scope === 'internal').length;
-                      const insoleCount = allO.filter(o => (o.subcategory === 'insole' || o.item_code.includes('formthotics') || o.item_code.includes('insole'))).length;
-                      const braceCount = allO.filter(o => (o.subcategory === 'brace' || o.item_code.includes('brace') || o.item_code.includes('tutor'))).length;
-                      const turboCount = allO.filter(o => (o.subcategory === 'turbocast' || o.item_code.includes('turbo'))).length;
+                      const stopWarnings = allO.filter(o => o.is_stop_warning === 1 || o.is_stop_warning === true || o.ebm_priority === 'P0-STOP' || o.ebm_priority === 'P0-CONTRA');
+                      const nonStop = allO.filter(o => !(o.is_stop_warning === 1 || o.is_stop_warning === true || o.ebm_priority === 'P0-STOP' || o.ebm_priority === 'P0-CONTRA'));
+                      const tmplPri = currentTemplate.orthotics_priority || 'P2';
+                      const priBadge = getOrthoticsPriorityBadge(tmplPri);
+                      const wbMode = currentTemplate.orthotics_weight_bearing || (nonStop[0]?.weight_bearing_mode) || 'WBAT';
+                      const wbBadge = getWeightBearingBadge(wbMode);
+
+                      const p1Count = nonStop.filter(o => o.ebm_priority === 'P1').length;
+                      const p2Count = nonStop.filter(o => o.ebm_priority === 'P2' || !o.ebm_priority).length;
+                      const p3Count = nonStop.filter(o => o.ebm_priority === 'P3').length;
+                      const intCount = nonStop.filter(o => o.service_scope === 'internal').length;
 
                       return (
-                        <Paper variant="outlined" sx={{ p: 1.25, mb: 2, bgcolor: '#ECFDF5', borderColor: '#A7F3D0', borderRadius: 2 }}>
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mr: 1 }}>
-                              <FilterListIcon sx={{ fontSize: 16, color: '#059669' }} />
-                              <Typography variant="caption" sx={{ fontWeight: 800, color: '#047857', textTransform: 'uppercase' }}>
-                                Быстрый фильтр:
+                        <Paper
+                          variant="outlined"
+                          sx={{
+                            p: 2,
+                            mb: 2.5,
+                            borderRadius: 2.5,
+                            bgcolor: '#F0FDF4',
+                            borderColor: '#BBF7D0',
+                            boxShadow: '0 1px 3px rgba(0,0,0,0.03)'
+                          }}
+                        >
+                          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 1.5 }}>
+                            <Box sx={{ flex: 1, minWidth: 280 }}>
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5, flexWrap: 'wrap' }}>
+                                <Typography variant="h6" sx={{ fontWeight: 900, color: '#0F3C64', display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                                  <ShieldIcon sx={{ color: '#059669', fontSize: 24 }} />
+                                  7. Ортопедические изделия, ортезирование и режимы разгрузки
+                                </Typography>
+                                <Chip
+                                  label={`${priBadge.icon} ${priBadge.label}`}
+                                  size="small"
+                                  sx={{
+                                    fontWeight: 900,
+                                    fontSize: '0.72rem',
+                                    bgcolor: priBadge.bg,
+                                    color: priBadge.color,
+                                    border: `1px solid ${priBadge.border}`
+                                  }}
+                                />
+                                <Tooltip title={wbBadge.fullTitle} arrow>
+                                  <Chip
+                                    label={`${wbBadge.icon} ${wbBadge.label}`}
+                                    size="small"
+                                    sx={{
+                                      fontWeight: 900,
+                                      fontSize: '0.72rem',
+                                      bgcolor: wbBadge.bg,
+                                      color: wbBadge.color,
+                                      border: `1px solid ${wbBadge.border}`
+                                    }}
+                                  />
+                                </Tooltip>
+                              </Box>
+                              <Typography variant="body2" sx={{ color: '#475569', lineHeight: 1.45 }}>
+                                Стандарт биомеханического ортезирования (ISO 8549, AO Trauma, AAOS): 1-я линия (P1 структурно-спасающая иммобилизация), 2-я линия (P2 функциональная коррекция оси) и шкала осевой нагрузки (NWB/TTWB/PWB/WBAT/FWB).
                               </Typography>
+                              {currentTemplate.orthotics_summary && (
+                                <Box sx={{ mt: 1, p: 1, bgcolor: '#FFFFFF', borderRadius: 1.5, border: '1px solid #DCFCE7' }}>
+                                  <Typography variant="caption" sx={{ color: '#166534', fontWeight: 600, display: 'block' }}>
+                                    <strong>Клинический регламент разгрузки:</strong> <LatexText text={currentTemplate.orthotics_summary} />
+                                  </Typography>
+                                </Box>
+                              )}
                             </Box>
-                            <Chip
-                              label={`Все (${allO.length})`}
-                              size="small"
-                              onClick={() => setOrthoFilter('all')}
-                              sx={{
-                                fontWeight: 700,
-                                cursor: 'pointer',
-                                bgcolor: orthoFilter === 'all' ? '#059669' : '#FFFFFF',
-                                color: orthoFilter === 'all' ? '#FFFFFF' : '#334155',
-                                border: orthoFilter === 'all' ? 'none' : '1px solid #CBD5E1'
-                              }}
-                            />
-                            <Chip
-                              label={`🏥 Внутренние ⭐ HIGH (${intCount})`}
-                              size="small"
-                              onClick={() => setOrthoFilter('internal')}
-                              sx={{
-                                fontWeight: 700,
-                                cursor: 'pointer',
-                                bgcolor: orthoFilter === 'internal' ? '#059669' : '#FFFFFF',
-                                color: orthoFilter === 'internal' ? '#FFFFFF' : '#047857',
-                                border: orthoFilter === 'internal' ? 'none' : '1px solid #A7F3D0'
-                              }}
-                            />
-                            {insoleCount > 0 && (
+
+                            <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
+                              <Button
+                                variant="contained"
+                                size="small"
+                                startIcon={<AddIcon />}
+                                onClick={() => setOrthoticsModalOpen(true)}
+                                sx={{ bgcolor: '#059669', '&:hover': { bgcolor: '#047857' }, textTransform: 'none', fontWeight: 800, borderRadius: 2 }}
+                              >
+                                + Добавить ортез / стельки
+                              </Button>
+                            </Box>
+                          </Box>
+
+                          {/* Metric Chips Row */}
+                          <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mt: 1.5, pt: 1.25, borderTop: '1px solid #DCFCE7' }}>
+                            <Chip label={`Всего изделий: ${nonStop.length}`} size="small" sx={{ fontWeight: 800, bgcolor: '#DCFCE7', color: '#15803D' }} />
+                            <Chip label={`🏥 В кассу клиники: ${intCount}`} size="small" sx={{ fontWeight: 800, bgcolor: '#D1FAE5', color: '#047857' }} />
+                            {p1Count > 0 && <Chip label={`⭐ P1 Обязательные: ${p1Count}`} size="small" sx={{ fontWeight: 800, bgcolor: '#FEF2F2', color: '#DC2626' }} />}
+                            {p2Count > 0 && <Chip label={`🎯 P2 Функциональные: ${p2Count}`} size="small" sx={{ fontWeight: 800, bgcolor: '#F0F9FF', color: '#0284C7' }} />}
+                            {p3Count > 0 && <Chip label={`🔍 P3 Адаптивные: ${p3Count}`} size="small" sx={{ fontWeight: 800, bgcolor: '#F0FDFA', color: '#0D9488' }} />}
+                            {stopWarnings.length > 0 && (
                               <Chip
-                                label={`Стельки Formthotics (${insoleCount})`}
+                                icon={<WarningAmberIcon sx={{ fontSize: '14px !important', color: '#DC2626' }} />}
+                                label={`🚨 CDSS Запреты: ${stopWarnings.length}`}
+                                size="small"
+                                sx={{ fontWeight: 900, bgcolor: '#FEE2E2', color: '#B91C1C', border: '1px solid #F87171' }}
+                              />
+                            )}
+                          </Box>
+                        </Paper>
+                      );
+                    })()}
+
+                    {/* CDSS STOP Red Flag Warning Alert Banner */}
+                    {(() => {
+                      const allO = currentTemplate.orthotics || [];
+                      const stopW = allO.filter(o => o.is_stop_warning === 1 || o.is_stop_warning === true || o.ebm_priority === 'P0-STOP' || o.ebm_priority === 'P0-CONTRA');
+                      const hasStop = currentTemplate.orthotics_has_stop === 1 || Boolean(currentTemplate.orthotics_stop_rationale) || stopW.length > 0;
+                      if (!hasStop) return null;
+
+                      const rationale = currentTemplate.orthotics_stop_rationale || stopW[0]?.stop_rationale || 'Ограничение нерациональной иммобилизации или преждевременной осевой нагрузки.';
+
+                      return (
+                        <Alert
+                          severity="error"
+                          icon={<LockIcon sx={{ color: '#DC2626' }} />}
+                          sx={{
+                            mb: 2.5,
+                            borderRadius: 2,
+                            border: '1.5px solid #EF4444',
+                            bgcolor: '#FEF2F2',
+                            '& .MuiAlert-message': { width: '100%' }
+                          }}
+                        >
+                          <Typography variant="subtitle2" sx={{ fontWeight: 900, color: '#991B1B', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                            CDSS STOP LOCK: КЛИНИЧЕСКИЙ ЗАПРЕТ ОПАСНОЙ ИММОБИЛИЗАЦИИ ИЛИ НАГРУЗКИ [P0-STOP / P0-CONTRA]
+                          </Typography>
+                          <Typography variant="body2" sx={{ color: '#7F1D1D', mt: 0.5, fontWeight: 600 }}>
+                            <LatexText text={rationale} />
+                          </Typography>
+                          <Typography variant="caption" sx={{ color: '#991B1B', display: 'block', mt: 0.5 }}>
+                            Программный контроль СППВР МИС: защищает пациента от вторичного смещения отломков, асептического некроза головки, атрофических контрактур и компрессионных нейропатий.
+                          </Typography>
+                        </Alert>
+                      );
+                    })()}
+
+                    {/* Multi-Tier Filter Toolbar */}
+                    {(() => {
+                      const allO = currentTemplate.orthotics || [];
+                      const nonStop = allO.filter(o => !(o.is_stop_warning === 1 || o.is_stop_warning === true || o.ebm_priority === 'P0-STOP' || o.ebm_priority === 'P0-CONTRA'));
+                      const stopWarnings = allO.filter(o => o.is_stop_warning === 1 || o.is_stop_warning === true || o.ebm_priority === 'P0-STOP' || o.ebm_priority === 'P0-CONTRA');
+
+                      return (
+                        <Paper variant="outlined" sx={{ p: 1.5, mb: 2.5, bgcolor: '#F8FAFC', borderRadius: 2, borderColor: '#CBD5E1' }}>
+                          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                            {/* Line 1: EBM Priority Filter */}
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                              <Typography variant="caption" sx={{ fontWeight: 800, color: '#334155', textTransform: 'uppercase', minWidth: 110 }}>
+                                Приоритет EBM:
+                              </Typography>
+                              <Chip
+                                label={`Все (${allO.length})`}
+                                size="small"
+                                onClick={() => setOrthoPriorityFilter('all')}
+                                sx={{
+                                  fontWeight: 700,
+                                  cursor: 'pointer',
+                                  bgcolor: orthoPriorityFilter === 'all' ? '#0F3C64' : '#FFFFFF',
+                                  color: orthoPriorityFilter === 'all' ? '#FFFFFF' : '#334155',
+                                  border: orthoPriorityFilter === 'all' ? 'none' : '1px solid #CBD5E1'
+                                }}
+                              />
+                              <Chip
+                                label={`⭐ P1 Критический (${nonStop.filter(o => o.ebm_priority === 'P1').length})`}
+                                size="small"
+                                onClick={() => setOrthoPriorityFilter('P1')}
+                                sx={{
+                                  fontWeight: 700,
+                                  cursor: 'pointer',
+                                  bgcolor: orthoPriorityFilter === 'P1' ? '#DC2626' : '#FFFFFF',
+                                  color: orthoPriorityFilter === 'P1' ? '#FFFFFF' : '#DC2626',
+                                  border: orthoPriorityFilter === 'P1' ? 'none' : '1px solid #FCA5A5'
+                                }}
+                              />
+                              <Chip
+                                label={`🎯 P2 Функция (${nonStop.filter(o => o.ebm_priority === 'P2' || !o.ebm_priority).length})`}
+                                size="small"
+                                onClick={() => setOrthoPriorityFilter('P2')}
+                                sx={{
+                                  fontWeight: 700,
+                                  cursor: 'pointer',
+                                  bgcolor: orthoPriorityFilter === 'P2' ? '#059669' : '#FFFFFF',
+                                  color: orthoPriorityFilter === 'P2' ? '#FFFFFF' : '#059669',
+                                  border: orthoPriorityFilter === 'P2' ? 'none' : '1px solid #A7F3D0'
+                                }}
+                              />
+                              <Chip
+                                label={`🔍 P3 Адаптив (${nonStop.filter(o => o.ebm_priority === 'P3').length})`}
+                                size="small"
+                                onClick={() => setOrthoPriorityFilter('P3')}
+                                sx={{
+                                  fontWeight: 700,
+                                  cursor: 'pointer',
+                                  bgcolor: orthoPriorityFilter === 'P3' ? '#0D9488' : '#FFFFFF',
+                                  color: orthoPriorityFilter === 'P3' ? '#FFFFFF' : '#0D9488',
+                                  border: orthoPriorityFilter === 'P3' ? 'none' : '1px solid #99F6E4'
+                                }}
+                              />
+                              {stopWarnings.length > 0 && (
+                                <Chip
+                                  label={`🚨 P0-STOP Запреты (${stopWarnings.length})`}
+                                  size="small"
+                                  onClick={() => setOrthoPriorityFilter('P0-STOP')}
+                                  sx={{
+                                    fontWeight: 700,
+                                    cursor: 'pointer',
+                                    bgcolor: orthoPriorityFilter === 'P0-STOP' ? '#991B1B' : '#FFFFFF',
+                                    color: orthoPriorityFilter === 'P0-STOP' ? '#FFFFFF' : '#991B1B',
+                                    border: orthoPriorityFilter === 'P0-STOP' ? 'none' : '1px solid #FCA5A5'
+                                  }}
+                                />
+                              )}
+                            </Box>
+
+                            {/* Line 2: Category Filter */}
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                              <Typography variant="caption" sx={{ fontWeight: 800, color: '#334155', textTransform: 'uppercase', minWidth: 110 }}>
+                                Категория:
+                              </Typography>
+                              <Chip
+                                label="Все категории"
+                                size="small"
+                                onClick={() => setOrthoFilter('all')}
+                                sx={{
+                                  fontWeight: 700,
+                                  cursor: 'pointer',
+                                  bgcolor: orthoFilter === 'all' ? '#059669' : '#FFFFFF',
+                                  color: orthoFilter === 'all' ? '#FFFFFF' : '#334155',
+                                  border: orthoFilter === 'all' ? 'none' : '1px solid #CBD5E1'
+                                }}
+                              />
+                              <Chip
+                                label="🏥 В кассу клиники"
+                                size="small"
+                                onClick={() => setOrthoFilter('internal')}
+                                sx={{
+                                  fontWeight: 700,
+                                  cursor: 'pointer',
+                                  bgcolor: orthoFilter === 'internal' ? '#059669' : '#FFFFFF',
+                                  color: orthoFilter === 'internal' ? '#FFFFFF' : '#047857',
+                                  border: orthoFilter === 'internal' ? 'none' : '1px solid #A7F3D0'
+                                }}
+                              />
+                              <Chip
+                                label="Стельки Formthotics"
                                 size="small"
                                 onClick={() => setOrthoFilter('insole')}
                                 sx={{
@@ -5294,10 +5519,8 @@ export default function OrthoTemplatesManager() {
                                   border: orthoFilter === 'insole' ? 'none' : '1px solid #CBD5E1'
                                 }}
                               />
-                            )}
-                            {braceCount > 0 && (
                               <Chip
-                                label={`Брейсы и Туторы (${braceCount})`}
+                                label="Брейсы и Туторы"
                                 size="small"
                                 onClick={() => setOrthoFilter('brace')}
                                 sx={{
@@ -5308,10 +5531,8 @@ export default function OrthoTemplatesManager() {
                                   border: orthoFilter === 'brace' ? 'none' : '1px solid #CBD5E1'
                                 }}
                               />
-                            )}
-                            {turboCount > 0 && (
                               <Chip
-                                label={`TurboCast иммобилизация (${turboCount})`}
+                                label="TurboCast иммобилизация"
                                 size="small"
                                 onClick={() => setOrthoFilter('turbo')}
                                 sx={{
@@ -5322,20 +5543,41 @@ export default function OrthoTemplatesManager() {
                                   border: orthoFilter === 'turbo' ? 'none' : '1px solid #CBD5E1'
                                 }}
                               />
-                            )}
+                            </Box>
                           </Box>
                         </Paper>
                       );
                     })()}
 
-                    {/* Orthotics Table */}
+                    {/* Grouped EBM Sections or Table */}
                     {(() => {
                       const allO = currentTemplate.orthotics || [];
+
                       const filteredO = allO.filter(o => {
-                        if (orthoFilter === 'internal') return o.service_scope === 'internal';
-                        if (orthoFilter === 'insole') return o.subcategory === 'insole' || o.item_code.includes('formthotics') || o.item_code.includes('insole');
-                        if (orthoFilter === 'brace') return o.subcategory === 'brace' || o.item_code.includes('brace') || o.item_code.includes('tutor');
-                        if (orthoFilter === 'turbo') return o.subcategory === 'turbocast' || o.item_code.includes('turbo');
+                        // Priority filter
+                        if (orthoPriorityFilter !== 'all') {
+                          if (orthoPriorityFilter === 'P0-STOP') {
+                            const isStop = o.is_stop_warning === 1 || o.is_stop_warning === true || o.ebm_priority === 'P0-STOP' || o.ebm_priority === 'P0-CONTRA';
+                            if (!isStop) return false;
+                          } else {
+                            if (o.ebm_priority !== orthoPriorityFilter) return false;
+                          }
+                        }
+
+                        // Category filter
+                        if (orthoFilter === 'internal') {
+                          if (o.service_scope !== 'internal') return false;
+                        } else if (orthoFilter === 'insole') {
+                          const isIns = o.subcategory === 'insole' || o.item_code.includes('formthotics') || o.item_code.includes('insole');
+                          if (!isIns) return false;
+                        } else if (orthoFilter === 'brace') {
+                          const isBrace = o.subcategory === 'brace' || o.item_code.includes('brace') || o.item_code.includes('tutor');
+                          if (!isBrace) return false;
+                        } else if (orthoFilter === 'turbo') {
+                          const isTurbo = o.subcategory === 'turbocast' || o.item_code.includes('turbo');
+                          if (!isTurbo) return false;
+                        }
+
                         return true;
                       });
 
@@ -5347,110 +5589,218 @@ export default function OrthoTemplatesManager() {
                         );
                       }
 
-                      return (
-                        <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 2 }}>
-                          <Table size="small">
-                            <TableHead sx={{ bgcolor: '#ECFDF5' }}>
-                              <TableRow>
-                                <TableCell sx={{ fontWeight: 700, color: '#047857' }}>Изделие / Ортез</TableCell>
-                                <TableCell sx={{ fontWeight: 700, color: '#047857', width: 140 }}>База / Охват</TableCell>
-                                <TableCell sx={{ fontWeight: 700, color: '#047857', width: 150 }}>Приоритет</TableCell>
-                                <TableCell sx={{ fontWeight: 700, color: '#047857' }}>Прайс клиники (servdict)</TableCell>
-                                <TableCell sx={{ fontWeight: 700, color: '#047857', width: 180 }}>Режим ношения</TableCell>
-                                <TableCell sx={{ fontWeight: 700, color: '#047857', width: 50 }} align="center">Инфо (i)</TableCell>
-                                <TableCell sx={{ fontWeight: 700, color: '#047857', width: 50 }} align="center">Удалить</TableCell>
-                              </TableRow>
-                            </TableHead>
-                            <TableBody>
-                              {filteredO.map((o) => {
-                                const catItem = orthoticsCatalog.find(oc => oc.code === o.item_code);
-                                const isInternal = o.service_scope === 'internal';
-                                return (
-                                  <TableRow key={o.item_code} hover>
-                                    <TableCell>
-                                      <Typography variant="body2" sx={{ fontWeight: 700, color: '#0F172A' }}>
-                                        <LatexText text={o.name || catItem?.name || o.item_code} />
-                                      </Typography>
-                                      {o.subcategory && (
-                                        <Typography variant="caption" sx={{ color: '#059669', fontWeight: 600, display: 'block' }}>
-                                          Тип: {o.subcategory.toUpperCase()}
-                                        </Typography>
-                                      )}
-                                    </TableCell>
-                                    <TableCell>
-                                      <Chip
-                                        label={isInternal ? '🏥 ВНУТРЕННЯЯ' : '🌐 ВНЕШНЯЯ'}
-                                        size="small"
-                                        sx={{
-                                          fontWeight: 800,
-                                          fontSize: '0.68rem',
-                                          height: 22,
-                                          bgcolor: isInternal ? '#D1FAE5' : '#F1F5F9',
-                                          color: isInternal ? '#047857' : '#475569',
-                                          border: isInternal ? '1px solid #6EE7B7' : '1px solid #CBD5E1'
-                                        }}
-                                      />
-                                    </TableCell>
-                                    <TableCell>
-                                      <Select
-                                        size="small"
-                                        value={o.priority_level || (isInternal ? 'high' : 'medium')}
-                                        onChange={(e) => handleUpdateTreatmentPriority(o.item_code, 'orthotics', e.target.value)}
-                                        sx={{ fontSize: '0.75rem', fontWeight: 700, height: 30 }}
-                                      >
-                                        <MenuItem value="high">Tier 1: Высокий ⭐</MenuItem>
-                                        <MenuItem value="medium">Tier 2: Средний</MenuItem>
-                                        <MenuItem value="low">Tier 3: Низкий</MenuItem>
-                                      </Select>
-                                    </TableCell>
-                                    <TableCell>
-                                      {o.servdict_price ? (
-                                        <Chip
-                                          label={`${o.servdict_price.toLocaleString('ru-RU')} ₽ (в кассу)`}
-                                          size="small"
-                                          color="success"
-                                          variant="outlined"
-                                          sx={{ fontWeight: 800, fontSize: '0.72rem' }}
-                                        />
-                                      ) : (
-                                        <Typography variant="caption" color="text.secondary">
-                                          Внешнее направление
-                                        </Typography>
-                                      )}
-                                    </TableCell>
-                                    <TableCell>
-                                      <Typography variant="caption" sx={{ color: '#334155', fontWeight: 600 }}>
-                                        <LatexText text={o.dosage_or_regimen || o.regimen_standard || catItem?.dosage_or_regimen || 'По назначению врача'} />
-                                      </Typography>
-                                    </TableCell>
-                                    <TableCell align="center">
-                                      <IconButton
-                                        size="small"
-                                        color="info"
-                                        title="Подробный клинический регламент, методика и EBM"
-                                        onClick={() => {
-                                          setTreatmentModalItem((catItem as any) || (o as any));
-                                          setTreatmentModalCategory('orthotics');
-                                        }}
-                                      >
-                                        <InfoIcon fontSize="small" />
-                                      </IconButton>
-                                    </TableCell>
-                                    <TableCell align="center">
-                                      <IconButton
-                                        size="small"
-                                        color="error"
-                                        onClick={() => handleRemoveTreatmentItem(o.item_code, 'orthotics')}
-                                      >
-                                        <DeleteIcon fontSize="small" />
-                                      </IconButton>
-                                    </TableCell>
+                      // Split into tiers
+                      const stopItems = filteredO.filter(o => o.is_stop_warning === 1 || o.is_stop_warning === true || o.ebm_priority === 'P0-STOP' || o.ebm_priority === 'P0-CONTRA');
+                      const p1Items = filteredO.filter(o => o.ebm_priority === 'P1' && !(o.is_stop_warning === 1 || o.is_stop_warning === true));
+                      const p2Items = filteredO.filter(o => (o.ebm_priority === 'P2' || !o.ebm_priority) && !(o.is_stop_warning === 1 || o.is_stop_warning === true));
+                      const p3Items = filteredO.filter(o => o.ebm_priority === 'P3' && !(o.is_stop_warning === 1 || o.is_stop_warning === true));
+
+                      const renderOrthoticsTable = (items: TemplateTreatmentRelItem[], tierBadge: { label: string; color: string; bg: string; icon: string }) => {
+                        if (items.length === 0) return null;
+                        return (
+                          <Box sx={{ mb: 2 }}>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                              <Typography variant="subtitle2" sx={{ fontWeight: 800, color: tierBadge.color, textTransform: 'uppercase', letterSpacing: 0.5, display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                <span>{tierBadge.icon}</span> {tierBadge.label}
+                              </Typography>
+                              <Chip label={`${items.length}`} size="small" sx={{ bgcolor: tierBadge.bg, color: tierBadge.color, fontWeight: 900 }} />
+                            </Box>
+                            <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 2, borderColor: '#E2E8F0' }}>
+                              <Table size="small">
+                                <TableHead sx={{ bgcolor: '#F8FAFC' }}>
+                                  <TableRow>
+                                    <TableCell sx={{ fontWeight: 800, color: '#334155' }}>Ортопедическое изделие</TableCell>
+                                    <TableCell sx={{ fontWeight: 800, color: '#334155', width: 110 }}>ISO Класс</TableCell>
+                                    <TableCell sx={{ fontWeight: 800, color: '#334155', width: 140 }}>Осевая опора</TableCell>
+                                    <TableCell sx={{ fontWeight: 800, color: '#334155', width: 160 }}>Настройка шарнира</TableCell>
+                                    <TableCell sx={{ fontWeight: 800, color: '#334155' }}>Режим ношения</TableCell>
+                                    <TableCell sx={{ fontWeight: 800, color: '#334155', width: 130 }}>Прайс (касса)</TableCell>
+                                    <TableCell sx={{ fontWeight: 800, color: '#334155', width: 50 }} align="center">Инфо</TableCell>
+                                    <TableCell sx={{ fontWeight: 800, color: '#334155', width: 50 }} align="center">Удалить</TableCell>
                                   </TableRow>
-                                );
-                              })}
-                            </TableBody>
-                          </Table>
-                        </TableContainer>
+                                </TableHead>
+                                <TableBody>
+                                  {items.map((o) => {
+                                    const catItem = orthoticsCatalog.find(oc => oc.code === o.item_code);
+                                    const isInternal = o.service_scope === 'internal';
+                                    const isStop = o.is_stop_warning === 1 || o.is_stop_warning === true || o.ebm_priority === 'P0-STOP' || o.ebm_priority === 'P0-CONTRA';
+                                    const wb = getWeightBearingBadge(o.weight_bearing_mode);
+
+                                    return (
+                                      <TableRow key={o.item_code} hover sx={{ bgcolor: isStop ? '#FEF2F2' : undefined }}>
+                                        <TableCell>
+                                          <Typography variant="body2" sx={{ fontWeight: 700, color: isStop ? '#B91C1C' : '#0F172A' }}>
+                                            <LatexText text={o.name || catItem?.name || o.item_code} />
+                                          </Typography>
+                                          {isStop && o.stop_rationale && (
+                                            <Typography variant="caption" sx={{ color: '#DC2626', fontWeight: 700, display: 'block', mt: 0.25 }}>
+                                              🛑 Запрет: <LatexText text={o.stop_rationale} />
+                                            </Typography>
+                                          )}
+                                        </TableCell>
+                                        <TableCell>
+                                          <Chip
+                                            label={o.device_type_iso || o.subcategory?.toUpperCase() || 'FO'}
+                                            size="small"
+                                            sx={{
+                                              fontWeight: 900,
+                                              fontSize: '0.68rem',
+                                              height: 22,
+                                              bgcolor: '#EFF6FF',
+                                              color: '#1D4ED8',
+                                              border: '1px solid #BFDBFE'
+                                            }}
+                                          />
+                                        </TableCell>
+                                        <TableCell>
+                                          <Tooltip title={wb.fullTitle} arrow>
+                                            <Chip
+                                              label={`${wb.icon} ${wb.label}`}
+                                              size="small"
+                                              sx={{
+                                                fontWeight: 800,
+                                                fontSize: '0.68rem',
+                                                height: 22,
+                                                bgcolor: wb.bg,
+                                                color: wb.color,
+                                                border: `1px solid ${wb.border}`
+                                              }}
+                                            />
+                                          </Tooltip>
+                                        </TableCell>
+                                        <TableCell>
+                                          <Typography variant="caption" sx={{ fontWeight: 700, color: '#0369A1' }}>
+                                            <LatexText text={o.hinge_settings || 'Стандарт'} />
+                                          </Typography>
+                                        </TableCell>
+                                        <TableCell>
+                                          <Typography variant="caption" sx={{ color: '#334155', fontWeight: 600 }}>
+                                            <LatexText text={o.wearing_regimen || o.dosage_or_regimen || o.regimen_standard || catItem?.dosage_or_regimen || 'По назначению врача'} />
+                                          </Typography>
+                                        </TableCell>
+                                        <TableCell>
+                                          {o.servdict_price ? (
+                                            <Chip
+                                              label={`${o.servdict_price.toLocaleString('ru-RU')} ₽`}
+                                              size="small"
+                                              color="success"
+                                              variant="outlined"
+                                              sx={{ fontWeight: 800, fontSize: '0.72rem' }}
+                                            />
+                                          ) : (
+                                            <Typography variant="caption" color="text.secondary">
+                                              Внешнее
+                                            </Typography>
+                                          )}
+                                        </TableCell>
+                                        <TableCell align="center">
+                                          <IconButton
+                                            size="small"
+                                            color="info"
+                                            title="Подробный клинический регламент, методика и EBM"
+                                            onClick={() => {
+                                              setTreatmentModalItem((catItem as any) || (o as any));
+                                              setTreatmentModalCategory('orthotics');
+                                            }}
+                                          >
+                                            <InfoIcon fontSize="small" />
+                                          </IconButton>
+                                        </TableCell>
+                                        <TableCell align="center">
+                                          <IconButton
+                                            size="small"
+                                            color="error"
+                                            onClick={() => handleRemoveTreatmentItem(o.item_code, 'orthotics')}
+                                          >
+                                            <DeleteIcon fontSize="small" />
+                                          </IconButton>
+                                        </TableCell>
+                                      </TableRow>
+                                    );
+                                  })}
+                                </TableBody>
+                              </Table>
+                            </TableContainer>
+                          </Box>
+                        );
+                      };
+
+                      return (
+                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                          {stopItems.length > 0 && renderOrthoticsTable(stopItems, { label: 'P0-STOP: Ограничения безопасности и запреты', color: '#DC2626', bg: '#FEF2F2', icon: '🚨' })}
+                          {p1Items.length > 0 && renderOrthoticsTable(p1Items, { label: 'P1: Структурно-спасающая иммобилизация и обязательная разгрузка', color: '#DC2626', bg: '#FEF2F2', icon: '⭐' })}
+                          {p2Items.length > 0 && renderOrthoticsTable(p2Items, { label: 'P2: Функциональное ортезирование и коррекция оси', color: '#059669', bg: '#ECFDF5', icon: '🎯' })}
+                          {p3Items.length > 0 && renderOrthoticsTable(p3Items, { label: 'P3: Адаптивно-профилактическая поддержка и бандажи', color: '#0D9488', bg: '#F0FDFA', icon: '🔍' })}
+                        </Box>
+                      );
+                    })()}
+
+                    {/* Generator Box for Orthopedic Offloading Note */}
+                    {(() => {
+                      const allO = currentTemplate.orthotics || [];
+                      const nonStop = allO.filter(o => !(o.is_stop_warning === 1 || o.is_stop_warning === true || o.ebm_priority === 'P0-STOP' || o.ebm_priority === 'P0-CONTRA'));
+                      const stopW = allO.filter(o => o.is_stop_warning === 1 || o.is_stop_warning === true || o.ebm_priority === 'P0-STOP' || o.ebm_priority === 'P0-CONTRA');
+                      const wbMode = currentTemplate.orthotics_weight_bearing || (nonStop[0]?.weight_bearing_mode) || 'WBAT';
+                      const wbBadge = getWeightBearingBadge(wbMode);
+
+                      let noteLines = [`Режим осевой нагрузки: ${wbBadge.fullTitle}.`];
+                      if (currentTemplate.orthotics_has_stop === 1 || stopW.length > 0) {
+                        noteLines.push(`[CDSS Red Flag] ${currentTemplate.orthotics_stop_rationale || stopW[0]?.stop_rationale || 'Соблюдение запрета нерациональной нагрузки/иммобилизации.'}`);
+                      }
+                      if (nonStop.length > 0) {
+                        noteLines.push(`Назначенные ортопедические изделия:`);
+                        nonStop.forEach((o, i) => {
+                          const hinge = o.hinge_settings ? ` (шарнир: ${o.hinge_settings})` : '';
+                          const regimen = o.wearing_regimen || o.dosage_or_regimen ? ` — ${o.wearing_regimen || o.dosage_or_regimen}` : '';
+                          noteLines.push(`  ${i + 1}. [${o.ebm_priority || 'P2'}] ${o.name || o.item_code}${hinge}${regimen}`);
+                        });
+                      }
+                      const generatedText = noteLines.join('\n');
+
+                      return (
+                        <Paper variant="outlined" sx={{ p: 2, mt: 3, borderRadius: 2, bgcolor: '#F8FAFC', borderColor: '#CBD5E1' }}>
+                          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1, flexWrap: 'wrap', gap: 1 }}>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                              <BrainIcon sx={{ color: '#059669', fontSize: 20 }} />
+                              <Typography variant="subtitle2" sx={{ fontWeight: 800, color: '#0F3C64', textTransform: 'uppercase' }}>
+                                Генератор заключения по ортезированию и разгрузке (для медкарты)
+                              </Typography>
+                            </Box>
+                            <Button
+                              size="small"
+                              variant="outlined"
+                              startIcon={copiedOrthoProtocol ? <CheckCircleIcon sx={{ color: '#16A34A' }} /> : <ContentCopyIcon />}
+                              onClick={() => {
+                                navigator.clipboard.writeText(cleanLatexText(generatedText));
+                                setCopiedOrthoProtocol(true);
+                                setTimeout(() => setCopiedOrthoProtocol(false), 2500);
+                              }}
+                              sx={{
+                                textTransform: 'none',
+                                fontWeight: 700,
+                                borderColor: copiedOrthoProtocol ? '#16A34A' : '#CBD5E1',
+                                color: copiedOrthoProtocol ? '#16A34A' : '#334155'
+                              }}
+                            >
+                              {copiedOrthoProtocol ? 'Скопировано!' : 'Копировать регламент'}
+                            </Button>
+                          </Box>
+                          <Paper
+                            variant="outlined"
+                            sx={{
+                              p: 1.5,
+                              bgcolor: '#FFFFFF',
+                              borderRadius: 1.5,
+                              fontFamily: 'monospace',
+                              fontSize: '0.82rem',
+                              color: '#1E293B',
+                              whiteSpace: 'pre-wrap',
+                              lineHeight: 1.5
+                            }}
+                          >
+                            <LatexText text={generatedText} />
+                          </Paper>
+                        </Paper>
                       );
                     })()}
                   </Box>
@@ -5576,7 +5926,57 @@ export default function OrthoTemplatesManager() {
                                 }
                                 return res;
                               })(),
-                              ...(currentTemplate.orthotics || []).map(o => `- Ортезирование: ${o.name || o.item_code} (${o.dosage_or_regimen || 'по схеме'})`),
+                              ...(() => {
+                                const orthList = currentTemplate.orthotics || [];
+                                if (orthList.length === 0 && !currentTemplate.orthotics_weight_bearing) return [];
+                                const res: string[] = ['7. ОРТОПЕДИЧЕСКИЕ ИЗДЕЛИЯ, ОРТЕЗИРОВАНИЕ И РАЗГРУЗКА:'];
+                                if (currentTemplate.orthotics_weight_bearing) {
+                                  const wbMap: Record<string, string> = {
+                                    'NWB': '0% нагрузки (Non-Weight Bearing, строгий костыльный режим)',
+                                    'TTWB': '5-10% нагрузки (Toe-Touch Weight Bearing, прикосновение носком)',
+                                    'PWB': '20-50% нагрузки (Partial Weight Bearing, частичная разгрузка)',
+                                    'WBAT': 'Нагрузка по переносимости боли (Weight Bearing As Tolerated)',
+                                    'FWB': '100% полная нагрузка (Full Weight Bearing)',
+                                    'N/A': 'Не применимо к осевой нагрузке'
+                                  };
+                                  res.push(`  - Режим осевой нагрузки: ${wbMap[currentTemplate.orthotics_weight_bearing] || currentTemplate.orthotics_weight_bearing}`);
+                                }
+                                if (currentTemplate.orthotics_has_stop === 1 || currentTemplate.orthotics_stop_rationale) {
+                                  res.push(`  - [ВНИМАНИЕ! КЛИНИЧЕСКИЙ CDSS STOP]: ${currentTemplate.orthotics_stop_rationale || 'Иммобилизация противопоказана'}`);
+                                }
+                                const p1 = orthList.filter(o => o.ebm_priority === 'P1' && o.is_stop_warning !== 1);
+                                const p2 = orthList.filter(o => o.ebm_priority === 'P2' && o.is_stop_warning !== 1);
+                                const p3 = orthList.filter(o => (!o.ebm_priority || o.ebm_priority === 'P3') && o.is_stop_warning !== 1);
+
+                                if (p1.length > 0) {
+                                  res.push('  [Обязательное / Структуросберегающее ортезирование P1]:');
+                                  p1.forEach(o => {
+                                    const reg = o.wearing_regimen || o.dosage_or_regimen || 'Постоянное ношение при нагрузке';
+                                    const iso = o.device_type_iso ? ` [${o.device_type_iso}]` : '';
+                                    const hng = o.hinge_settings ? ` (Шарнир: ${o.hinge_settings})` : '';
+                                    res.push(`    - ${o.name || o.item_code}${iso}: ${reg}${hng}`);
+                                  });
+                                }
+                                if (p2.length > 0) {
+                                  res.push('  [Функциональная биомеханическая коррекция P2]:');
+                                  p2.forEach(o => {
+                                    const reg = o.wearing_regimen || o.dosage_or_regimen || 'Ношение при активности';
+                                    const iso = o.device_type_iso ? ` [${o.device_type_iso}]` : '';
+                                    const hng = o.hinge_settings ? ` (Шарнир: ${o.hinge_settings})` : '';
+                                    res.push(`    - ${o.name || o.item_code}${iso}: ${reg}${hng}`);
+                                  });
+                                }
+                                if (p3.length > 0) {
+                                  res.push('  [Профилактическое / Поддерживающее ортезирование P3]:');
+                                  p3.forEach(o => {
+                                    const reg = o.wearing_regimen || o.dosage_or_regimen || 'По потребности';
+                                    const iso = o.device_type_iso ? ` [${o.device_type_iso}]` : '';
+                                    const hng = o.hinge_settings ? ` (Шарнир: ${o.hinge_settings})` : '';
+                                    res.push(`    - ${o.name || o.item_code}${iso}: ${reg}${hng}`);
+                                  });
+                                }
+                                return res;
+                              })(),
                               '',
                               '8. ОБЩИЕ РЕКОМЕНДАЦИИ И РЕЖИМ:',
                               currentTemplate.recommendations_template || 'Охранительный двигательный режим.'
@@ -6281,27 +6681,151 @@ export default function OrthoTemplatesManager() {
                         })()}
 
                         {/* Orthotics Section */}
-                        {currentTemplate.orthotics && currentTemplate.orthotics.length > 0 && (
-                          <Box sx={{ mb: 1.5, p: 1.25, bgcolor: '#ECFDF5', border: '1px solid #A7F3D0', borderRadius: 1.5 }}>
-                            <Typography sx={{ fontWeight: 800, fontSize: '0.82rem', color: '#047857', textTransform: 'uppercase', mb: 0.75 }}>
-                              Ортопедические изделия, индивидуальное ортезирование и разгрузка:
-                            </Typography>
-                            {currentTemplate.orthotics.map((o, idx) => (
-                              <Box key={o.item_code} sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', py: 0.3, borderBottom: '1px dashed #D1FAE5' }}>
-                                <Typography sx={{ fontSize: '0.82rem', fontWeight: 600, color: '#1E293B' }}>
-                                  {idx + 1}. <LatexText text={o.name || o.item_code} /> — <span style={{ color: '#475569', fontWeight: 'normal' }}><LatexText text={o.dosage_or_regimen || 'Постоянное ношение при нагрузке'} /></span>
+                        {(() => {
+                          const orthList = currentTemplate.orthotics || [];
+                          if (orthList.length === 0 && !currentTemplate.orthotics_weight_bearing) return null;
+
+                          const stopItems = orthList.filter(o => o.is_stop_warning === 1 || o.ebm_priority === 'P0-STOP' || o.ebm_priority === 'P0-CONTRA');
+                          const p1Items = orthList.filter(o => o.ebm_priority === 'P1' && o.is_stop_warning !== 1);
+                          const p2Items = orthList.filter(o => o.ebm_priority === 'P2' && o.is_stop_warning !== 1);
+                          const p3Items = orthList.filter(o => (!o.ebm_priority || o.ebm_priority === 'P3') && o.is_stop_warning !== 1 && o.ebm_priority !== 'P0-STOP' && o.ebm_priority !== 'P0-CONTRA');
+
+                          return (
+                            <Box sx={{ mb: 1.5, p: 1.25, bgcolor: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: 1.5 }}>
+                              {/* Header & Badges */}
+                              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.75, flexWrap: 'wrap', gap: 0.5 }}>
+                                <Typography sx={{ fontWeight: 800, fontSize: '0.82rem', color: '#166534', textTransform: 'uppercase' }}>
+                                  7. Ортопедические изделия, индивидуальное ортезирование и разгрузка:
                                 </Typography>
-                                {o.servdict_price ? (
-                                  <Chip
-                                    label={`${o.servdict_price.toLocaleString('ru-RU')} ₽`}
-                                    size="small"
-                                    sx={{ fontSize: '0.68rem', height: 18, fontWeight: 800, bgcolor: '#D1FAE5', color: '#047857' }}
-                                  />
-                                ) : null}
+                                <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center' }}>
+                                  {currentTemplate.orthotics_weight_bearing && (
+                                    getWeightBearingBadge(currentTemplate.orthotics_weight_bearing)
+                                  )}
+                                  {currentTemplate.orthotics_priority && (
+                                    getOrthoticsPriorityBadge(currentTemplate.orthotics_priority)
+                                  )}
+                                </Box>
                               </Box>
-                            ))}
-                          </Box>
-                        )}
+
+                              {/* CDSS Red Flag / STOP alert banner */}
+                              {(currentTemplate.orthotics_has_stop === 1 || stopItems.length > 0) && (
+                                <Box sx={{ mb: 1, p: 1, bgcolor: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 1, display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+                                  <WarningAmberIcon sx={{ color: '#DC2626', fontSize: 18, mt: 0.2, flexShrink: 0 }} />
+                                  <Box>
+                                    <Typography sx={{ fontSize: '0.78rem', fontWeight: 800, color: '#991B1B' }}>
+                                      КЛИНИЧЕСКИЙ CDSS STOP / ПРЕДУПРЕЖДЕНИЕ:
+                                    </Typography>
+                                    <Typography sx={{ fontSize: '0.76rem', color: '#B91C1C', lineHeight: 1.35 }}>
+                                      {currentTemplate.orthotics_stop_rationale || stopItems[0]?.stop_rationale || 'Иммобилизация противопоказана или ограничена.'}
+                                    </Typography>
+                                  </Box>
+                                </Box>
+                              )}
+
+                              {/* P1 Section: Mandatory / Structural-Saving */}
+                              {p1Items.length > 0 && (
+                                <Box sx={{ mb: (p2Items.length > 0 || p3Items.length > 0) ? 1 : 0 }}>
+                                  <Typography sx={{ fontSize: '0.74rem', fontWeight: 800, color: '#DC2626', textTransform: 'uppercase', mb: 0.4 }}>
+                                    🛡️ Обязательное / Структуросберегающее ортезирование (P1):
+                                  </Typography>
+                                  {p1Items.map((o, idx) => (
+                                    <Box key={o.item_code} sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', py: 0.35, borderBottom: '1px dashed #DCFCE7' }}>
+                                      <Box sx={{ flex: 1, pr: 1 }}>
+                                        <Typography sx={{ fontSize: '0.82rem', fontWeight: 600, color: '#1E293B' }}>
+                                          {idx + 1}. <LatexText text={o.name || o.item_code} />
+                                          {o.device_type_iso && (
+                                            <Chip label={o.device_type_iso} size="small" sx={{ ml: 1, height: 16, fontSize: '0.62rem', fontWeight: 800, bgcolor: '#FEE2E2', color: '#991B1B' }} />
+                                          )}
+                                        </Typography>
+                                        <Typography sx={{ fontSize: '0.78rem', color: '#475569', mt: 0.2 }}>
+                                          <LatexText text={o.wearing_regimen || o.dosage_or_regimen || 'Постоянное ношение при осевой нагрузке'} />
+                                          {o.hinge_settings && (
+                                            <span style={{ color: '#059669', fontWeight: 600 }}> (Углы шарнира: {o.hinge_settings})</span>
+                                          )}
+                                        </Typography>
+                                      </Box>
+                                      {o.servdict_price ? (
+                                        <Chip
+                                          label={`${o.servdict_price.toLocaleString('ru-RU')} ₽`}
+                                          size="small"
+                                          sx={{ fontSize: '0.68rem', height: 18, fontWeight: 800, bgcolor: '#DCFCE7', color: '#15803D' }}
+                                        />
+                                      ) : null}
+                                    </Box>
+                                  ))}
+                                </Box>
+                              )}
+
+                              {/* P2 Section: Functional / Biomechanical */}
+                              {p2Items.length > 0 && (
+                                <Box sx={{ mb: p3Items.length > 0 ? 1 : 0 }}>
+                                  <Typography sx={{ fontSize: '0.74rem', fontWeight: 800, color: '#0284C7', textTransform: 'uppercase', mb: 0.4, mt: p1Items.length > 0 ? 0.8 : 0 }}>
+                                    🎯 Функциональная коррекция и разгрузка (P2):
+                                  </Typography>
+                                  {p2Items.map((o, idx) => (
+                                    <Box key={o.item_code} sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', py: 0.35, borderBottom: '1px dashed #DCFCE7' }}>
+                                      <Box sx={{ flex: 1, pr: 1 }}>
+                                        <Typography sx={{ fontSize: '0.82rem', fontWeight: 600, color: '#1E293B' }}>
+                                          {idx + 1}. <LatexText text={o.name || o.item_code} />
+                                          {o.device_type_iso && (
+                                            <Chip label={o.device_type_iso} size="small" sx={{ ml: 1, height: 16, fontSize: '0.62rem', fontWeight: 800, bgcolor: '#E0F2FE', color: '#0369A1' }} />
+                                          )}
+                                        </Typography>
+                                        <Typography sx={{ fontSize: '0.78rem', color: '#475569', mt: 0.2 }}>
+                                          <LatexText text={o.wearing_regimen || o.dosage_or_regimen || 'Ношение в период двигательной активности'} />
+                                          {o.hinge_settings && (
+                                            <span style={{ color: '#0284C7', fontWeight: 600 }}> (Углы шарнира: {o.hinge_settings})</span>
+                                          )}
+                                        </Typography>
+                                      </Box>
+                                      {o.servdict_price ? (
+                                        <Chip
+                                          label={`${o.servdict_price.toLocaleString('ru-RU')} ₽`}
+                                          size="small"
+                                          sx={{ fontSize: '0.68rem', height: 18, fontWeight: 800, bgcolor: '#DCFCE7', color: '#15803D' }}
+                                        />
+                                      ) : null}
+                                    </Box>
+                                  ))}
+                                </Box>
+                              )}
+
+                              {/* P3 Section: Prophylactic / Ergonomic */}
+                              {p3Items.length > 0 && (
+                                <Box>
+                                  <Typography sx={{ fontSize: '0.74rem', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', mb: 0.4, mt: (p1Items.length > 0 || p2Items.length > 0) ? 0.8 : 0 }}>
+                                    🌿 Профилактическое / Поддерживающее ортезирование (P3):
+                                  </Typography>
+                                  {p3Items.map((o, idx) => (
+                                    <Box key={o.item_code} sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', py: 0.35, borderBottom: '1px dashed #DCFCE7' }}>
+                                      <Box sx={{ flex: 1, pr: 1 }}>
+                                        <Typography sx={{ fontSize: '0.82rem', fontWeight: 600, color: '#1E293B' }}>
+                                          {idx + 1}. <LatexText text={o.name || o.item_code} />
+                                          {o.device_type_iso && (
+                                            <Chip label={o.device_type_iso} size="small" sx={{ ml: 1, height: 16, fontSize: '0.62rem', fontWeight: 800, bgcolor: '#F1F5F9', color: '#475569' }} />
+                                          )}
+                                        </Typography>
+                                        <Typography sx={{ fontSize: '0.78rem', color: '#475569', mt: 0.2 }}>
+                                          <LatexText text={o.wearing_regimen || o.dosage_or_regimen || 'По потребности'} />
+                                          {o.hinge_settings && (
+                                            <span style={{ color: '#475569', fontWeight: 600 }}> (Углы шарнира: {o.hinge_settings})</span>
+                                          )}
+                                        </Typography>
+                                      </Box>
+                                      {o.servdict_price ? (
+                                        <Chip
+                                          label={`${o.servdict_price.toLocaleString('ru-RU')} ₽`}
+                                          size="small"
+                                          sx={{ fontSize: '0.68rem', height: 18, fontWeight: 800, bgcolor: '#DCFCE7', color: '#15803D' }}
+                                        />
+                                      ) : null}
+                                    </Box>
+                                  ))}
+                                </Box>
+                              )}
+                            </Box>
+                          );
+                        })()}
 
                         {/* Financial Calculator Summary for internal services */}
                         {(() => {

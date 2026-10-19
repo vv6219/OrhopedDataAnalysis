@@ -1821,7 +1821,7 @@ router.get('/cdss/physio-blocks', (req, res) => {
 
 // 9.3. GET /api/ortho/templates/detailed - List templates with counts, cluster metadata & filters
 router.get('/templates/detailed', (req, res) => {
-  const { joint, search, cluster, with_details, only_custom, rom_priority, manipulations_priority } = req.query;
+  const { joint, search, cluster, with_details, only_custom, rom_priority, manipulations_priority, orthotics_priority, orthotics_weight_bearing } = req.query;
   let sql = `
     SELECT ot.*,
       (SELECT COUNT(*) FROM ortho_template_tests WHERE template_id = ot.id) AS tests_count,
@@ -1848,6 +1848,14 @@ router.get('/templates/detailed', (req, res) => {
   if (manipulations_priority && manipulations_priority !== 'all') {
     sql += ` AND ot.manipulations_priority = ?`;
     params.push(manipulations_priority);
+  }
+  if (orthotics_priority && orthotics_priority !== 'all') {
+    sql += ` AND ot.orthotics_priority = ?`;
+    params.push(orthotics_priority);
+  }
+  if (orthotics_weight_bearing && orthotics_weight_bearing !== 'all') {
+    sql += ` AND ot.orthotics_weight_bearing = ?`;
+    params.push(orthotics_weight_bearing);
   }
   if (only_custom === 'true' || only_custom === '1') {
     sql += ` AND ot.is_custom = 1`;
@@ -2085,6 +2093,9 @@ router.get('/templates/:id/full', (req, res) => {
         const orthSql = `
           SELECT oto.id, oto.orthotics_code, oto.dosage_or_regimen, oto.is_mandatory, oto.sort_order,
                  oto.priority_level, oto.service_scope,
+                 oto.ebm_priority, oto.weight_bearing_mode, oto.device_type_iso,
+                 oto.hinge_settings, oto.wearing_regimen, oto.is_stop_warning,
+                 oto.stop_rationale, oto.cdss_contraindication_tags,
                  oc.name, oc.subcategory, oc.target_joint, oc.description, oc.technique_details,
                  oc.regimen_standard, oc.patient_preparation, oc.post_procedure_care,
                  oc.clinical_indications, oc.contraindications, oc.servdict_id, oc.servdict_code,
@@ -2094,6 +2105,13 @@ router.get('/templates/:id/full', (req, res) => {
           LEFT JOIN servdict sd ON sd.id = oc.servdict_id
           WHERE oto.template_id = ?
           ORDER BY 
+            CASE 
+              WHEN oto.is_stop_warning = 1 OR oto.ebm_priority = 'P0-STOP' THEN 0
+              WHEN oto.ebm_priority = 'P1' THEN 1
+              WHEN oto.ebm_priority = 'P2' THEN 2
+              WHEN oto.ebm_priority = 'P3' THEN 3
+              ELSE 4
+            END ASC,
             CASE oto.priority_level WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 ELSE 4 END ASC,
             oto.sort_order ASC, oto.id ASC
         `;
@@ -2135,6 +2153,7 @@ router.post('/templates', (req, res) => {
     performed_manipulations_template, default_sections_mask,
     rom_norm_preset, rom_priority, rom_sftr_preview, rom_end_feel, rom_has_stop_warning,
     manipulations_priority, manipulations_summary, manipulations_has_stop, manipulations_stop_rationale,
+    orthotics_priority, orthotics_weight_bearing, orthotics_summary, orthotics_has_stop, orthotics_stop_rationale,
     recommendations_template, cluster_id, cluster_name,
     stage_or_severity, clinical_tags, tests = [], diagnostics = [],
     manipulations = [], physiotherapy = [], orthotics = []
@@ -2160,10 +2179,11 @@ router.post('/templates', (req, res) => {
       performed_manipulations_template, default_sections_mask,
       rom_norm_preset, rom_priority, rom_sftr_preview, rom_end_feel, rom_has_stop_warning,
       manipulations_priority, manipulations_summary, manipulations_has_stop, manipulations_stop_rationale,
+      orthotics_priority, orthotics_weight_bearing, orthotics_summary, orthotics_has_stop, orthotics_stop_rationale,
       recommendations_template, is_active, sort_order,
       cluster_id, cluster_name, stage_or_severity, clinical_tags,
       is_custom, author_doctor_name
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, ?, ?, ?, ?, ?, ?)
   `, [
     title, joint_name, default_mkb_code || null, rawJson, category || null,
     default_side || 'right', complaints_template || null, anamnesis_template || null,
@@ -2172,6 +2192,7 @@ router.post('/templates', (req, res) => {
     performed_manipulations_template || null, maskStr,
     romPresetStr || null, rom_priority || 'P2', rom_sftr_preview || '', rom_end_feel || '', rom_has_stop_warning ? 1 : 0,
     manipulations_priority || 'P2', manipulations_summary || '', manipulations_has_stop ? 1 : 0, manipulations_stop_rationale || '',
+    orthotics_priority || 'P2', orthotics_weight_bearing || 'WBAT', orthotics_summary || '', orthotics_has_stop ? 1 : 0, orthotics_stop_rationale || '',
     recommendations_template || null,
     cluster_id || null, cluster_name || null, stage_or_severity || null, tagsStr,
     isCustomVal, authorDoctorNameVal
@@ -2288,8 +2309,9 @@ router.post('/templates', (req, res) => {
     if (Array.isArray(orthotics) && orthotics.length > 0) {
       const oStmt = db.prepare(`
         INSERT INTO ortho_template_orthotics (
-          template_id, orthotics_code, dosage_or_regimen, is_mandatory, sort_order, priority_level, service_scope
-        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+          template_id, orthotics_code, dosage_or_regimen, is_mandatory, sort_order, priority_level, service_scope,
+          ebm_priority, weight_bearing_mode, device_type_iso, hinge_settings, wearing_regimen, is_stop_warning, stop_rationale, cdss_contraindication_tags
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
       orthotics.forEach((o, i) => {
         const scope = o.service_scope || 'internal';
@@ -2297,11 +2319,19 @@ router.post('/templates', (req, res) => {
         oStmt.run([
           newId,
           o.orthotics_code || o.code,
-          o.dosage_or_regimen || o.regimen || null,
+          o.dosage_or_regimen || o.regimen || o.wearing_regimen || null,
           o.is_mandatory ?? 1,
           i * 10,
           priority,
-          scope
+          scope,
+          o.ebm_priority || 'P2',
+          o.weight_bearing_mode || 'WBAT',
+          o.device_type_iso || 'FO',
+          o.hinge_settings || 'Стандарт',
+          o.wearing_regimen || o.dosage_or_regimen || 'По клиническому регламенту',
+          o.is_stop_warning ? 1 : 0,
+          o.stop_rationale || '',
+          JSON.stringify([o.device_type_iso, o.weight_bearing_mode, o.ebm_priority])
         ]);
       });
       oStmt.finalize();
@@ -2478,6 +2508,7 @@ router.put('/templates/:id', (req, res) => {
     performed_manipulations_template, default_sections_mask,
     rom_norm_preset, rom_priority, rom_sftr_preview, rom_end_feel, rom_has_stop_warning,
     manipulations_priority, manipulations_summary, manipulations_has_stop, manipulations_stop_rationale,
+    orthotics_priority, orthotics_weight_bearing, orthotics_summary, orthotics_has_stop, orthotics_stop_rationale,
     recommendations_template, cluster_id, cluster_name,
     stage_or_severity, clinical_tags, tests = [], diagnostics = [],
     manipulations = [], physiotherapy = [], orthotics = []
@@ -2513,6 +2544,11 @@ router.put('/templates/:id', (req, res) => {
       manipulations_summary = COALESCE(?, manipulations_summary),
       manipulations_has_stop = COALESCE(?, manipulations_has_stop),
       manipulations_stop_rationale = COALESCE(?, manipulations_stop_rationale),
+      orthotics_priority = COALESCE(?, orthotics_priority),
+      orthotics_weight_bearing = COALESCE(?, orthotics_weight_bearing),
+      orthotics_summary = COALESCE(?, orthotics_summary),
+      orthotics_has_stop = COALESCE(?, orthotics_has_stop),
+      orthotics_stop_rationale = COALESCE(?, orthotics_stop_rationale),
       recommendations_template = ?,
       cluster_id = COALESCE(?, cluster_id),
       cluster_name = COALESCE(?, cluster_name),
@@ -2526,6 +2562,7 @@ router.put('/templates/:id', (req, res) => {
     performed_manipulations_template, maskStr,
     romPresetStr, rom_priority || null, rom_sftr_preview || null, rom_end_feel || null, rom_has_stop_warning !== undefined ? (rom_has_stop_warning ? 1 : 0) : null,
     manipulations_priority || null, manipulations_summary || null, manipulations_has_stop !== undefined ? (manipulations_has_stop ? 1 : 0) : null, manipulations_stop_rationale || null,
+    orthotics_priority || null, orthotics_weight_bearing || null, orthotics_summary || null, orthotics_has_stop !== undefined ? (orthotics_has_stop ? 1 : 0) : null, orthotics_stop_rationale || null,
     recommendations_template,
     cluster_id || null, cluster_name || null, stage_or_severity || null, tagsStr,
     templateId
@@ -2650,8 +2687,9 @@ router.put('/templates/:id', (req, res) => {
       if (Array.isArray(orthotics) && orthotics.length > 0) {
         const oStmt = db.prepare(`
           INSERT INTO ortho_template_orthotics (
-            template_id, orthotics_code, dosage_or_regimen, is_mandatory, sort_order, priority_level, service_scope
-          ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            template_id, orthotics_code, dosage_or_regimen, is_mandatory, sort_order, priority_level, service_scope,
+            ebm_priority, weight_bearing_mode, device_type_iso, hinge_settings, wearing_regimen, is_stop_warning, stop_rationale, cdss_contraindication_tags
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `);
         orthotics.forEach((o, i) => {
           const scope = o.service_scope || 'internal';
@@ -2659,11 +2697,19 @@ router.put('/templates/:id', (req, res) => {
           oStmt.run([
             templateId,
             o.orthotics_code || o.code,
-            o.dosage_or_regimen || o.regimen || null,
+            o.dosage_or_regimen || o.regimen || o.wearing_regimen || null,
             o.is_mandatory ?? 1,
             i * 10,
             priority,
-            scope
+            scope,
+            o.ebm_priority || 'P2',
+            o.weight_bearing_mode || 'WBAT',
+            o.device_type_iso || 'FO',
+            o.hinge_settings || 'Стандарт',
+            o.wearing_regimen || o.dosage_or_regimen || 'По клиническому регламенту',
+            o.is_stop_warning ? 1 : 0,
+            o.stop_rationale || '',
+            JSON.stringify([o.device_type_iso, o.weight_bearing_mode, o.ebm_priority])
           ]);
         });
         oStmt.finalize();

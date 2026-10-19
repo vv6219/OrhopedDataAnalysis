@@ -206,7 +206,12 @@ function initOrthoSchema(db, callback) {
       "ALTER TABLE ortho_templates ADD COLUMN manipulations_priority TEXT DEFAULT 'P2'",
       "ALTER TABLE ortho_templates ADD COLUMN manipulations_summary TEXT DEFAULT ''",
       "ALTER TABLE ortho_templates ADD COLUMN manipulations_has_stop INTEGER DEFAULT 0",
-      "ALTER TABLE ortho_templates ADD COLUMN manipulations_stop_rationale TEXT DEFAULT ''"
+      "ALTER TABLE ortho_templates ADD COLUMN manipulations_stop_rationale TEXT DEFAULT ''",
+      "ALTER TABLE ortho_templates ADD COLUMN orthotics_priority TEXT DEFAULT 'P2'",
+      "ALTER TABLE ortho_templates ADD COLUMN orthotics_weight_bearing TEXT DEFAULT ''",
+      "ALTER TABLE ortho_templates ADD COLUMN orthotics_summary TEXT DEFAULT ''",
+      "ALTER TABLE ortho_templates ADD COLUMN orthotics_has_stop INTEGER DEFAULT 0",
+      "ALTER TABLE ortho_templates ADD COLUMN orthotics_stop_rationale TEXT DEFAULT ''"
     ];
     tmplCols.forEach((colSql) => {
       db.run(colSql, () => {});
@@ -216,6 +221,8 @@ function initOrthoSchema(db, callback) {
     db.run("CREATE INDEX IF NOT EXISTS idx_ot_rom_priority ON ortho_templates(rom_priority);");
     db.run("CREATE INDEX IF NOT EXISTS idx_ot_man_priority ON ortho_templates(manipulations_priority);");
     db.run("CREATE INDEX IF NOT EXISTS idx_ot_man_stop ON ortho_templates(manipulations_has_stop);");
+    db.run("CREATE INDEX IF NOT EXISTS idx_ot_ortho_priority ON ortho_templates(orthotics_priority);");
+    db.run("CREATE INDEX IF NOT EXISTS idx_ot_ortho_stop ON ortho_templates(orthotics_has_stop);");
 
     // 6.0. Clinical Clusters Classification (10 Master Clusters)
     db.run(`CREATE TABLE IF NOT EXISTS ortho_clusters (
@@ -605,11 +612,35 @@ function initOrthoSchema(db, callback) {
       sort_order INTEGER DEFAULT 0,
       priority_level TEXT DEFAULT 'high',
       service_scope TEXT DEFAULT 'internal',
+      ebm_priority TEXT DEFAULT 'P2',
+      weight_bearing_mode TEXT,
+      device_type_iso TEXT,
+      hinge_settings TEXT,
+      wearing_regimen TEXT,
+      is_stop_warning INTEGER DEFAULT 0,
+      stop_rationale TEXT,
+      cdss_contraindication_tags TEXT,
       FOREIGN KEY(template_id) REFERENCES ortho_templates(id) ON DELETE CASCADE,
       FOREIGN KEY(orthotics_code) REFERENCES ortho_orthotics_catalog(code) ON DELETE CASCADE
     )`);
     db.run("CREATE INDEX IF NOT EXISTS idx_oto_tmpl ON ortho_template_orthotics(template_id);");
     db.run("CREATE INDEX IF NOT EXISTS idx_oto_code ON ortho_template_orthotics(orthotics_code);");
+    db.run("CREATE INDEX IF NOT EXISTS idx_oto_ebm ON ortho_template_orthotics(ebm_priority);");
+    db.run("CREATE INDEX IF NOT EXISTS idx_oto_stop ON ortho_template_orthotics(is_stop_warning);");
+
+    const otoCols = [
+      "ALTER TABLE ortho_template_orthotics ADD COLUMN ebm_priority TEXT DEFAULT 'P2'",
+      "ALTER TABLE ortho_template_orthotics ADD COLUMN weight_bearing_mode TEXT",
+      "ALTER TABLE ortho_template_orthotics ADD COLUMN device_type_iso TEXT",
+      "ALTER TABLE ortho_template_orthotics ADD COLUMN hinge_settings TEXT",
+      "ALTER TABLE ortho_template_orthotics ADD COLUMN wearing_regimen TEXT",
+      "ALTER TABLE ortho_template_orthotics ADD COLUMN is_stop_warning INTEGER DEFAULT 0",
+      "ALTER TABLE ortho_template_orthotics ADD COLUMN stop_rationale TEXT",
+      "ALTER TABLE ortho_template_orthotics ADD COLUMN cdss_contraindication_tags TEXT"
+    ];
+    otoCols.forEach((colSql) => {
+      db.run(colSql, () => {});
+    });
 
     // Seed/sync 180 master clinical templates across clusters if not already populated
     db.get("SELECT COUNT(*) AS count FROM ortho_templates WHERE is_active = 1", (cntErr, row) => {
