@@ -211,7 +211,13 @@ function initOrthoSchema(db, callback) {
       "ALTER TABLE ortho_templates ADD COLUMN orthotics_weight_bearing TEXT DEFAULT ''",
       "ALTER TABLE ortho_templates ADD COLUMN orthotics_summary TEXT DEFAULT ''",
       "ALTER TABLE ortho_templates ADD COLUMN orthotics_has_stop INTEGER DEFAULT 0",
-      "ALTER TABLE ortho_templates ADD COLUMN orthotics_stop_rationale TEXT DEFAULT ''"
+      "ALTER TABLE ortho_templates ADD COLUMN orthotics_stop_rationale TEXT DEFAULT ''",
+      "ALTER TABLE ortho_templates ADD COLUMN lfk_priority TEXT DEFAULT 'P1'",
+      "ALTER TABLE ortho_templates ADD COLUMN lfk_has_stop INTEGER DEFAULT 0",
+      "ALTER TABLE ortho_templates ADD COLUMN lfk_stop_rationale TEXT DEFAULT ''",
+      "ALTER TABLE ortho_templates ADD COLUMN lfk_pain_monitoring_zone TEXT DEFAULT 'green'",
+      "ALTER TABLE ortho_templates ADD COLUMN lfk_target_goal TEXT DEFAULT ''",
+      "ALTER TABLE ortho_templates ADD COLUMN lfk_phases_summary TEXT DEFAULT ''"
     ];
     tmplCols.forEach((colSql) => {
       db.run(colSql, () => {});
@@ -223,6 +229,8 @@ function initOrthoSchema(db, callback) {
     db.run("CREATE INDEX IF NOT EXISTS idx_ot_man_stop ON ortho_templates(manipulations_has_stop);");
     db.run("CREATE INDEX IF NOT EXISTS idx_ot_ortho_priority ON ortho_templates(orthotics_priority);");
     db.run("CREATE INDEX IF NOT EXISTS idx_ot_ortho_stop ON ortho_templates(orthotics_has_stop);");
+    db.run("CREATE INDEX IF NOT EXISTS idx_ot_lfk_priority ON ortho_templates(lfk_priority);");
+    db.run("CREATE INDEX IF NOT EXISTS idx_ot_lfk_stop ON ortho_templates(lfk_has_stop);");
 
     // 6.0. Clinical Clusters Classification (10 Master Clusters)
     db.run(`CREATE TABLE IF NOT EXISTS ortho_clusters (
@@ -642,6 +650,85 @@ function initOrthoSchema(db, callback) {
       db.run(colSql, () => {});
     });
 
+    // 6.7. Kinesiotherapy & Therapeutic Physical Training Catalog (ЛФК)
+    db.run(`CREATE TABLE IF NOT EXISTS ortho_lfk_catalog (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      code TEXT UNIQUE NOT NULL,
+      name TEXT NOT NULL,
+      short_name TEXT,
+      exercise_type TEXT NOT NULL,
+      target_joint TEXT NOT NULL,
+      target_muscle_group TEXT,
+      kinetic_chain TEXT DEFAULT 'CKC',
+      default_phase TEXT DEFAULT 'Phase 1',
+      default_stage_step TEXT,
+      standard_dosage TEXT,
+      tempo_formula TEXT,
+      equipment_tags TEXT,
+      technique_description TEXT,
+      contraindications_notes TEXT,
+      servdict_id INTEGER,
+      is_active INTEGER DEFAULT 1,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (servdict_id) REFERENCES servdict(id) ON DELETE SET NULL
+    )`);
+    db.run("CREATE INDEX IF NOT EXISTS idx_lfk_joint ON ortho_lfk_catalog(target_joint);");
+    db.run("CREATE INDEX IF NOT EXISTS idx_lfk_type ON ortho_lfk_catalog(exercise_type);");
+    db.run("CREATE INDEX IF NOT EXISTS idx_lfk_chain ON ortho_lfk_catalog(kinetic_chain);");
+
+    db.run(`CREATE TABLE IF NOT EXISTS ortho_template_lfk (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      template_id INTEGER NOT NULL,
+      lfk_code TEXT NOT NULL,
+      phase_number INTEGER DEFAULT 1,
+      phase_name TEXT NOT NULL,
+      stage_step TEXT,
+      exercise_order INTEGER DEFAULT 0,
+      exercise_name_override TEXT,
+      dosage_prescription TEXT NOT NULL,
+      tempo_and_hold TEXT,
+      frequency_per_day TEXT,
+      biomechanical_goal TEXT,
+      ebm_priority TEXT DEFAULT 'P1',
+      pain_threshold_zone TEXT DEFAULT 'green',
+      kinetic_chain TEXT DEFAULT 'CKC',
+      safe_angle_range TEXT,
+      tags TEXT,
+      is_stop_warning INTEGER DEFAULT 0,
+      stop_rationale TEXT,
+      sort_order INTEGER DEFAULT 0,
+      FOREIGN KEY(template_id) REFERENCES ortho_templates(id) ON DELETE CASCADE,
+      FOREIGN KEY(lfk_code) REFERENCES ortho_lfk_catalog(code) ON DELETE CASCADE
+    )`);
+    db.run("CREATE INDEX IF NOT EXISTS idx_otl_tmpl ON ortho_template_lfk(template_id);");
+    db.run("CREATE INDEX IF NOT EXISTS idx_otl_code ON ortho_template_lfk(lfk_code);");
+    db.run("CREATE INDEX IF NOT EXISTS idx_otl_phase ON ortho_template_lfk(phase_number);");
+    db.run("CREATE INDEX IF NOT EXISTS idx_otl_ebm ON ortho_template_lfk(ebm_priority);");
+    db.run("CREATE INDEX IF NOT EXISTS idx_otl_stop ON ortho_template_lfk(is_stop_warning);");
+
+    const otlCols = [
+      "ALTER TABLE ortho_template_lfk ADD COLUMN phase_number INTEGER DEFAULT 1",
+      "ALTER TABLE ortho_template_lfk ADD COLUMN phase_name TEXT NOT NULL DEFAULT 'Фаза I'",
+      "ALTER TABLE ortho_template_lfk ADD COLUMN stage_step TEXT",
+      "ALTER TABLE ortho_template_lfk ADD COLUMN exercise_order INTEGER DEFAULT 0",
+      "ALTER TABLE ortho_template_lfk ADD COLUMN exercise_name_override TEXT",
+      "ALTER TABLE ortho_template_lfk ADD COLUMN dosage_prescription TEXT NOT NULL DEFAULT ''",
+      "ALTER TABLE ortho_template_lfk ADD COLUMN tempo_and_hold TEXT",
+      "ALTER TABLE ortho_template_lfk ADD COLUMN frequency_per_day TEXT",
+      "ALTER TABLE ortho_template_lfk ADD COLUMN biomechanical_goal TEXT",
+      "ALTER TABLE ortho_template_lfk ADD COLUMN ebm_priority TEXT DEFAULT 'P1'",
+      "ALTER TABLE ortho_template_lfk ADD COLUMN pain_threshold_zone TEXT DEFAULT 'green'",
+      "ALTER TABLE ortho_template_lfk ADD COLUMN kinetic_chain TEXT DEFAULT 'CKC'",
+      "ALTER TABLE ortho_template_lfk ADD COLUMN safe_angle_range TEXT",
+      "ALTER TABLE ortho_template_lfk ADD COLUMN tags TEXT",
+      "ALTER TABLE ortho_template_lfk ADD COLUMN is_stop_warning INTEGER DEFAULT 0",
+      "ALTER TABLE ortho_template_lfk ADD COLUMN stop_rationale TEXT",
+      "ALTER TABLE ortho_template_lfk ADD COLUMN sort_order INTEGER DEFAULT 0"
+    ];
+    otlCols.forEach((colSql) => {
+      db.run(colSql, () => {});
+    });
+
     // Seed/sync 180 master clinical templates across clusters if not already populated
     db.get("SELECT COUNT(*) AS count FROM ortho_templates WHERE is_active = 1", (cntErr, row) => {
       if (!cntErr && (!row || row.count < 180)) {
@@ -745,6 +832,116 @@ function initOrthoSchema(db, callback) {
             });
           }
         });
+      }
+    });
+
+    // -------------------------------------------------------------------------
+    // 8. Patient Referrals & Orders Subsystem (Направления пациентов)
+    // -------------------------------------------------------------------------
+    db.run(`CREATE TABLE IF NOT EXISTS ortho_referral_performers (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      short_name TEXT NOT NULL,
+      is_internal INTEGER NOT NULL DEFAULT 1,
+      performer_category TEXT NOT NULL,
+      organization_address TEXT,
+      contact_phone TEXT,
+      target_domains TEXT,
+      is_default INTEGER DEFAULT 0,
+      sort_order INTEGER DEFAULT 0,
+      is_active INTEGER DEFAULT 1,
+      created_at TEXT DEFAULT (datetime('now', 'localtime'))
+    );`);
+    db.run("CREATE INDEX IF NOT EXISTS idx_orp_internal ON ortho_referral_performers(is_internal);");
+    db.run("CREATE INDEX IF NOT EXISTS idx_orp_active ON ortho_referral_performers(is_active);");
+
+    db.run(`CREATE TABLE IF NOT EXISTS ortho_referrals (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      referral_number TEXT UNIQUE NOT NULL,
+      patient_id INTEGER NOT NULL,
+      appointment_id INTEGER,
+      protocol_id INTEGER,
+      doctor_name TEXT NOT NULL DEFAULT 'Добрушкин А.М',
+      issue_date TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+      valid_days INTEGER NOT NULL DEFAULT 90,
+      expires_at TEXT NOT NULL,
+      performer_id INTEGER NOT NULL,
+      performer_name TEXT NOT NULL,
+      performer_is_internal INTEGER NOT NULL DEFAULT 1,
+      performer_address TEXT,
+      icd10_code TEXT NOT NULL,
+      icd10_name TEXT,
+      clinical_diagnosis TEXT NOT NULL,
+      target_joint TEXT,
+      target_side TEXT,
+      anamnesis_summary TEXT,
+      preparation_instructions TEXT,
+      special_notes TEXT,
+      status TEXT NOT NULL DEFAULT 'issued',
+      verification_hash TEXT NOT NULL,
+      printed_count INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT (datetime('now', 'localtime')),
+      updated_at TEXT DEFAULT (datetime('now', 'localtime')),
+      FOREIGN KEY(performer_id) REFERENCES ortho_referral_performers(id),
+      FOREIGN KEY(patient_id) REFERENCES patients(id)
+    );`);
+    db.run("CREATE INDEX IF NOT EXISTS idx_ref_patient ON ortho_referrals(patient_id);");
+    db.run("CREATE INDEX IF NOT EXISTS idx_ref_status ON ortho_referrals(status);");
+    db.run("CREATE INDEX IF NOT EXISTS idx_ref_number ON ortho_referrals(referral_number);");
+    db.run("CREATE INDEX IF NOT EXISTS idx_ref_expires ON ortho_referrals(expires_at);");
+
+    db.run(`CREATE TABLE IF NOT EXISTS ortho_referral_items (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      referral_id INTEGER NOT NULL,
+      domain TEXT NOT NULL,
+      service_code TEXT,
+      item_title TEXT NOT NULL,
+      item_details TEXT,
+      formula_latex TEXT,
+      preparation_notes TEXT,
+      sort_order INTEGER DEFAULT 0,
+      FOREIGN KEY(referral_id) REFERENCES ortho_referrals(id) ON DELETE CASCADE
+    );`);
+    db.run("CREATE INDEX IF NOT EXISTS idx_ref_item_ref ON ortho_referral_items(referral_id);");
+    db.run("CREATE INDEX IF NOT EXISTS idx_ref_item_domain ON ortho_referral_items(domain);");
+
+    db.run(`CREATE TABLE IF NOT EXISTS ortho_referral_audit_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      referral_id INTEGER NOT NULL,
+      action_type TEXT NOT NULL,
+      performed_by_name TEXT NOT NULL DEFAULT 'Добрушкин А.М',
+      details_json TEXT,
+      created_at TEXT DEFAULT (datetime('now', 'localtime')),
+      FOREIGN KEY(referral_id) REFERENCES ortho_referrals(id) ON DELETE CASCADE
+    );`);
+    db.run("CREATE INDEX IF NOT EXISTS idx_ref_audit_ref ON ortho_referral_audit_log(referral_id);");
+
+    // Seed initial performers if table is empty
+    db.get("SELECT COUNT(*) AS pCount FROM ortho_referral_performers", (pErr, pRow) => {
+      if (!pErr && pRow && pRow.pCount === 0) {
+        console.log('[OrthoSchema] Seeding clinical performers into ortho_referral_performers...');
+        const initialPerformers = [
+          // Внутренние исполнители
+          ['Центр Ортопедии и Травматологии Добрушкина — Процедурный кабинет', 'Процедурный кабинет Центра', 1, 'clinic_procedure_room', 'г. Сочи, ул. Навагинская, д. 9Д', '+7 (862) 295-00-55', '["manipulation","surgery"]', 1, 10],
+          ['Центр Ортопедии и Травматологии Добрушкина — Отделение кинезиотерапии и ЛФК', 'Отделение ЛФК Центра', 1, 'rehab_department', 'г. Сочи, ул. Навагинская, д. 9Д', '+7 (862) 295-00-55', '["lfk"]', 0, 20],
+          ['Центр Ортопедии и Травматологии Добрушкина — Физиотерапевтический кабинет', 'Кабинет физиотерапии Центра', 1, 'physiotherapy', 'г. Сочи, ул. Навагинская, д. 9Д', '+7 (862) 295-00-55', '["physio"]', 0, 30],
+          ['Центр Ортопедии и Травматологии Добрушкина — Кабинет индивидуального ортезирования и подологии', 'Кабинет ортезирования Центра', 1, 'orthotics', 'г. Сочи, ул. Навагинская, д. 9Д', '+7 (862) 295-00-55', '["orthotics"]', 0, 40],
+          // Внешние исполнители
+          ['Любая аккредитованная организация лучевой диагностики (МРТ / КТ / Рентгенография) РФ', 'Внешний МРТ/КТ/Рентген центр', 0, 'mri_ct_center', 'По выбору пациента (РФ)', '—', '["diagnostics"]', 1, 50],
+          ['ГБ №4 г. Сочи — Травматолого-ортопедическое отделение', 'ГБ №4 г. Сочи (Стационар)', 0, 'hospital_surgery', 'г. Сочи, ул. Дагомысская, д. 42', '+7 (862) 261-42-12', '["surgery","manipulation"]', 0, 60],
+          ['Клинико-диагностическая лаборатория (по выбору пациента)', 'Внешняя КДЛ', 0, 'lab', 'По выбору пациента (РФ)', '—', '["diagnostics"]', 0, 70],
+          ['Федеральный научно-клинический центр травматологии и ортопедии', 'Федеральный центр травматологии', 0, 'hospital_surgery', 'РФ, специализированный стационар', '—', '["surgery","diagnostics"]', 0, 80]
+        ];
+
+        const stmt = db.prepare(`
+          INSERT INTO ortho_referral_performers 
+          (name, short_name, is_internal, performer_category, organization_address, contact_phone, target_domains, is_default, sort_order)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `);
+        initialPerformers.forEach((row) => {
+          stmt.run(row);
+        });
+        stmt.finalize();
       }
     });
 

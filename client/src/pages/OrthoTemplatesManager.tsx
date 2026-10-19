@@ -65,7 +65,10 @@ import {
   WarningAmber as WarningAmberIcon,
   Block as BlockIcon,
   Bolt as BoltIcon,
-  Lock as LockIcon
+  Lock as LockIcon,
+  DirectionsRun as RunIcon,
+  Speed as SpeedIcon,
+  AssignmentTurnedIn as ComplianceIcon
 } from '@mui/icons-material';
 import { useRef } from 'react';
 import { useReactToPrint } from 'react-to-print';
@@ -74,6 +77,12 @@ import DiagnosticMethodsCatalogManager from '../components/ortho/DiagnosticMetho
 import OrthopedicTestsCatalogManager from '../components/ortho/OrthopedicTestsCatalogManager';
 import DiagnosticMethodGuidanceModal from '../components/ortho/DiagnosticMethodGuidanceModal';
 import TreatmentGuidanceModal from '../components/ortho/TreatmentGuidanceModal';
+import RomStandardsManager from '../components/ortho/RomStandardsManager';
+import ManipulationsCatalogManager from '../components/ortho/ManipulationsCatalogManager';
+import PhysiotherapyCatalogManager from '../components/ortho/PhysiotherapyCatalogManager';
+import OrthoticsCatalogManager from '../components/ortho/OrthoticsCatalogManager';
+import LfkCatalogManager from '../components/ortho/LfkCatalogManager';
+import ClinicalGuidanceModal, { type ClinicalGuideSection } from '../components/ortho/ClinicalGuidanceModal';
 import type { TreatmentItem, TreatmentCategory } from '../components/ortho/TreatmentGuidanceModal';
 import LatexText, { cleanLatexText } from '../components/ortho/LatexText';
 
@@ -102,6 +111,19 @@ export interface TreatmentCatalogItem {
   apparatus_examples?: string;
   biophysical_profile?: string;
   cdss_contraindication_tags?: string;
+  anatomical_access?: string | null;
+  navigation_type?: 'us_guided' | 'c_arm' | 'landmark' | 'none' | string;
+  drug_class?: string | null;
+  is_stop_warning?: number | boolean;
+  stop_rationale?: string | null;
+  weight_bearing_mode?: 'NWB' | 'TTWB' | 'PWB' | 'WBAT' | 'FWB' | 'N/A' | string;
+  device_type_iso?: string | null;
+  hinge_settings?: string | null;
+  wearing_regimen?: string | null;
+  kinetic_chain?: string | null;
+  target_muscle_group?: string | null;
+  tempo_formula?: string | null;
+  phase_number?: number | null;
 }
 
 export interface TemplateTreatmentRelItem {
@@ -144,6 +166,40 @@ export interface TemplateTreatmentRelItem {
   apparatus_examples?: string;
   biophysical_profile?: string;
   cdss_contraindication_tags?: string;
+}
+
+export interface TemplateLfkItem {
+  id?: number;
+  template_id?: number;
+  lfk_code: string;
+  phase_number: number;
+  phase_name: string;
+  stage_step?: string;
+  exercise_order?: number;
+  exercise_name_override?: string;
+  dosage_prescription: string;
+  tempo_and_hold?: string;
+  frequency_per_day?: string;
+  biomechanical_goal?: string;
+  ebm_priority?: string;
+  pain_threshold_zone?: 'green' | 'yellow' | 'red' | string;
+  kinetic_chain?: string;
+  safe_angle_range?: string;
+  tags?: string;
+  is_stop_warning?: number;
+  stop_rationale?: string;
+  sort_order?: number;
+  name?: string;
+  short_name?: string;
+  exercise_type?: string;
+  target_joint?: string;
+  target_muscle_group?: string;
+  default_stage_step?: string;
+  standard_dosage?: string;
+  tempo_formula?: string;
+  equipment_tags?: string;
+  technique_description?: string;
+  contraindications_notes?: string;
 }
 
 interface OrthoTestCatalogItem {
@@ -283,41 +339,27 @@ const DIAG_PRIORITY_TIERS = [
   { key: 'low', label: 'Tier 3: Низкий (Экспертный / Предоперационный)', short: 'Tier 3: Экспертный', color: '#2563EB', bg: '#EFF6FF', border: '#93C5FD' }
 ];
 
-export interface RomAxisDef {
-  key: string;
-  labelRu: string;
-  labelLat: string;
-  normMin: number;
-  normMax: number;
-  unit: string;
-  normText: string;
-  isDeficit?: boolean;
-  clinicalNote?: string;
-  priority?: 'P1' | 'P2' | 'P3' | 'P0-STOP' | string;
-  cutoff_condition?: string;
-}
+import {
+  ROM_CONFIGS,
+  END_FEEL_OPTIONS,
+  getRomPriorityBadge,
+  resolveRomConfig,
+  evaluateRomAxisStatus,
+  JointRomConfig,
+  RomAxisDef
+} from '../components/ortho/romStandardsData';
+import type { RomAxisDef as RomAxisDefType, JointRomConfig as JointRomConfigType } from '../components/ortho/romStandardsData';
 
-export const END_FEEL_OPTIONS = [
-  { code: 'EF_BONY', label: 'Костный', sub: 'Hard bony', icon: '🦴', color: '#475569', desc: 'Твердый упор («кость о кость»). Остеофиты артроза, анкилоз.' },
-  { code: 'EF_CAPS', label: 'Капсульный', sub: 'Firm leathery', icon: '🛡️', color: '#D97706', desc: 'Плотное капсулярное натяжение. Адгезивный капсулит, фиброз, артроз.' },
-  { code: 'EF_SPRING', label: 'Пружинящий', sub: 'Springy rebound', icon: '🌀', color: '#EA580C', desc: 'Упругий блок. Блокада мениска («ручка лейки»), свободное тело, Кёниг.' },
-  { code: 'EF_SPASM', label: 'Мышечный дефанс', sub: 'Muscle spasm', icon: '⚡', color: '#DC2626', desc: 'Рефлекторная остановка движения спазмированными мышцами от острой боли.' },
-  { code: 'EF_EMPTY', label: '«Пустой» упор', sub: 'Empty pain', icon: '⚠️', color: '#9333EA', desc: 'Движение прервано пациентом из-за резкой боли до достижения упора.' },
-  { code: 'EF_MUSHI', label: 'Ватный упор', sub: 'Soft / Mushy', icon: '🌊', color: '#0284C7', desc: 'Отсутствие конечной точки упора при стресс-пробе. Полный разрыв связок.' }
-];
-
-export function getRomPriorityBadge(priority?: string): { label: string; bg: string; color: string; border: string } {
-  switch (priority) {
-    case 'P0-STOP':
-      return { label: '🚨 P0-STOP Ограничение', bg: '#FEF2F2', color: '#DC2626', border: '#FCA5A5' };
-    case 'P1':
-      return { label: '⭐ P1 Критический', bg: '#FEF2F2', color: '#DC2626', border: '#FCA5A5' };
-    case 'P3':
-      return { label: '🔍 P3 Дифференциал', bg: '#F0FDFA', color: '#0D9488', border: '#99F6E4' };
-    default:
-      return { label: '🎯 P2 Функция', bg: '#F0F9FF', color: '#0284C7', border: '#BAE6FD' };
-  }
-}
+export {
+  ROM_CONFIGS,
+  END_FEEL_OPTIONS,
+  getRomPriorityBadge,
+  resolveRomConfig,
+  evaluateRomAxisStatus,
+  JointRomConfig,
+  RomAxisDef
+};
+export type { RomAxisDefType, JointRomConfigType };
 
 export function getManipPriorityBadge(priority?: string): { label: string; bg: string; color: string; border: string; icon: string } {
   switch (priority) {
@@ -363,210 +405,76 @@ export function getWeightBearingBadge(mode?: string): { label: string; fullTitle
   }
 }
 
-export interface JointRomConfig {
-  category: string;
-  titleRu: string;
-  titleLat: string;
-  iconColor: string;
-  axes: RomAxisDef[];
-  defaultNorm: Record<string, any>;
-  defaultMild: Record<string, any>;
-  defaultSevere: Record<string, any>;
+export function getLfkPriorityBadge(priority?: string): { label: string; code: string; bg: string; color: string; border: string; icon: string } {
+  switch (priority) {
+    case 'P0-STOP':
+      return { label: 'P0-STOP КАТЕГОРИЧЕСКИЙ ЗАПРЕТ ЛФК / ИММОБИЛИЗАЦИЯ', code: 'P0-STOP', bg: '#FEF2F2', color: '#DC2626', border: '#FCA5A5', icon: '🚨' };
+    case 'P1':
+      return { label: 'P1 ПАТОГЕНЕТИЧЕСКИЙ МАКСИМУМ (CORE REHAB)', code: 'P1', bg: '#ECFDF5', color: '#047857', border: '#A7F3D0', icon: '⭐' };
+    case 'P3':
+      return { label: 'P3 ДРЕНАЖ И ЛИМФООТТОК / АДАПТИВНАЯ ГИМНАСТИКА', code: 'P3', bg: '#F0FDFA', color: '#0D9488', border: '#99F6E4', icon: '🔍' };
+    default:
+      return { label: 'P2 ВОССТАНОВИТЕЛЬНАЯ КИНЕЗИОТЕРАПИЯ', code: 'P2', bg: '#F0F9FF', color: '#0284C7', border: '#BAE6FD', icon: '🎯' };
+  }
 }
 
-export const ROM_CONFIGS: Record<string, JointRomConfig> = {
-  knee: {
-    category: 'knee',
-    titleRu: 'Коленный сустав',
-    titleLat: 'Articulatio genus',
-    iconColor: '#0284C7',
-    axes: [
-      { key: 'flexion_active', labelRu: 'Активное сгибание', labelLat: 'Flexio activa', normMin: 130, normMax: 145, unit: '°', normText: '130°–145°', clinicalNote: 'Функциональный предел активной флексии' },
-      { key: 'flexion_passive', labelRu: 'Пассивное сгибание', labelLat: 'Flexio passiva', normMin: 140, normMax: 150, unit: '°', normText: '140°–150°', clinicalNote: 'Тест мягкотканого упора в крайних углах' },
-      { key: 'extension_deficit', labelRu: 'Дефицит разгибания', labelLat: 'Deficit extensionis', normMin: 0, normMax: 0, unit: '°', normText: '0° (норма)', isDeficit: true, clinicalNote: 'Маркер сгибательной контрактуры или блока мениска' }
-    ],
-    defaultNorm: { flexion_active: 135, flexion_passive: 140, extension_deficit: 0 },
-    defaultMild: { flexion_active: 120, flexion_passive: 125, extension_deficit: 0 },
-    defaultSevere: { flexion_active: 90, flexion_passive: 95, extension_deficit: 15 }
-  },
-  shoulder: {
-    category: 'shoulder',
-    titleRu: 'Плечевой сустав и пояс',
-    titleLat: 'Articulatio humeri',
-    iconColor: '#9333EA',
-    axes: [
-      { key: 'abduction', labelRu: 'Отведение во фронтальной пл.', labelLat: 'Abductio', normMin: 160, normMax: 180, unit: '°', normText: '160°–180°', clinicalNote: 'Болезненная дуга Дауборна 70°–120°' },
-      { key: 'flexion_active', labelRu: 'Элевация / Сгибание вперед', labelLat: 'Anteversio / Elevatio', normMin: 160, normMax: 180, unit: '°', normText: '160°–180°', clinicalNote: 'Лопаточно-плечевой ритм' },
-      { key: 'external_rotation', labelRu: 'Наружная ротация', labelLat: 'Rotatio externa', normMin: 60, normMax: 90, unit: '°', normText: '60°–90°', clinicalNote: 'Ранний маркер замороженного плеча / манжеты' },
-      { key: 'internal_rotation', labelRu: 'Внутренняя ротация', labelLat: 'Rotatio interna', normMin: 60, normMax: 80, unit: '°', normText: '60°–80°', clinicalNote: 'Ориентир: заведение кисти за спину до Th7–Th10' },
-      { key: 'extension_deficit', labelRu: 'Ретракция / Дефицит', labelLat: 'Deficit extensionis', normMin: 0, normMax: 10, unit: '°', normText: '0°–10°', isDeficit: true, clinicalNote: 'Капсулярная ретракция заднего отдела' }
-    ],
-    defaultNorm: { abduction: 170, flexion_active: 170, external_rotation: 75, internal_rotation: 75, extension_deficit: 0 },
-    defaultMild: { abduction: 150, flexion_active: 160, external_rotation: 65, internal_rotation: 65, extension_deficit: 0 },
-    defaultSevere: { abduction: 75, flexion_active: 85, external_rotation: 15, internal_rotation: 25, extension_deficit: 20 }
-  },
-  hip: {
-    category: 'hip',
-    titleRu: 'Тазобедренный сустав',
-    titleLat: 'Articulatio coxae',
-    iconColor: '#16A34A',
-    axes: [
-      { key: 'flexion_active', labelRu: 'Сгибание бедра', labelLat: 'Flexio', normMin: 115, normMax: 125, unit: '°', normText: '115°–125°', clinicalNote: 'Сгибание до контакта бедра с животом' },
-      { key: 'abduction', labelRu: 'Отведение бедра', labelLat: 'Abductio', normMin: 40, normMax: 45, unit: '°', normText: '40°–45°', clinicalNote: 'Амплитуда отведения при фиксированном тазе' },
-      { key: 'internal_rotation', labelRu: 'Внутренняя ротация (артроз)', labelLat: 'Rotatio interna', normMin: 30, normMax: 35, unit: '°', normText: '30°–35°', clinicalNote: 'Главный ранний маркер коксартроза / FAI!' },
-      { key: 'external_rotation', labelRu: 'Наружная ротация', labelLat: 'Rotatio externa', normMin: 40, normMax: 45, unit: '°', normText: '40°–45°', clinicalNote: 'Ротация бедра наружу при сгибании 90°' },
-      { key: 'extension_deficit', labelRu: 'Дефицит разгибания', labelLat: 'Deficit extensionis', normMin: 0, normMax: 0, unit: '°', normText: '0° (норма)', isDeficit: true, clinicalNote: 'Сгибательная контрактура бедра (тест Томаса)' }
-    ],
-    defaultNorm: { flexion_active: 120, abduction: 45, internal_rotation: 35, external_rotation: 45, extension_deficit: 0 },
-    defaultMild: { flexion_active: 110, abduction: 35, internal_rotation: 20, external_rotation: 35, extension_deficit: 0 },
-    defaultSevere: { flexion_active: 70, abduction: 15, internal_rotation: 5, external_rotation: 15, extension_deficit: 15 }
-  },
-  ankle: {
-    category: 'ankle',
-    titleRu: 'Голеностопный сустав и стопа',
-    titleLat: 'Articulatio talocruralis',
-    iconColor: '#0D9488',
-    axes: [
-      { key: 'dorsal_flexion', labelRu: 'Тыльное сгибание (дорсифлексия)', labelLat: 'Dorsiflexio', normMin: 20, normMax: 25, unit: '°', normText: '20°–25°', clinicalNote: 'Ограничено при ригидности ахиллова сухожилия' },
-      { key: 'plantar_flexion', labelRu: 'Подошвенное сгибание', labelLat: 'Plantarflexio', normMin: 45, normMax: 50, unit: '°', normText: '45°–50°', clinicalNote: 'Функция икроножно-камбаловидного комплекса' },
-      { key: 'supination', labelRu: 'Супинация / Инверсия стопы', labelLat: 'Supinatio / Inversio', normMin: 30, normMax: 35, unit: '°', normText: '30°–35°', clinicalNote: 'Амплитуда подтаранного сустава' },
-      { key: 'pronation', labelRu: 'Пронация / Эверсия стопы', labelLat: 'Pronatio / Eversio', normMin: 15, normMax: 20, unit: '°', normText: '15°–20°', clinicalNote: 'Стабильность малоберцовых сухожилий' }
-    ],
-    defaultNorm: { dorsal_flexion: 20, plantar_flexion: 45, supination: 30, pronation: 15 },
-    defaultMild: { dorsal_flexion: 15, plantar_flexion: 40, supination: 25, pronation: 15 },
-    defaultSevere: { dorsal_flexion: 5, plantar_flexion: 20, supination: 10, pronation: 8 }
-  },
-  foot_mtp: {
-    category: 'foot_mtp',
-    titleRu: 'I плюснефаланговый сустав и стопа',
-    titleLat: 'Articulatio metatarsophalangea I',
-    iconColor: '#059669',
-    axes: [
-      { key: 'mtp1_dorsiflexion', labelRu: 'Разгибание I ПФС (I палец)', labelLat: 'Extensio MTP-1', normMin: 65, normMax: 70, unit: '°', normText: '65°–70°', clinicalNote: 'Критично при Hallux Valgus / Hallux Rigidus / Подагре' },
-      { key: 'mtp1_plantarflexion', labelRu: 'Сгибание I ПФС', labelLat: 'Flexio MTP-1', normMin: 35, normMax: 45, unit: '°', normText: '35°–45°', clinicalNote: 'Функция короткого сгибателя большого пальца' },
-      { key: 'dorsal_flexion', labelRu: 'Тыльное сгибание голеностопа', labelLat: 'Dorsiflexio', normMin: 20, normMax: 25, unit: '°', normText: '20°–25°', clinicalNote: 'Общая дорсифлексия стопы' },
-      { key: 'plantar_flexion', labelRu: 'Подошвенное сгибание', labelLat: 'Plantarflexio', normMin: 45, normMax: 50, unit: '°', normText: '45°–50°', clinicalNote: 'Толчковая фаза шага' }
-    ],
-    defaultNorm: { mtp1_dorsiflexion: 65, mtp1_plantarflexion: 35, dorsal_flexion: 20, plantar_flexion: 45 },
-    defaultMild: { mtp1_dorsiflexion: 40, mtp1_plantarflexion: 25, dorsal_flexion: 15, plantar_flexion: 40 },
-    defaultSevere: { mtp1_dorsiflexion: 20, mtp1_plantarflexion: 15, dorsal_flexion: 10, plantar_flexion: 30 }
-  },
-  elbow: {
-    category: 'elbow',
-    titleRu: 'Локтевой сустав',
-    titleLat: 'Articulatio cubiti',
-    iconColor: '#EA580C',
-    axes: [
-      { key: 'flexion_active', labelRu: 'Сгибание в локтевом суставе', labelLat: 'Flexio', normMin: 140, normMax: 150, unit: '°', normText: '140°–150°', clinicalNote: 'Рабочая амплитуда самообслуживания (≥120°)' },
-      { key: 'extension_deficit', labelRu: 'Дефицит разгибания', labelLat: 'Deficit extensionis', normMin: 0, normMax: 0, unit: '°', normText: '0° (норма)', isDeficit: true, clinicalNote: 'Посттравматическая сгибательная контрактура' },
-      { key: 'supination', labelRu: 'Супинация предплечья', labelLat: 'Supinatio', normMin: 85, normMax: 90, unit: '°', normText: '85°–90°', clinicalNote: 'Ротация ладонью вверх' },
-      { key: 'pronation', labelRu: 'Пронация предплечья', labelLat: 'Pronatio', normMin: 85, normMax: 90, unit: '°', normText: '85°–90°', clinicalNote: 'Ротация ладонью вниз' }
-    ],
-    defaultNorm: { flexion_active: 145, extension_deficit: 0, supination: 85, pronation: 85 },
-    defaultMild: { flexion_active: 135, extension_deficit: 0, supination: 85, pronation: 85 },
-    defaultSevere: { flexion_active: 105, extension_deficit: 15, supination: 65, pronation: 70 }
-  },
-  wrist: {
-    category: 'wrist',
-    titleRu: 'Лучезапястный сустав и кисть',
-    titleLat: 'Articulatio radiocarpalis',
-    iconColor: '#DB2777',
-    axes: [
-      { key: 'palmar_flexion', labelRu: 'Ладонное сгибание', labelLat: 'Palmarflexio', normMin: 70, normMax: 80, unit: '°', normText: '70°–80°', clinicalNote: 'Провокация Фалена при карпальном синдроме' },
-      { key: 'dorsal_flexion', labelRu: 'Тыльное разгибание', labelLat: 'Dorsiflexio', normMin: 65, normMax: 75, unit: '°', normText: '65°–75°', clinicalNote: 'Необходимо для сильного захвата кисти' },
-      { key: 'radial_deviation', labelRu: 'Лучевое отведение', labelLat: 'Deviatio radialis', normMin: 20, normMax: 25, unit: '°', normText: '20°–25°', clinicalNote: 'Отвод кисти в сторону I пальца' },
-      { key: 'ulnar_deviation', labelRu: 'Локтевое отведение', labelLat: 'Deviatio ulnaris', normMin: 30, normMax: 35, unit: '°', normText: '30°–35°', clinicalNote: 'Провокация де Кервена (тест Финкельштейна)' }
-    ],
-    defaultNorm: { palmar_flexion: 75, dorsal_flexion: 70, radial_deviation: 20, ulnar_deviation: 30 },
-    defaultMild: { palmar_flexion: 65, dorsal_flexion: 60, radial_deviation: 20, ulnar_deviation: 25 },
-    defaultSevere: { palmar_flexion: 45, dorsal_flexion: 45, radial_deviation: 15, ulnar_deviation: 20 }
-  },
-  spine: {
-    category: 'spine',
-    titleRu: 'Позвоночный столб',
-    titleLat: 'Columna vertebralis',
-    iconColor: '#475569',
-    axes: [
-      { key: 'schober_cm', labelRu: 'Проба Шобера (прирост длины)', labelLat: 'Schober index', normMin: 5.0, normMax: 7.0, unit: 'см', normText: '≥ 5.0 см', clinicalNote: 'Критерий анкилозирующего спондилита (болезнь Бехтерева)' },
-      { key: 'lumbar_flexion', labelRu: 'Сгибание поясницы (Flexio)', labelLat: 'Flexio lumbalis', normMin: 80, normMax: 90, unit: '°', normText: '80°–90°', clinicalNote: 'Расстояние пальцы-пол (норма: 0–5 см)' },
-      { key: 'lumbar_extension', labelRu: 'Разгибание (Extensio)', labelLat: 'Extensio', normMin: 25, normMax: 30, unit: '°', normText: '25°–30°', clinicalNote: 'Ограничено при фасеточном синдроме' },
-      { key: 'lateral_flexion_left', labelRu: 'Боковой наклон влево', labelLat: 'Lateroflexio sin.', normMin: 25, normMax: 35, unit: '°', normText: '25°–35°', clinicalNote: 'Фронтальная подвижность' },
-      { key: 'lateral_flexion_right', labelRu: 'Боковой наклон вправо', labelLat: 'Lateroflexio dex.', normMin: 25, normMax: 35, unit: '°', normText: '25°–35°', clinicalNote: 'Фронтальная подвижность' },
-      { key: 'cervical_flexion', labelRu: 'Сгибание шейного отдела', labelLat: 'Flexio cervicalis', normMin: 40, normMax: 45, unit: '°', normText: '40°–45°', clinicalNote: 'Расстояние подбородок-грудина (норма: 0 см)' },
-      { key: 'cervical_rotation', labelRu: 'Ротация шейного отдела', labelLat: 'Rotatio cervicalis', normMin: 70, normMax: 80, unit: '°', normText: '70°–80°', clinicalNote: 'Поворот головы в каждую сторону' }
-    ],
-    defaultNorm: { schober_cm: 5.0, lumbar_flexion: 85, lumbar_extension: 25, lateral_flexion_left: 30, lateral_flexion_right: 30, cervical_flexion: 45, cervical_rotation: 75 },
-    defaultMild: { schober_cm: 4.0, lumbar_flexion: 70, lumbar_extension: 15, lateral_flexion_left: 20, lateral_flexion_right: 20, cervical_flexion: 35, cervical_rotation: 60 },
-    defaultSevere: { schober_cm: 2.0, lumbar_flexion: 35, lumbar_extension: 5, lateral_flexion_left: 10, lateral_flexion_right: 10, cervical_flexion: 20, cervical_rotation: 30 }
-  },
-  systemic_hypermobile: {
-    category: 'systemic_hypermobile',
-    titleRu: 'Гипермобильность суставов',
-    titleLat: 'Hypermobilitas articularis',
-    iconColor: '#7C3AED',
-    axes: [
-      { key: 'beighton_score', labelRu: 'Шкала Бейтона (баллы)', labelLat: 'Beighton score', normMin: 0, normMax: 3, unit: 'баллов', normText: '0–3 баллов', clinicalNote: '≥ 4 баллов указывает на генерализованную гипермобильность' },
-      { key: 'knee_hyperextension', labelRu: 'Переразгибание коленей', labelLat: 'Genu recurvatum', normMin: 0, normMax: 0, unit: '°', normText: '0° (гипер >10°)', isDeficit: true, clinicalNote: 'Рекурвация коленных суставов' },
-      { key: 'elbow_hyperextension', labelRu: 'Переразгибание локтей', labelLat: 'Cubitus recurvatus', normMin: 0, normMax: 0, unit: '°', normText: '0° (гипер >10°)', isDeficit: true, clinicalNote: 'Рекурвация локтевых суставов' }
-    ],
-    defaultNorm: { beighton_score: 1, knee_hyperextension: 0, elbow_hyperextension: 0 },
-    defaultMild: { beighton_score: 4, knee_hyperextension: 5, elbow_hyperextension: 5 },
-    defaultSevere: { beighton_score: 8, knee_hyperextension: 15, elbow_hyperextension: 15 }
+export function getPainMonitoringBadge(zone?: string): { label: string; short: string; bg: string; color: string; border: string; icon: string; desc: string; vasRange: string } {
+  switch (zone) {
+    case 'yellow':
+      return {
+        label: 'ЖЕЛТАЯ ЗОНА (ВАШ 4–5) МОНИТОРИНГ ТЕНДИНОПАТИИ',
+        short: 'ВАШ 4–5 (Контроль)',
+        bg: '#FFFBEB',
+        color: '#B45309',
+        border: '#FDE68A',
+        icon: '🟡',
+        desc: 'Допустимо только при HSR / эксцентрике, если боль полностью регрессирует к утру',
+        vasRange: '4–5 баллов'
+      };
+    case 'red':
+      return {
+        label: 'КРАСНАЯ ЗОНА (ВАШ 6–10) СВЕРХНАГРУЗКА И СТОП',
+        short: 'ВАШ 6–10 (Стоп!)',
+        bg: '#FEF2F2',
+        color: '#B91C1C',
+        border: '#FCA5A5',
+        icon: '🔴',
+        desc: 'Риск повреждения сухожилия или сустава! Немедленное прекращение и снижение нагрузки на 50%',
+        vasRange: '6–10 баллов'
+      };
+    default:
+      return {
+        label: 'ЗЕЛЕНАЯ ЗОНА (ВАШ 0–3) БЕЗОПАСНАЯ ТРЕНИРОВКА',
+        short: 'ВАШ 0–3 (Норма)',
+        bg: '#ECFDF5',
+        color: '#047857',
+        border: '#A7F3D0',
+        icon: '🟢',
+        desc: 'Безопасная тренировочная зона без усиления воспалительного ответа тканей',
+        vasRange: '0–3 балла'
+      };
   }
-};
-
-export function resolveRomConfig(template: { joint_name?: string; title?: string; rom_norm_preset?: any }): JointRomConfig {
-  const romPreset = template?.rom_norm_preset || {};
-  let category = romPreset.joint_category;
-
-  if (!category || category === 'general' || category === 'systemic_general') {
-    const title = (template?.title || '').toLowerCase();
-    const jName = (template?.joint_name || '').toLowerCase();
-
-    if (jName === 'knee' || /колен|тэкс|мениск|пкс|зкс|пателл|осгуд|гоффа|синдинг|блаунт/i.test(title)) {
-      category = 'knee';
-    } else if (jName === 'shoulder' || /плеч|акс|ключиц|ротатор|манжет|латарже|банкарт|субакромиал|tsa|rsa/i.test(title)) {
-      category = 'shoulder';
-    } else if (jName === 'hip' || /тазобедр|тбс|кокс|тэтс|пертес|юэгбк|scfe|вертлуж|fai/i.test(title)) {
-      category = 'hip';
-    } else if (jName === 'ankle' || /стоп|голеностоп|ахилл|пятк|север|келер|фрейберг|hallux|вальгус стоп|плоскостоп|косолапост|подагр|подошвен|плантар/i.test(title)) {
-      category = /hallux|подагр|первого пальц|сесамоид/i.test(title) ? 'foot_mtp' : 'ankle';
-    } else if (jName === 'elbow' || /локт|эпикондил|олекранон|лучев.*кост.*локт|няни/i.test(title)) {
-      category = 'elbow';
-    } else if (jName === 'wrist' || /кист|запяст|лучезапяст|дистальн.*радиус|карпал|туннел|де кёрвен|vlp|пальц|дюпюитрен/i.test(title)) {
-      category = 'wrist';
-    } else if (jName === 'spine' || /позвоноч|дискэктоми|спондилодез|tlif|plif|шейн|пояснич|дорсопат|сколиоз|бехтерев|кривоше/i.test(title)) {
-      category = 'spine';
-    } else if (/гипермобильн|элерс/i.test(title)) {
-      category = 'systemic_hypermobile';
-    } else {
-      category = jName || 'knee';
-    }
-  }
-
-  return ROM_CONFIGS[category] || ROM_CONFIGS['knee'];
 }
 
-export function evaluateRomAxisStatus(axis: RomAxisDef, val: number | undefined): { text: string; color: string; isAbnormal: boolean } {
-  if (val === undefined || val === null || isNaN(val)) {
-    return { text: 'Не исследовано', color: '#64748B', isAbnormal: false };
+export function getKineticChainBadge(chain?: string): { label: string; short: string; bg: string; color: string; border: string } {
+  switch (chain) {
+    case 'OKC':
+      return { label: 'OKC (Открытая кинематическая цепь)', short: 'OKC Открытая цепь', bg: '#EFF6FF', color: '#1D4ED8', border: '#BFDBFE' };
+    case 'CKC':
+      return { label: 'CKC (Закрытая кинематическая цепь)', short: 'CKC Закрытая цепь', bg: '#F5F3FF', color: '#6D28D9', border: '#DDD6FE' };
+    case 'PNF':
+      return { label: 'PNF (Проприоцептивное облегчение)', short: 'PNF Проприоцепция', bg: '#FFF7ED', color: '#C2410C', border: '#FED7AA' };
+    case 'CORE':
+      return { label: 'CORE (Стабилизация кора и таза)', short: 'CORE Стабилизация', bg: '#FDF2F8', color: '#BE185D', border: '#FBCFE8' };
+    case 'ISOM':
+      return { label: 'Изометрия (Статическая нагрузка)', short: 'Изометрия', bg: '#ECFEFF', color: '#0E7490', border: '#A5F3FC' };
+    case 'ECC':
+      return { label: 'Эксцентрика (HSR / Альфредсон)', short: 'Эксцентрика', bg: '#FEFCE8', color: '#A16207', border: '#FEF08A' };
+    case 'NEURO':
+      return { label: 'Нейродинамика (Мобилизация нервов)', short: 'Нейродинамика', bg: '#F1F5F9', color: '#334155', border: '#CBD5E1' };
+    default:
+      return { label: chain || 'Кинезиотерапия', short: chain || 'ЛФК', bg: '#F8FAFC', color: '#475569', border: '#E2E8F0' };
   }
-  if (axis.isDeficit) {
-    if (val === 0) return { text: 'Норма (дефицит 0°)', color: '#16A34A', isAbnormal: false };
-    if (val <= 5) return { text: `Минимальный дефицит (${val}°)`, color: '#D97706', isAbnormal: true };
-    return { text: `Контрактура / Дефицит (${val}°)!`, color: '#DC2626', isAbnormal: true };
-  }
-  if (val >= axis.normMin) {
-    return { text: 'В пределах нормы', color: '#16A34A', isAbnormal: false };
-  }
-  const deficit = axis.normMin - val;
-  if (deficit <= 15) {
-    return { text: `Легкое ограничение (-${deficit}${axis.unit})`, color: '#0284C7', isAbnormal: true };
-  }
-  if (deficit <= 35) {
-    return { text: `Умеренное ограничение (-${deficit}${axis.unit})`, color: '#D97706', isAbnormal: true };
-  }
-  return { text: `Выраженный дефицит (-${deficit}${axis.unit})`, color: '#DC2626', isAbnormal: true };
 }
 
 export function computeSftrFormula(category: string, rom: any): string {
@@ -629,6 +537,7 @@ interface FullTemplate {
   id?: number;
   title: string;
   joint_name: string;
+  joint_category?: string;
   default_mkb_code?: string;
   category?: string;
   cluster_id?: string;
@@ -659,12 +568,19 @@ interface FullTemplate {
   orthotics_summary?: string;
   orthotics_has_stop?: number | boolean;
   orthotics_stop_rationale?: string;
+  lfk_priority?: 'P1' | 'P2' | 'P3' | 'P0-STOP' | string;
+  lfk_has_stop?: number | boolean;
+  lfk_stop_rationale?: string;
+  lfk_pain_monitoring_zone?: 'green' | 'yellow' | 'red' | string;
+  lfk_target_goal?: string;
+  lfk_phases_summary?: string;
   template_json?: any;
   tests: TemplateTestItem[];
   diagnostics: TemplateDiagnosticItem[];
   manipulations: TemplateTreatmentRelItem[];
   physiotherapy: TemplateTreatmentRelItem[];
   orthotics: TemplateTreatmentRelItem[];
+  lfk?: TemplateLfkItem[];
   prescriptions?: PrescriptionItem[];
   is_custom?: boolean | number;
   author_doctor_name?: string;
@@ -685,8 +601,33 @@ const JOINT_OPTIONS = [
 export default function OrthoTemplatesManager() {
   const navigate = useNavigate();
 
-  // Mode: Templates vs Diagnostic Methods Catalog vs Orthopedic Tests Catalog
-  const [viewMode, setViewMode] = useState<'templates' | 'diagnostics' | 'tests'>('templates');
+  // Mode: All 8 Catalogs synchronized with the clinical workflow tabs
+  const [viewMode, setViewMode] = useState<
+    'templates' | 'rom' | 'tests' | 'diagnostics' | 'manipulations' | 'physiotherapy' | 'orthotics' | 'lfk'
+  >('templates');
+
+  const [catalogSummary, setCatalogSummary] = useState({
+    templates: 180,
+    rom_joints: 10,
+    tests: 1377,
+    diagnostics: 381,
+    manipulations: 26,
+    physiotherapy: 21,
+    orthotics: 26,
+    lfk: 29
+  });
+
+  const fetchCatalogSummary = async () => {
+    try {
+      const res = await fetch('/api/ortho/catalogs/summary');
+      const data = await res.json();
+      if (data.success && data.counts) {
+        setCatalogSummary(data.counts);
+      }
+    } catch (e) {
+      console.error('Failed to fetch catalog summary:', e);
+    }
+  };
 
   // Master List State
   const [templates, setTemplates] = useState<any[]>([]);
@@ -723,7 +664,6 @@ export default function OrthoTemplatesManager() {
   const [physioFilter, setPhysioFilter] = useState<string>('all');
   const [orthoFilter, setOrthoFilter] = useState<string>('all');
   const [orthoPriorityFilter, setOrthoPriorityFilter] = useState<'all' | 'P1' | 'P2' | 'P3' | 'P0-STOP'>('all');
-  const [orthoWbFilter, setOrthoWbFilter] = useState<string>('all');
   const [copiedOrthoProtocol, setCopiedOrthoProtocol] = useState(false);
 
   // Modality counts for Tab 3 Diagnostics
@@ -779,6 +719,7 @@ export default function OrthoTemplatesManager() {
   const [manipCatalog, setManipCatalog] = useState<TreatmentCatalogItem[]>([]);
   const [physioCatalog, setPhysioCatalog] = useState<TreatmentCatalogItem[]>([]);
   const [orthoticsCatalog, setOrthoticsCatalog] = useState<TreatmentCatalogItem[]>([]);
+  const [lfkCatalog, setLfkCatalog] = useState<any[]>([]);
 
   // Dialogs
   const [testModalOpen, setTestModalOpen] = useState(false);
@@ -786,6 +727,16 @@ export default function OrthoTemplatesManager() {
   const [manipModalOpen, setManipModalOpen] = useState(false);
   const [physioModalOpen, setPhysioModalOpen] = useState(false);
   const [orthoticsModalOpen, setOrthoticsModalOpen] = useState(false);
+  const [lfkModalOpen, setLfkModalOpen] = useState(false);
+
+  // Quick Filter & State for Tab 7 (LFK)
+  const [lfkSearchQuery, setLfkSearchQuery] = useState('');
+  const [lfkPhaseFilter, setLfkPhaseFilter] = useState<'all' | '1' | '2' | '3'>('all');
+  const [lfkChainFilter, setLfkChainFilter] = useState('all');
+  const [lfkPriorityFilter, setLfkPriorityFilter] = useState('all');
+  const [copiedLfkSheet, setCopiedLfkSheet] = useState(false);
+  const [, setLfkStepperActiveStep] = useState<number>(0);
+  const [lfkInfoModal, setLfkInfoModal] = useState<any | null>(null);
 
   const [methodInfoModal, setMethodInfoModal] = useState<OrthoTestCatalogItem | null>(null);
   const [diagInfoModal, setDiagInfoModal] = useState<DiagnosticMethodCatalogItem | null>(null);
@@ -793,6 +744,22 @@ export default function OrthoTemplatesManager() {
   // Treatment Guidance Modal
   const [treatmentModalItem, setTreatmentModalItem] = useState<TreatmentItem | null>(null);
   const [treatmentModalCategory, setTreatmentModalCategory] = useState<TreatmentCategory>('manipulation');
+
+  // Unified Clinical Guidance Modal
+  const [clinicalGuideOpen, setClinicalGuideOpen] = useState(false);
+  const [clinicalGuideSection, setClinicalGuideSection] = useState<ClinicalGuideSection>('templates');
+
+  const openClinicalGuide = (sec?: ClinicalGuideSection | number | string) => {
+    if (typeof sec === 'number') {
+      const map: ClinicalGuideSection[] = ['templates', 'rom', 'tests', 'diagnostics', 'manipulations', 'physiotherapy', 'orthotics', 'lfk'];
+      setClinicalGuideSection(map[sec] || 'templates');
+    } else if (sec && ['templates', 'rom', 'tests', 'diagnostics', 'manipulations', 'physiotherapy', 'orthotics', 'lfk'].includes(sec as string)) {
+      setClinicalGuideSection(sec as ClinicalGuideSection);
+    } else {
+      setClinicalGuideSection((viewMode as ClinicalGuideSection) || 'templates');
+    }
+    setClinicalGuideOpen(true);
+  };
 
   // Protocol Preview State & Print Ref
   const protocolPrintRef = useRef<HTMLDivElement>(null);
@@ -819,28 +786,33 @@ export default function OrthoTemplatesManager() {
   useEffect(() => {
     fetchCatalogs();
     fetchTemplates();
+    fetchCatalogSummary();
   }, []);
 
   const fetchCatalogs = async () => {
     try {
-      const [testsRes, diagsRes, manRes, physRes, orthRes] = await Promise.all([
+      fetchCatalogSummary();
+      const [testsRes, diagsRes, manRes, physRes, orthRes, lfkRes] = await Promise.all([
         fetch('/api/ortho/tests/catalog'),
         fetch('/api/ortho/diagnostics/catalog'),
         fetch('/api/ortho/treatments/manipulations'),
         fetch('/api/ortho/treatments/physiotherapy'),
-        fetch('/api/ortho/treatments/orthotics')
+        fetch('/api/ortho/treatments/orthotics'),
+        fetch('/api/ortho/treatments/lfk')
       ]);
       const testsData = await testsRes.json();
       const diagsData = await diagsRes.json();
       const manData = await manRes.json();
       const physData = await physRes.json();
       const orthData = await orthRes.json();
+      const lfkData = await lfkRes.json();
 
       if (testsData.success) setTestCatalog(testsData.tests || []);
       if (diagsData.success) setDiagCatalog(diagsData.diagnostics || []);
       if (manData.success) setManipCatalog(manData.manipulations || manData.items || []);
       if (physData.success) setPhysioCatalog(physData.physiotherapy || physData.items || []);
       if (orthData.success) setOrthoticsCatalog(orthData.orthotics || orthData.items || []);
+      if (lfkData.success) setLfkCatalog(lfkData.lfk || lfkData.items || []);
     } catch (e) {
       console.error('Failed to load catalogs:', e);
     }
@@ -917,6 +889,13 @@ export default function OrthoTemplatesManager() {
           manipulations: (t.manipulations || []).map((m: any) => ({ ...m, item_code: m.item_code || m.manipulation_code || m.code })),
           physiotherapy: (t.physiotherapy || []).map((p: any) => ({ ...p, item_code: p.item_code || p.physiotherapy_code || p.code })),
           orthotics: (t.orthotics || []).map((o: any) => ({ ...o, item_code: o.item_code || o.orthotics_code || o.code })),
+          lfk_priority: t.lfk_priority || 'P1',
+          lfk_has_stop: t.lfk_has_stop ?? (t.lfk_priority === 'P0-STOP' ? 1 : 0),
+          lfk_stop_rationale: t.lfk_stop_rationale || '',
+          lfk_pain_monitoring_zone: t.lfk_pain_monitoring_zone || 'green',
+          lfk_target_goal: t.lfk_target_goal || '',
+          lfk_phases_summary: t.lfk_phases_summary || '',
+          lfk: t.lfk || [],
           prescriptions: parsedJson.prescriptions || [],
           is_custom: Boolean(t.is_custom),
           author_doctor_name: t.author_doctor_name || ''
@@ -961,6 +940,13 @@ export default function OrthoTemplatesManager() {
       manipulations: [],
       physiotherapy: [],
       orthotics: [],
+      lfk_priority: 'P1',
+      lfk_has_stop: 0,
+      lfk_stop_rationale: '',
+      lfk_pain_monitoring_zone: 'green',
+      lfk_target_goal: '',
+      lfk_phases_summary: '',
+      lfk: [],
       prescriptions: [],
       is_custom: false,
       author_doctor_name: ''
@@ -1012,6 +998,12 @@ export default function OrthoTemplatesManager() {
         orthotics_summary: currentTemplate.orthotics_summary || '',
         orthotics_has_stop: currentTemplate.orthotics_has_stop ? 1 : 0,
         orthotics_stop_rationale: currentTemplate.orthotics_stop_rationale || '',
+        lfk_priority: currentTemplate.lfk_priority || 'P1',
+        lfk_has_stop: currentTemplate.lfk_has_stop ? 1 : 0,
+        lfk_stop_rationale: currentTemplate.lfk_stop_rationale || '',
+        lfk_pain_monitoring_zone: currentTemplate.lfk_pain_monitoring_zone || 'green',
+        lfk_target_goal: currentTemplate.lfk_target_goal || '',
+        lfk_phases_summary: currentTemplate.lfk_phases_summary || '',
         recommendations_template: currentTemplate.recommendations_template,
         is_custom: currentTemplate.is_custom ? 1 : 0,
         author_doctor_name: currentTemplate.author_doctor_name || null,
@@ -1030,7 +1022,8 @@ export default function OrthoTemplatesManager() {
         diagnostics: currentTemplate.diagnostics,
         manipulations: currentTemplate.manipulations,
         physiotherapy: currentTemplate.physiotherapy,
-        orthotics: currentTemplate.orthotics
+        orthotics: currentTemplate.orthotics,
+        lfk: currentTemplate.lfk || []
       };
 
       let url = '/api/ortho/templates';
@@ -1279,6 +1272,69 @@ export default function OrthoTemplatesManager() {
     });
   };
 
+  // LFK Handlers
+  const handleAddLfkItem = (item: any, phaseNumber: number = 1) => {
+    if (!currentTemplate) return;
+    const currentLfk = currentTemplate.lfk || [];
+    const phaseNames: Record<number, string> = {
+      1: 'Фаза I (Острая / Защита и активация)',
+      2: 'Фаза II (Подострая / Восстановление функции и ROM)',
+      3: 'Фаза III (Функциональная / Силовая прогрессия)'
+    };
+    const phaseSteps: Record<number, string> = {
+      1: 'Ступень 1: Активация',
+      2: 'Ступень 2: Мобильность',
+      3: 'Ступень 3: Сила и стабилизация'
+    };
+    const newItem: TemplateLfkItem = {
+      lfk_code: item.code,
+      phase_number: phaseNumber,
+      phase_name: phaseNames[phaseNumber] || `Фаза ${phaseNumber}`,
+      stage_step: item.default_stage_step || phaseSteps[phaseNumber] || 'Ступень 1',
+      exercise_order: currentLfk.filter(l => l.phase_number === phaseNumber).length + 1,
+      dosage_prescription: item.standard_dosage || '3 подхода по 10-12 повторений',
+      tempo_and_hold: item.tempo_formula || '3-1-3-1',
+      frequency_per_day: '1-2 раза в день',
+      biomechanical_goal: item.technique_description || 'Восстановление биомеханики и мышечного контроля',
+      ebm_priority: currentTemplate.lfk_priority === 'P0-STOP' ? 'P0-STOP' : 'P1',
+      pain_threshold_zone: currentTemplate.lfk_pain_monitoring_zone || 'green',
+      kinetic_chain: item.kinetic_chain || 'CKC',
+      safe_angle_range: item.safe_angle_sector || '',
+      tags: item.equipment_tags || '',
+      is_stop_warning: 0,
+      name: item.name,
+      target_joint: item.target_joint,
+      target_muscle_group: item.target_muscle_group,
+      technique_description: item.technique_description
+    };
+    setCurrentTemplate({
+      ...currentTemplate,
+      lfk: [...currentLfk, newItem]
+    });
+    setLfkModalOpen(false);
+  };
+
+  const handleRemoveLfkItem = (index: number) => {
+    if (!currentTemplate) return;
+    const currentLfk = [...(currentTemplate.lfk || [])];
+    currentLfk.splice(index, 1);
+    setCurrentTemplate({
+      ...currentTemplate,
+      lfk: currentLfk
+    });
+  };
+
+  const handleUpdateLfkField = (index: number, field: keyof TemplateLfkItem, value: any) => {
+    if (!currentTemplate) return;
+    const currentLfk = [...(currentTemplate.lfk || [])];
+    if (!currentLfk[index]) return;
+    currentLfk[index] = { ...currentLfk[index], [field]: value };
+    setCurrentTemplate({
+      ...currentTemplate,
+      lfk: currentLfk
+    });
+  };
+
   // Cluster counts map
   const clusterCounts = useMemo(() => {
     const counts: Record<string, number> = { all: templates.length };
@@ -1350,7 +1406,8 @@ export default function OrthoTemplatesManager() {
   return (
     <Box sx={{ p: { xs: 1, sm: 1.5 }, height: 'calc(100vh - 75px)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       {/* Top Banner Navigation */}
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1, flexShrink: 0 }}>
+      {/* Header with Title and Global Actions */}
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.25, flexShrink: 0, flexWrap: 'wrap', gap: 1.5 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
           <Button
             variant="outlined"
@@ -1365,65 +1422,12 @@ export default function OrthoTemplatesManager() {
               <BrainIcon color="primary" /> Справочник клинических шаблонов и протоколов 2.0
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              Управление эталонными нозологиями, ортопедическими тестами и пресетами аппаратного обследования
+              Единый реестр эталонных нозологий, углов ROM, провокационных тестов, обследований и программ реабилитации
             </Typography>
           </Box>
         </Box>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <ToggleButtonGroup
-            value={viewMode}
-            exclusive
-            size="small"
-            onChange={(_, val) => val && setViewMode(val)}
-            sx={{ bgcolor: '#F1F5F9', p: 0.3, borderRadius: 2 }}
-          >
-            <ToggleButton
-              value="templates"
-              sx={{
-                fontWeight: 700,
-                px: 2,
-                py: 0.6,
-                textTransform: 'none',
-                fontSize: '0.82rem',
-                border: 'none',
-                borderRadius: '6px !important',
-                '&.Mui-selected': { bgcolor: '#FFFFFF', color: '#0F3C64', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }
-              }}
-            >
-              <ArticleIcon sx={{ fontSize: 18, mr: 0.75 }} /> Шаблоны протоколов ({templates.length})
-            </ToggleButton>
-            <ToggleButton
-              value="diagnostics"
-              sx={{
-                fontWeight: 700,
-                px: 2,
-                py: 0.6,
-                textTransform: 'none',
-                fontSize: '0.82rem',
-                border: 'none',
-                borderRadius: '6px !important',
-                '&.Mui-selected': { bgcolor: '#FFFFFF', color: '#0284C7', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }
-              }}
-            >
-              <BiotechIcon sx={{ fontSize: 18, mr: 0.75 }} /> Методы диагностики ({diagCatalog.length})
-            </ToggleButton>
-            <ToggleButton
-              value="tests"
-              sx={{
-                fontWeight: 700,
-                px: 2,
-                py: 0.6,
-                textTransform: 'none',
-                fontSize: '0.82rem',
-                border: 'none',
-                borderRadius: '6px !important',
-                '&.Mui-selected': { bgcolor: '#FFFFFF', color: '#166534', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }
-              }}
-            >
-              <HealingIcon sx={{ fontSize: 18, mr: 0.75 }} /> Ортопедические тесты ({testCatalog.length})
-            </ToggleButton>
-          </ToggleButtonGroup>
 
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
           {viewMode === 'templates' && (
             <Button
               variant="contained"
@@ -1439,10 +1443,28 @@ export default function OrthoTemplatesManager() {
           <Button
             variant="outlined"
             startIcon={<RefreshIcon />}
-            onClick={() => { fetchCatalogs(); fetchTemplates(); }}
+            onClick={() => { fetchCatalogs(); fetchTemplates(); fetchCatalogSummary(); }}
             sx={{ textTransform: 'none', whiteSpace: 'nowrap' }}
           >
             Обновить
+          </Button>
+
+          <Button
+            variant="outlined"
+            startIcon={<ManualIcon />}
+            onClick={() => openClinicalGuide(viewMode)}
+            sx={{
+              color: '#0F3C64',
+              borderColor: '#93C5FD',
+              bgcolor: '#F0F9FF',
+              '&:hover': { bgcolor: '#E0F2FE', borderColor: '#0F3C64' },
+              textTransform: 'none',
+              fontWeight: 700,
+              fontSize: '0.82rem',
+              whiteSpace: 'nowrap'
+            }}
+          >
+            Клинический гид
           </Button>
 
           <Button
@@ -1463,10 +1485,184 @@ export default function OrthoTemplatesManager() {
         </Box>
       </Box>
 
-      {viewMode === 'diagnostics' ? (
-        <DiagnosticMethodsCatalogManager onCatalogChanged={() => { fetchCatalogs(); fetchTemplates(); }} />
+      {/* Top Synchronized Catalog Switcher Bar: 8 clinical buttons matching protocol tabs */}
+      <Box sx={{ mb: 1.75, flexShrink: 0, bgcolor: '#FFFFFF', p: 0.6, borderRadius: 2, border: '1px solid #E2E8F0', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
+        <ToggleButtonGroup
+          value={viewMode}
+          exclusive
+          size="small"
+          onChange={(_, val) => val && setViewMode(val)}
+          sx={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: 0.6,
+            width: '100%',
+            '& .MuiToggleButtonGroup-grouped': {
+              border: 'none !important',
+              mx: 0
+            }
+          }}
+        >
+          {[
+            {
+              value: 'templates',
+              caption: `1. Шаблоны (${catalogSummary.templates || templates.length})`,
+              count: catalogSummary.templates || templates.length,
+              fullTitle: '1. Клинические шаблоны и протоколы осмотра',
+              description: 'Жалобы, анамнез (morbi/vitae), общий и локальный статус, клинические кластеры нозологий и эталонные протоколы первичного приёма.',
+              icon: <ArticleIcon sx={{ fontSize: 18 }} />,
+              activeColor: '#0F3C64',
+              activeBg: '#F0F7FF',
+              activeBorder: '#BAE6FD'
+            },
+            {
+              value: 'rom',
+              caption: `2. ROM (${catalogSummary.rom_joints || 10})`,
+              count: catalogSummary.rom_joints || 10,
+              fullTitle: '2. Стандарты гониометрии суставов (ROM / SFTR Neutral-0)',
+              description: 'Физиологические нормы объёма движений по системе Neutral-0, градации сгибательных/разгибательных контрактур и классификатор конечного упора (End-Feel).',
+              icon: <RomIcon sx={{ fontSize: 18 }} />,
+              activeColor: '#0369A1',
+              activeBg: '#F0F9FF',
+              activeBorder: '#7DD3FC'
+            },
+            {
+              value: 'tests',
+              caption: `3. Тесты (${catalogSummary.tests || testCatalog.length})`,
+              count: catalogSummary.tests || testCatalog.length,
+              fullTitle: '3. Реестр специальных ортопедических тестов',
+              description: 'Клинические провокационные тесты: Tier 1 (патогномоничные), Tier 2 (верификация), Tier 3 (экспертные) с оценкой чувствительности и специфичности.',
+              icon: <HealingIcon sx={{ fontSize: 18 }} />,
+              activeColor: '#15803D',
+              activeBg: '#F0FDF4',
+              activeBorder: '#86EFAC'
+            },
+            {
+              value: 'diagnostics',
+              caption: `4. Диагностика (${catalogSummary.diagnostics || diagCatalog.length})`,
+              count: catalogSummary.diagnostics || diagCatalog.length,
+              fullTitle: '4. Инструментальная и лабораторная диагностика',
+              description: 'Рентген, МРТ, КТ, УЗИ суставов, лабораторные анализы, ЭНМГ, критерии назначения и сопоставление с прайсом клиники.',
+              icon: <BiotechIcon sx={{ fontSize: 18 }} />,
+              activeColor: '#0284C7',
+              activeBg: '#F0F9FF',
+              activeBorder: '#38BDF8'
+            },
+            {
+              value: 'manipulations',
+              caption: `5. Манипуляции (${catalogSummary.manipulations || 26})`,
+              count: catalogSummary.manipulations || 26,
+              fullTitle: '5. Лечебные манипуляции и инъекционная терапия',
+              description: 'Лечебно-медикаментозные блокады, пункции суставов, PRP-терапия, гиалуроновая кислота, УЗИ-навигация и CDSS STOP Red Flags.',
+              icon: <MedicalServicesIcon sx={{ fontSize: 18 }} />,
+              activeColor: '#0F766E',
+              activeBg: '#F0FDFA',
+              activeBorder: '#5EEAD4'
+            },
+            {
+              value: 'physiotherapy',
+              caption: `6. Физиотерапия (${catalogSummary.physiotherapy || 21})`,
+              count: catalogSummary.physiotherapy || 21,
+              fullTitle: '6. Физиотерапия и аппаратное восстановительное лечение',
+              description: '1-я линия EBM (P1 патогенетический максимум), 2-я линия (P2), биофизическая дозировка (HILT лазер, УВТ, SIS, TECAR, крио), аппараты и правила безопасности.',
+              icon: <FitnessIcon sx={{ fontSize: 18 }} />,
+              activeColor: '#1D4ED8',
+              activeBg: '#EFF6FF',
+              activeBorder: '#93C5FD'
+            },
+            {
+              value: 'orthotics',
+              caption: `7. Ортезирование (${catalogSummary.orthotics || 26})`,
+              count: catalogSummary.orthotics || 26,
+              fullTitle: '7. Ортопедические изделия и средства разгрузки',
+              description: 'Шарнирные ортезы, жесткие туторы, мягкие бандажи, индивидуальные ортопедические стельки, режимы весовой осевой нагрузки (NWB–FWB) и схемы ношения.',
+              icon: <ShieldIcon sx={{ fontSize: 18 }} />,
+              activeColor: '#7C3AED',
+              activeBg: '#F5F3FF',
+              activeBorder: '#C4B5FD'
+            },
+            {
+              value: 'lfk',
+              caption: `8. ЛФК (${catalogSummary.lfk || 29})`,
+              count: catalogSummary.lfk || 29,
+              fullTitle: '8. Лечебная физкультура (ЛФК) и кинезиотерапия',
+              description: 'Поэтапные комплексы ЛФК (Фазы I–III), биомеханические цепи (CKC/OKC/PNF/CORE), мониторинг боли по ВАШ Silbernagel (Green/Yellow/Red) и формулы темпа.',
+              icon: <RunIcon sx={{ fontSize: 18 }} />,
+              activeColor: '#047857',
+              activeBg: '#ECFDF5',
+              activeBorder: '#6EE7B7'
+            }
+          ].map((btn) => {
+            const isSelected = viewMode === btn.value;
+            return (
+              <Tooltip
+                key={btn.value}
+                arrow
+                placement="bottom"
+                enterDelay={150}
+                title={
+                  <Box sx={{ p: 0.75, maxWidth: 320 }}>
+                    <Typography sx={{ fontWeight: 800, fontSize: '0.82rem', color: '#FFFFFF', mb: 0.4, display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                      {btn.fullTitle}
+                    </Typography>
+                    <Typography sx={{ fontSize: '0.74rem', color: '#E2E8F0', lineHeight: 1.45 }}>
+                      {btn.description}
+                    </Typography>
+                  </Box>
+                }
+              >
+                <ToggleButton
+                  value={btn.value}
+                  sx={{
+                    flex: { xs: '1 1 calc(50% - 6px)', sm: '1 1 calc(25% - 6px)', md: '1 1 0px' },
+                    minWidth: 0,
+                    px: { xs: 1, md: 1.4 },
+                    py: 0.75,
+                    textTransform: 'none',
+                    fontWeight: isSelected ? 800 : 600,
+                    fontSize: { xs: '0.74rem', lg: '0.78rem' },
+                    borderRadius: '8px !important',
+                    bgcolor: isSelected ? btn.activeBg : '#F8FAFC',
+                    color: isSelected ? btn.activeColor : '#475569',
+                    border: `1.5px solid ${isSelected ? btn.activeBorder : '#E2E8F0'} !important`,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 0.6,
+                    whiteSpace: 'nowrap',
+                    boxShadow: isSelected ? '0 1px 4px rgba(0,0,0,0.08)' : 'none',
+                    transition: 'all 0.15s ease-in-out',
+                    '&:hover': {
+                      bgcolor: isSelected ? btn.activeBg : '#F1F5F9',
+                      color: btn.activeColor,
+                      borderColor: `${btn.activeBorder} !important`
+                    }
+                  }}
+                >
+                  {btn.icon}
+                  <span>{btn.caption}</span>
+                </ToggleButton>
+              </Tooltip>
+            );
+          })}
+        </ToggleButtonGroup>
+      </Box>
+
+      {/* Main View Router */}
+      {viewMode === 'rom' ? (
+        <RomStandardsManager />
       ) : viewMode === 'tests' ? (
-        <OrthopedicTestsCatalogManager onCatalogChanged={() => { fetchCatalogs(); fetchTemplates(); }} />
+        <OrthopedicTestsCatalogManager onCatalogChanged={() => { fetchCatalogs(); fetchTemplates(); fetchCatalogSummary(); }} />
+      ) : viewMode === 'diagnostics' ? (
+        <DiagnosticMethodsCatalogManager onCatalogChanged={() => { fetchCatalogs(); fetchTemplates(); fetchCatalogSummary(); }} />
+      ) : viewMode === 'manipulations' ? (
+        <ManipulationsCatalogManager onCatalogChanged={() => { fetchCatalogs(); fetchTemplates(); fetchCatalogSummary(); }} />
+      ) : viewMode === 'physiotherapy' ? (
+        <PhysiotherapyCatalogManager onCatalogChanged={() => { fetchCatalogs(); fetchTemplates(); fetchCatalogSummary(); }} />
+      ) : viewMode === 'orthotics' ? (
+        <OrthoticsCatalogManager onCatalogChanged={() => { fetchCatalogs(); fetchTemplates(); fetchCatalogSummary(); }} />
+      ) : viewMode === 'lfk' ? (
+        <LfkCatalogManager onCatalogChanged={() => { fetchCatalogs(); fetchTemplates(); fetchCatalogSummary(); }} />
       ) : (
         <>
           {/* Notifications */}
@@ -1808,6 +2004,20 @@ export default function OrthoTemplatesManager() {
                                         sx={{ fontSize: '0.62rem', height: 18, borderColor: '#5EEAD4', color: '#0F766E', bgcolor: '#F0FDFA' }}
                                       />
                                     )}
+                                    {t.lfk_has_stop === 1 ? (
+                                      <Chip
+                                        label="P0-STOP"
+                                        size="small"
+                                        sx={{ fontSize: '0.62rem', height: 18, bgcolor: '#FEF2F2', color: '#DC2626', fontWeight: 800, border: '1px solid #FCA5A5' }}
+                                      />
+                                    ) : (t.lfk_count > 0) ? (
+                                      <Chip
+                                        label={`${t.lfk_count} ЛФК`}
+                                        size="small"
+                                        variant="outlined"
+                                        sx={{ fontSize: '0.62rem', height: 18, borderColor: '#A7F3D0', color: '#047857', bgcolor: '#ECFDF5', fontWeight: 700 }}
+                                      />
+                                    ) : null}
                                   </Box>
                                   <Typography variant="caption" sx={{ fontSize: '0.65rem', color: '#94A3B8' }}>
                                     #{t.id}
@@ -1929,6 +2139,20 @@ export default function OrthoTemplatesManager() {
                                     sx={{ fontSize: '0.62rem', height: 18, borderColor: '#5EEAD4', color: '#0F766E', bgcolor: '#F0FDFA' }}
                                   />
                                 )}
+                                {t.lfk_has_stop === 1 ? (
+                                  <Chip
+                                    label="P0-STOP"
+                                    size="small"
+                                    sx={{ fontSize: '0.62rem', height: 18, bgcolor: '#FEF2F2', color: '#DC2626', fontWeight: 800, border: '1px solid #FCA5A5' }}
+                                  />
+                                ) : (t.lfk_count > 0) ? (
+                                  <Chip
+                                    label={`${t.lfk_count} ЛФК`}
+                                    size="small"
+                                    variant="outlined"
+                                    sx={{ fontSize: '0.62rem', height: 18, borderColor: '#A7F3D0', color: '#047857', bgcolor: '#ECFDF5', fontWeight: 700 }}
+                                  />
+                                ) : null}
                               </Box>
                               <Typography variant="caption" sx={{ fontSize: '0.65rem', color: '#94A3B8' }}>
                                 #{t.id}
@@ -2168,6 +2392,30 @@ export default function OrthoTemplatesManager() {
                     flexShrink: 0
                   }}
                 >
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', pb: 1, px: 0.5 }}>
+                    <Typography sx={{ fontWeight: 800, fontSize: '0.82rem', color: '#0F3C64' }}>
+                      Клинические разделы протокола ({activeTab + 1} из 9)
+                    </Typography>
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      startIcon={<ManualIcon />}
+                      onClick={() => openClinicalGuide(activeTab)}
+                      sx={{
+                        textTransform: 'none',
+                        fontWeight: 700,
+                        fontSize: '0.74rem',
+                        color: '#0284C7',
+                        borderColor: '#BAE6FD',
+                        bgcolor: '#F0F9FF',
+                        '&:hover': { bgcolor: '#E0F2FE', borderColor: '#0284C7' },
+                        py: 0.25,
+                        px: 1.2
+                      }}
+                    >
+                      Клинический гид
+                    </Button>
+                  </Box>
                   <Tabs
                     value={activeTab}
                     onChange={(_, v) => setActiveTab(v)}
@@ -2278,8 +2526,16 @@ export default function OrthoTemplatesManager() {
                       },
                       {
                         index: 7,
-                        shortCaption: '8. Протокол A4',
-                        fullTitle: '8. Предпросмотр эталонного протокола осмотра (A4)',
+                        shortCaption: '8. ЛФК',
+                        badgeCount: currentTemplate.lfk?.length || 0,
+                        fullTitle: '8. Лечебная физкультура (ЛФК) и кинезиотерапия',
+                        description: 'Поэтапные комплексы ЛФК (Фазы I-III), биомеханика цепей (OKC/CKC/PNF/CORE), шкала боли ВАШ 0-10 Silbernagel, 7-дневный трекер комплаентности.',
+                        icon: <RunIcon sx={{ fontSize: 16 }} />
+                      },
+                      {
+                        index: 8,
+                        shortCaption: '9. Протокол A4',
+                        fullTitle: '9. Предпросмотр эталонного протокола осмотра (A4)',
                         description: 'Финальный клинический протокол для амбулаторной медкарты (ЭМК), печать официального бланка на листе A4 и экспорт очищенного текста.',
                         icon: <PreviewIcon sx={{ fontSize: 16 }} />
                       }
@@ -2489,7 +2745,7 @@ export default function OrthoTemplatesManager() {
 
                   // Filter axes by romPriorityFilter
                   const filteredAxes = jointRomCfg.axes.filter((axis) => {
-                    if (romPriorityFilter === 'ALL') return true;
+                    if (romPriorityFilter === 'all') return true;
                     return (axis.priority || 'P2') === romPriorityFilter;
                   });
 
@@ -3947,7 +4203,7 @@ export default function OrthoTemplatesManager() {
                                                     patient_preparation: d.patient_preparation,
                                                     diagnostic_criteria: d.diagnostic_criteria,
                                                     contraindications: d.contraindications,
-                                                    clinical_indications: d.clinical_indications
+                                                    clinical_indications: d.clinical_indications || undefined
                                                   });
                                                 }
                                               }}
@@ -4646,6 +4902,11 @@ export default function OrthoTemplatesManager() {
                                                   {(m.anatomical_access || catItem?.anatomical_access) && (
                                                     <Typography variant="caption" sx={{ color: '#0F766E', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 0.5 }}>
                                                       📍 Доступ: {m.anatomical_access || catItem?.anatomical_access}
+                                                    </Typography>
+                                                  )}
+                                                  {drugClass && (
+                                                    <Typography variant="caption" sx={{ color: '#4338CA', fontWeight: 600 }}>
+                                                      💊 Препарат: {drugClass.toUpperCase()}
                                                     </Typography>
                                                   )}
                                                   {m.subcategory && (
@@ -5622,7 +5883,6 @@ export default function OrthoTemplatesManager() {
                                 <TableBody>
                                   {items.map((o) => {
                                     const catItem = orthoticsCatalog.find(oc => oc.code === o.item_code);
-                                    const isInternal = o.service_scope === 'internal';
                                     const isStop = o.is_stop_warning === 1 || o.is_stop_warning === true || o.ebm_priority === 'P0-STOP' || o.ebm_priority === 'P0-CONTRA';
                                     const wb = getWeightBearingBadge(o.weight_bearing_mode);
 
@@ -5806,8 +6066,754 @@ export default function OrthoTemplatesManager() {
                   </Box>
                 )}
 
-                {/* TAB 7: Live Protocol Preview */}
-                {activeTab === 7 && (
+                {/* TAB 7: LFK & Kinesiotherapy */}
+                {activeTab === 7 && (() => {
+                  const lfkList = currentTemplate.lfk || [];
+                  const pBadge = getLfkPriorityBadge(currentTemplate.lfk_priority);
+                  const painBadge = getPainMonitoringBadge(currentTemplate.lfk_pain_monitoring_zone);
+                  const hasStop = currentTemplate.lfk_has_stop === 1 || currentTemplate.lfk_priority === 'P0-STOP';
+
+                  // Filter logic
+                  const filteredLfk = lfkList.filter(item => {
+                    if (lfkPhaseFilter !== 'all' && String(item.phase_number) !== lfkPhaseFilter) return false;
+                    if (lfkChainFilter !== 'all' && item.kinetic_chain !== lfkChainFilter) return false;
+                    if (lfkPriorityFilter !== 'all' && item.ebm_priority !== lfkPriorityFilter) return false;
+                    if (lfkSearchQuery.trim()) {
+                      const q = lfkSearchQuery.toLowerCase();
+                      const matchesName = (item.name || item.exercise_name_override || item.lfk_code || '').toLowerCase().includes(q);
+                      const matchesGoal = (item.biomechanical_goal || '').toLowerCase().includes(q);
+                      const matchesMuscle = (item.target_muscle_group || '').toLowerCase().includes(q);
+                      const matchesTags = (item.tags || '').toLowerCase().includes(q);
+                      if (!matchesName && !matchesGoal && !matchesMuscle && !matchesTags) return false;
+                    }
+                    return true;
+                  });
+
+                  // Counts per phase
+                  const phase1Count = lfkList.filter(l => l.phase_number === 1).length;
+                  const phase2Count = lfkList.filter(l => l.phase_number === 2).length;
+                  const phase3Count = lfkList.filter(l => l.phase_number === 3).length;
+
+                  // 7-day diary text generator
+                  const generate7DayPlan = () => {
+                    const days = ['Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота', 'Воскресенье'];
+                    const lines = [
+                      `ИНДИВИДУАЛЬНЫЙ 7-ДНЕВНЫЙ ДНЕВНИК ЛФК И КИНЕЗИОТЕРАПИИ`,
+                      `Пациент: _________________________ | Диагноз: [${currentTemplate.default_mkb_code || ''}] ${currentTemplate.title}`,
+                      `Целевая зона боли: ${painBadge.label} (Порог: ${painBadge.vasRange})`,
+                      `Правило: Если боль во время занятия превышает ${painBadge.vasRange} или не проходит к утру — снизить нагрузку!`,
+                      `---------------------------------------------------------------------------------`
+                    ];
+                    days.forEach((day, dIdx) => {
+                      const isRest = dIdx === 6; // Sunday lighter
+                      lines.push(`\n📅 ${day.toUpperCase()}${isRest ? ' (День активного восстановления / растяжка)' : ''}:`);
+                      if (lfkList.length === 0) {
+                        lines.push(`  - Индивидуальный двигательный покой / легкая суставная гимнастика`);
+                      } else {
+                        lfkList.forEach((ex, idx) => {
+                          const name = ex.exercise_name_override || ex.name || ex.lfk_code;
+                          lines.push(`  [ ] Упр ${idx + 1}. ${name} — ${ex.dosage_prescription} (темп: ${ex.tempo_and_hold || '3-1-3-1'})`);
+                        });
+                      }
+                      lines.push(`  Оценка боли после занятия: [   ] ВАШ (0-10) | Самочувствие: [ Отличное / Умеренное / Дискомфорт ]`);
+                    });
+                    return lines.join('\n');
+                  };
+
+                  return (
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+                      {/* Top Action & Priority Header Card */}
+                      <Paper
+                        elevation={0}
+                        sx={{
+                          p: 2.5,
+                          borderRadius: 2.5,
+                          border: '1.5px solid #CBD5E1',
+                          background: 'linear-gradient(135deg, #F8FAFC 0%, #F0FDF4 100%)',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: 2
+                        }}
+                      >
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 1.5 }}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                            <Box
+                              sx={{
+                                width: 44,
+                                height: 44,
+                                borderRadius: 2,
+                                bgcolor: '#ECFDF5',
+                                border: '1.5px solid #A7F3D0',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                color: '#047857'
+                              }}
+                            >
+                              <RunIcon sx={{ fontSize: 28 }} />
+                            </Box>
+                            <Box>
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                <Typography variant="h6" sx={{ fontWeight: 900, color: '#0F3C64', fontSize: '1.05rem', lineHeight: 1.2 }}>
+                                  8. Комплекс лечебной физкультуры (ЛФК) и кинезиотерапии
+                                </Typography>
+                                <Chip
+                                  label={pBadge.label}
+                                  size="small"
+                                  sx={{ bgcolor: pBadge.bg, color: pBadge.color, border: `1px solid ${pBadge.border}`, fontWeight: 800, fontSize: '0.68rem', height: 20 }}
+                                />
+                              </Box>
+                              <Typography variant="caption" sx={{ color: '#475569', fontSize: '0.78rem' }}>
+                                Поэтапное восстановление кинематических цепей (OKC/CKC/PNF/CORE), двигательного контроля и адаптации сухожилий
+                              </Typography>
+                            </Box>
+                          </Box>
+
+                          {/* Header Action Buttons */}
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                            <Button
+                              variant="outlined"
+                              size="small"
+                              startIcon={copiedLfkSheet ? <CheckCircleIcon sx={{ color: '#16A34A' }} /> : <ComplianceIcon />}
+                              onClick={() => {
+                                const text = generate7DayPlan();
+                                navigator.clipboard.writeText(cleanLatexText(text));
+                                setCopiedLfkSheet(true);
+                                setTimeout(() => setCopiedLfkSheet(false), 2500);
+                              }}
+                              sx={{
+                                textTransform: 'none',
+                                fontWeight: 700,
+                                fontSize: '0.75rem',
+                                borderColor: copiedLfkSheet ? '#16A34A' : '#A7F3D0',
+                                color: copiedLfkSheet ? '#16A34A' : '#065F46',
+                                bgcolor: '#FFFFFF',
+                                '&:hover': { bgcolor: '#ECFDF5', borderColor: '#059669' }
+                              }}
+                            >
+                              {copiedLfkSheet ? 'Дневник скопирован!' : '📋 План на 7 дней (Пациенту)'}
+                            </Button>
+
+                            <Button
+                              variant="contained"
+                              size="small"
+                              startIcon={<AddIcon />}
+                              onClick={() => setLfkModalOpen(true)}
+                              sx={{
+                                textTransform: 'none',
+                                fontWeight: 800,
+                                fontSize: '0.75rem',
+                                bgcolor: '#047857',
+                                '&:hover': { bgcolor: '#065F46' },
+                                boxShadow: '0 2px 6px rgba(4, 120, 87, 0.25)'
+                              }}
+                            >
+                              + Добавить упражнение из каталога
+                            </Button>
+                          </Box>
+                        </Box>
+
+                        {/* Clinical Parameters Bar */}
+                        <Grid container spacing={2} sx={{ pt: 1, borderTop: '1px solid #E2E8F0' }}>
+                          <Grid size={{ xs: 12, sm: 4 }}>
+                            <FormControl size="small" fullWidth>
+                              <InputLabel>Приоритет EBM (Доказательность)</InputLabel>
+                              <Select
+                                label="Приоритет EBM (Доказательность)"
+                                value={currentTemplate.lfk_priority || 'P1'}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setCurrentTemplate({
+                                    ...currentTemplate,
+                                    lfk_priority: val,
+                                    lfk_has_stop: val === 'P0-STOP' ? 1 : 0
+                                  });
+                                }}
+                              >
+                                <MenuItem value="P1">⭐ P1 Патогенетический оптимум (Core Rehab)</MenuItem>
+                                <MenuItem value="P2">🎯 P2 Восстановительная кинезиотерапия</MenuItem>
+                                <MenuItem value="P3">🔍 P3 Дренаж / Лимфоотток / Адаптивная гимнастика</MenuItem>
+                                <MenuItem value="P0-STOP">🚨 P0-STOP Категорический запрет ЛФК / Покой</MenuItem>
+                              </Select>
+                            </FormControl>
+                          </Grid>
+
+                          <Grid size={{ xs: 12, sm: 4 }}>
+                            <FormControl size="small" fullWidth>
+                              <InputLabel>Шкала мониторинга боли (Silbernagel)</InputLabel>
+                              <Select
+                                label="Шкала мониторинга боли (Silbernagel)"
+                                value={currentTemplate.lfk_pain_monitoring_zone || 'green'}
+                                onChange={(e) => setCurrentTemplate({ ...currentTemplate, lfk_pain_monitoring_zone: e.target.value })}
+                              >
+                                <MenuItem value="green">🟢 Зеленая зона (ВАШ 0–3) Безопасная норма</MenuItem>
+                                <MenuItem value="yellow">🟡 Желтая зона (ВАШ 4–5) Контроль тендинопатии</MenuItem>
+                                <MenuItem value="red">🔴 Красная зона (ВАШ 6–10) Стоп-сигнал перегрузки</MenuItem>
+                              </Select>
+                            </FormControl>
+                          </Grid>
+
+                          <Grid size={{ xs: 12, sm: 4 }}>
+                            <TextField
+                              size="small"
+                              fullWidth
+                              label="Биомеханическая цель программы"
+                              placeholder="Напр. Изометрическая активация VMO и задней цепи"
+                              value={currentTemplate.lfk_target_goal || ''}
+                              onChange={(e) => setCurrentTemplate({ ...currentTemplate, lfk_target_goal: e.target.value })}
+                            />
+                          </Grid>
+                        </Grid>
+                      </Paper>
+
+                      {/* CDSS STOP Red Flag Warning Box */}
+                      {hasStop && (
+                        <Paper
+                          variant="outlined"
+                          sx={{
+                            p: 2,
+                            borderRadius: 2,
+                            bgcolor: '#FEF2F2',
+                            borderColor: '#EF4444',
+                            borderWidth: 2,
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: 1.25
+                          }}
+                        >
+                          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1 }}>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                              <LockIcon sx={{ color: '#DC2626', fontSize: 24 }} />
+                              <Typography variant="subtitle2" sx={{ fontWeight: 900, color: '#B91C1C', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                                CDSS STOP WARNING / КАТЕГОРИЧЕСКИЙ КЛИНИЧЕСКИЙ СТОП-СИГНАЛ БЕЗОПАСНОСТИ [P0-STOP]
+                              </Typography>
+                            </Box>
+                            <FormControlLabel
+                              control={
+                                <Switch
+                                  checked={currentTemplate.lfk_has_stop === 1}
+                                  onChange={(e) => setCurrentTemplate({ ...currentTemplate, lfk_has_stop: e.target.checked ? 1 : 0 })}
+                                  color="error"
+                                />
+                              }
+                              label={<Typography sx={{ fontSize: '0.8rem', fontWeight: 800, color: '#991B1B' }}>Блокировка активна</Typography>}
+                            />
+                          </Box>
+
+                          <TextField
+                            size="small"
+                            fullWidth
+                            multiline
+                            rows={2}
+                            label="Обоснование запрета ЛФК и предписание охранительного режима"
+                            value={currentTemplate.lfk_stop_rationale || ''}
+                            onChange={(e) => setCurrentTemplate({ ...currentTemplate, lfk_stop_rationale: e.target.value })}
+                            placeholder="Опишите биомеханическую причину запрета (напр. Острый гемартроз, разрыв связки, нестабильность перелома до консолидации)..."
+                            sx={{ bgcolor: '#FFFFFF', borderRadius: 1 }}
+                          />
+                        </Paper>
+                      )}
+
+                      {/* Interactive Pain Traffic Light Gauge (Silbernagel / Thomeé) */}
+                      <Paper variant="outlined" sx={{ p: 2, borderRadius: 2, borderColor: '#CBD5E1', bgcolor: '#FFFFFF' }}>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.5, flexWrap: 'wrap', gap: 1 }}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <SpeedIcon sx={{ color: '#0284C7', fontSize: 22 }} />
+                            <Typography variant="subtitle2" sx={{ fontWeight: 800, color: '#0F3C64', textTransform: 'uppercase' }}>
+                              Шкала мониторинга боли и допустимой нагрузки (Pain-Monitoring Model Silbernagel / Thomeé)
+                            </Typography>
+                          </Box>
+                          <Typography variant="caption" sx={{ color: '#64748B', fontWeight: 600 }}>
+                            Кликните на зону для выбора рабочего протокола
+                          </Typography>
+                        </Box>
+
+                        <Grid container spacing={1.5}>
+                          {/* Green Zone */}
+                          <Grid size={{ xs: 12, md: 4 }}>
+                            <Card
+                              variant="outlined"
+                              onClick={() => setCurrentTemplate({ ...currentTemplate, lfk_pain_monitoring_zone: 'green' })}
+                              sx={{
+                                p: 1.5,
+                                cursor: 'pointer',
+                                borderRadius: 2,
+                                borderColor: currentTemplate.lfk_pain_monitoring_zone === 'green' ? '#10B981' : '#E2E8F0',
+                                borderWidth: currentTemplate.lfk_pain_monitoring_zone === 'green' ? 2.5 : 1,
+                                bgcolor: currentTemplate.lfk_pain_monitoring_zone === 'green' ? '#ECFDF5' : '#F8FAFC',
+                                transition: 'all 0.15s ease-in-out',
+                                '&:hover': { borderColor: '#10B981', transform: 'translateY(-1px)' }
+                              }}
+                            >
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+                                <Chip label="ВАШ 0–3" size="small" sx={{ fontWeight: 900, bgcolor: '#10B981', color: '#FFFFFF', fontSize: '0.72rem' }} />
+                                <Typography sx={{ fontWeight: 800, fontSize: '0.82rem', color: '#065F46' }}>
+                                  Безопасная зона
+                                </Typography>
+                              </Box>
+                              <Typography sx={{ fontSize: '0.74rem', color: '#047857', lineHeight: 1.4 }}>
+                                Стандартная восстановительная тренировка. Нагрузка безопасна и не вызывает воспалительной реакции мягких тканей.
+                              </Typography>
+                            </Card>
+                          </Grid>
+
+                          {/* Yellow Zone */}
+                          <Grid size={{ xs: 12, md: 4 }}>
+                            <Card
+                              variant="outlined"
+                              onClick={() => setCurrentTemplate({ ...currentTemplate, lfk_pain_monitoring_zone: 'yellow' })}
+                              sx={{
+                                p: 1.5,
+                                cursor: 'pointer',
+                                borderRadius: 2,
+                                borderColor: currentTemplate.lfk_pain_monitoring_zone === 'yellow' ? '#F59E0B' : '#E2E8F0',
+                                borderWidth: currentTemplate.lfk_pain_monitoring_zone === 'yellow' ? 2.5 : 1,
+                                bgcolor: currentTemplate.lfk_pain_monitoring_zone === 'yellow' ? '#FFFBEB' : '#F8FAFC',
+                                transition: 'all 0.15s ease-in-out',
+                                '&:hover': { borderColor: '#F59E0B', transform: 'translateY(-1px)' }
+                              }}
+                            >
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+                                <Chip label="ВАШ 4–5" size="small" sx={{ fontWeight: 900, bgcolor: '#F59E0B', color: '#FFFFFF', fontSize: '0.72rem' }} />
+                                <Typography sx={{ fontWeight: 800, fontSize: '0.82rem', color: '#92400E' }}>
+                                  Контроль тендинопатии
+                                </Typography>
+                              </Box>
+                              <Typography sx={{ fontSize: '0.74rem', color: '#B45309', lineHeight: 1.4 }}>
+                                Допустима при эксцентрике/HSR при условии, что боль полностью исчезает к следующему утру без утренней скованности.
+                              </Typography>
+                            </Card>
+                          </Grid>
+
+                          {/* Red Zone */}
+                          <Grid size={{ xs: 12, md: 4 }}>
+                            <Card
+                              variant="outlined"
+                              onClick={() => setCurrentTemplate({ ...currentTemplate, lfk_pain_monitoring_zone: 'red' })}
+                              sx={{
+                                p: 1.5,
+                                cursor: 'pointer',
+                                borderRadius: 2,
+                                borderColor: currentTemplate.lfk_pain_monitoring_zone === 'red' ? '#EF4444' : '#E2E8F0',
+                                borderWidth: currentTemplate.lfk_pain_monitoring_zone === 'red' ? 2.5 : 1,
+                                bgcolor: currentTemplate.lfk_pain_monitoring_zone === 'red' ? '#FEF2F2' : '#F8FAFC',
+                                transition: 'all 0.15s ease-in-out',
+                                '&:hover': { borderColor: '#EF4444', transform: 'translateY(-1px)' }
+                              }}
+                            >
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+                                <Chip label="ВАШ 6–10" size="small" sx={{ fontWeight: 900, bgcolor: '#EF4444', color: '#FFFFFF', fontSize: '0.72rem' }} />
+                                <Typography sx={{ fontWeight: 800, fontSize: '0.82rem', color: '#991B1B' }}>
+                                  Опасность перегрузки (СТОП)
+                                </Typography>
+                              </Box>
+                              <Typography sx={{ fontSize: '0.74rem', color: '#B91C1C', lineHeight: 1.4 }}>
+                                Риск микроразрывов и прогрессирования отека костного мозга. Немедленно прекратить подход и снизить объем на 50%.
+                              </Typography>
+                            </Card>
+                          </Grid>
+                        </Grid>
+                      </Paper>
+
+                      {/* Interactive Rehab Journey Stepper */}
+                      <Paper variant="outlined" sx={{ p: 2, borderRadius: 2, borderColor: '#CBD5E1', bgcolor: '#F8FAFC' }}>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.5, flexWrap: 'wrap', gap: 1 }}>
+                          <Typography variant="subtitle2" sx={{ fontWeight: 800, color: '#0F3C64', textTransform: 'uppercase' }}>
+                            Маршрут двигательной реабилитации (Rehab Journey): 3 ключевые фазы
+                          </Typography>
+                          <Button
+                            size="small"
+                            variant={lfkPhaseFilter === 'all' ? 'contained' : 'outlined'}
+                            onClick={() => { setLfkPhaseFilter('all'); setLfkStepperActiveStep(0); }}
+                            sx={{ textTransform: 'none', fontWeight: 700, fontSize: '0.72rem' }}
+                          >
+                            Показать все фазы ({lfkList.length})
+                          </Button>
+                        </Box>
+
+                        <Grid container spacing={1.5}>
+                          {[
+                            {
+                              phaseNum: 1,
+                              title: 'Фаза I: Острая',
+                              subtitle: 'Защита, активация, изометрия',
+                              count: phase1Count,
+                              color: '#0E7490',
+                              bg: '#ECFEFF',
+                              border: '#A5F3FC'
+                            },
+                            {
+                              phaseNum: 2,
+                              title: 'Фаза II: Подострая',
+                              subtitle: 'Восстановление ROM и мышечного тонуса',
+                              count: phase2Count,
+                              color: '#047857',
+                              bg: '#ECFDF5',
+                              border: '#A7F3D0'
+                            },
+                            {
+                              phaseNum: 3,
+                              title: 'Фаза III: Функциональная',
+                              subtitle: 'Силовая прогрессия, эксцентрика, баланс',
+                              count: phase3Count,
+                              color: '#6D28D9',
+                              bg: '#F5F3FF',
+                              border: '#DDD6FE'
+                            }
+                          ].map(step => {
+                            const isSelected = lfkPhaseFilter === String(step.phaseNum);
+                            return (
+                              <Grid size={{ xs: 12, md: 4 }} key={step.phaseNum}>
+                                <Card
+                                  variant="outlined"
+                                  onClick={() => {
+                                    setLfkPhaseFilter(isSelected ? 'all' : String(step.phaseNum) as any);
+                                    setLfkStepperActiveStep(step.phaseNum);
+                                  }}
+                                  sx={{
+                                    p: 1.5,
+                                    cursor: 'pointer',
+                                    borderRadius: 2,
+                                    borderWidth: isSelected ? 2 : 1,
+                                    borderColor: isSelected ? step.color : step.border,
+                                    bgcolor: isSelected ? step.bg : '#FFFFFF',
+                                    transition: 'all 0.15s ease-in-out',
+                                    '&:hover': { borderColor: step.color, transform: 'translateY(-1px)' }
+                                  }}
+                                >
+                                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
+                                    <Typography sx={{ fontWeight: 900, fontSize: '0.85rem', color: step.color }}>
+                                      {step.title}
+                                    </Typography>
+                                    <Chip
+                                      label={`${step.count} упр.`}
+                                      size="small"
+                                      sx={{ fontWeight: 800, fontSize: '0.68rem', bgcolor: step.bg, color: step.color }}
+                                    />
+                                  </Box>
+                                  <Typography sx={{ fontSize: '0.74rem', color: '#475569' }}>
+                                    {step.subtitle}
+                                  </Typography>
+                                </Card>
+                              </Grid>
+                            );
+                          })}
+                        </Grid>
+                      </Paper>
+
+                      {/* 4-Level Filter & Search Toolbar */}
+                      <Paper
+                        variant="outlined"
+                        sx={{
+                          p: 1.5,
+                          borderRadius: 2,
+                          borderColor: '#CBD5E1',
+                          bgcolor: '#FFFFFF',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 1.5,
+                          flexWrap: 'wrap'
+                        }}
+                      >
+                        <TextField
+                          size="small"
+                          placeholder="Поиск упражнения, мышцы, цели или тегов..."
+                          value={lfkSearchQuery}
+                          onChange={(e) => setLfkSearchQuery(e.target.value)}
+                          slotProps={{
+                            input: {
+                              startAdornment: <SearchIcon sx={{ color: '#94A3B8', fontSize: 20, mr: 0.75 }} />
+                            }
+                          }}
+                          sx={{ flex: '1 1 240px', minWidth: 200 }}
+                        />
+
+                        <FormControl size="small" sx={{ minWidth: 140 }}>
+                          <InputLabel>Фаза ЛФК</InputLabel>
+                          <Select
+                            label="Фаза ЛФК"
+                            value={lfkPhaseFilter}
+                            onChange={(e) => setLfkPhaseFilter(e.target.value as any)}
+                          >
+                            <MenuItem value="all">Все фазы ({lfkList.length})</MenuItem>
+                            <MenuItem value="1">Фаза I (Острая) ({phase1Count})</MenuItem>
+                            <MenuItem value="2">Фаза II (Подострая) ({phase2Count})</MenuItem>
+                            <MenuItem value="3">Фаза III (Функциональная) ({phase3Count})</MenuItem>
+                          </Select>
+                        </FormControl>
+
+                        <FormControl size="small" sx={{ minWidth: 150 }}>
+                          <InputLabel>Кинематич. цепь</InputLabel>
+                          <Select
+                            label="Кинематич. цепь"
+                            value={lfkChainFilter}
+                            onChange={(e) => setLfkChainFilter(e.target.value)}
+                          >
+                            <MenuItem value="all">Все цепи</MenuItem>
+                            <MenuItem value="OKC">OKC (Открытая цепь)</MenuItem>
+                            <MenuItem value="CKC">CKC (Закрытая цепь)</MenuItem>
+                            <MenuItem value="PNF">PNF (Проприоцепция)</MenuItem>
+                            <MenuItem value="CORE">CORE (Кор/Таз)</MenuItem>
+                            <MenuItem value="ISOM">Изометрия</MenuItem>
+                            <MenuItem value="ECC">Эксцентрика</MenuItem>
+                            <MenuItem value="NEURO">Нейродинамика</MenuItem>
+                          </Select>
+                        </FormControl>
+
+                        <FormControl size="small" sx={{ minWidth: 130 }}>
+                          <InputLabel>EBM Приоритет</InputLabel>
+                          <Select
+                            label="EBM Приоритет"
+                            value={lfkPriorityFilter}
+                            onChange={(e) => setLfkPriorityFilter(e.target.value)}
+                          >
+                            <MenuItem value="all">Все уровни</MenuItem>
+                            <MenuItem value="P1">⭐ P1 Основной</MenuItem>
+                            <MenuItem value="P2">🎯 P2 Восстановит.</MenuItem>
+                            <MenuItem value="P3">🔍 P3 Адаптивный</MenuItem>
+                          </Select>
+                        </FormControl>
+
+                        {(lfkSearchQuery || lfkPhaseFilter !== 'all' || lfkChainFilter !== 'all' || lfkPriorityFilter !== 'all') && (
+                          <Button
+                            size="small"
+                            variant="text"
+                            onClick={() => {
+                              setLfkSearchQuery('');
+                              setLfkPhaseFilter('all');
+                              setLfkChainFilter('all');
+                              setLfkPriorityFilter('all');
+                            }}
+                            sx={{ textTransform: 'none', fontSize: '0.75rem', color: '#64748B' }}
+                          >
+                            Сбросить
+                          </Button>
+                        )}
+                      </Paper>
+
+                      {/* Phased Exercise Cards */}
+                      {filteredLfk.length === 0 ? (
+                        <Paper variant="outlined" sx={{ p: 4, textAlign: 'center', borderRadius: 2, borderColor: '#E2E8F0', bgcolor: '#F8FAFC' }}>
+                          <RunIcon sx={{ fontSize: 44, color: '#94A3B8', mb: 1 }} />
+                          <Typography sx={{ fontWeight: 700, color: '#334155', mb: 0.5 }}>
+                            {lfkList.length === 0 ? 'Упражнения ЛФК для данного шаблона пока не назначены' : 'Нет упражнений, соответствующих выбранным фильтрам'}
+                          </Typography>
+                          <Typography variant="caption" sx={{ color: '#64748B', display: 'block', mb: 2 }}>
+                            {lfkList.length === 0 ? 'Нажмите кнопку ниже, чтобы выбрать стандартизированные упражнения из каталога' : 'Попробуйте изменить параметры поиска или сбросить фильтры'}
+                          </Typography>
+                          {lfkList.length === 0 && (
+                            <Button
+                              variant="contained"
+                              size="small"
+                              startIcon={<AddIcon />}
+                              onClick={() => setLfkModalOpen(true)}
+                              sx={{ textTransform: 'none', fontWeight: 800, bgcolor: '#047857' }}
+                            >
+                              Выбрать упражнение из каталога
+                            </Button>
+                          )}
+                        </Paper>
+                      ) : (
+                        [1, 2, 3]
+                          .filter(phaseNum => lfkPhaseFilter === 'all' || lfkPhaseFilter === String(phaseNum))
+                          .map(phaseNum => {
+                            const phaseItems = filteredLfk.filter(item => item.phase_number === phaseNum);
+                            if (phaseItems.length === 0) return null;
+
+                            const phaseColor = phaseNum === 1 ? '#0E7490' : phaseNum === 2 ? '#047857' : '#6D28D9';
+                            const phaseBg = phaseNum === 1 ? '#ECFEFF' : phaseNum === 2 ? '#ECFDF5' : '#F5F3FF';
+                            const phaseBorder = phaseNum === 1 ? '#A5F3FC' : phaseNum === 2 ? '#A7F3D0' : '#DDD6FE';
+                            const phaseTitle = phaseItems[0]?.phase_name || (phaseNum === 1 ? 'Фаза I (Острая / Защита и активация)' : phaseNum === 2 ? 'Фаза II (Подострая / Восстановление функции и ROM)' : 'Фаза III (Функциональная / Силовая прогрессия)');
+
+                            return (
+                              <Box key={phaseNum} sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+                                {/* Phase Header Banner */}
+                                <Box
+                                  sx={{
+                                    p: 1.25,
+                                    px: 2,
+                                    borderRadius: 2,
+                                    bgcolor: phaseBg,
+                                    border: `1.5px solid ${phaseBorder}`,
+                                    display: 'flex',
+                                    justifyContent: 'space-between',
+                                    alignItems: 'center',
+                                    flexWrap: 'wrap',
+                                    gap: 1
+                                  }}
+                                >
+                                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                    <Chip
+                                      label={`ФАЗА ${phaseNum}`}
+                                      size="small"
+                                      sx={{ fontWeight: 900, fontSize: '0.72rem', bgcolor: phaseColor, color: '#FFFFFF' }}
+                                    />
+                                    <Typography sx={{ fontWeight: 800, fontSize: '0.88rem', color: phaseColor }}>
+                                      {phaseTitle}
+                                    </Typography>
+                                  </Box>
+                                  <Chip
+                                    label={`${phaseItems.length} упр.`}
+                                    size="small"
+                                    sx={{ fontWeight: 800, fontSize: '0.68rem', bgcolor: '#FFFFFF', color: phaseColor, border: `1px solid ${phaseBorder}` }}
+                                  />
+                                </Box>
+
+                                {/* Exercise Cards for this Phase */}
+                                <Grid container spacing={1.5}>
+                                  {phaseItems.map((ex) => {
+                                    const origIndex = lfkList.findIndex(l => l === ex || (l.id && l.id === ex.id) || (l.lfk_code === ex.lfk_code && l.phase_number === ex.phase_number));
+                                    const chainBadge = getKineticChainBadge(ex.kinetic_chain);
+
+                                    return (
+                                      <Grid size={{ xs: 12, md: 6 }} key={ex.id || `${ex.lfk_code}_${ex.phase_number}_${origIndex}`}>
+                                        <Card
+                                          variant="outlined"
+                                          sx={{
+                                            p: 2,
+                                            borderRadius: 2,
+                                            borderColor: phaseBorder,
+                                            bgcolor: '#FFFFFF',
+                                            height: '100%',
+                                            display: 'flex',
+                                            flexDirection: 'column',
+                                            justifyContent: 'space-between',
+                                            transition: 'all 0.15s ease-in-out',
+                                            '&:hover': {
+                                              boxShadow: '0 4px 12px rgba(0,0,0,0.06)',
+                                              borderColor: phaseColor
+                                            }
+                                          }}
+                                        >
+                                          <Box>
+                                            {/* Header Row */}
+                                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1, gap: 1 }}>
+                                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap' }}>
+                                                <Typography variant="subtitle2" sx={{ fontWeight: 800, color: '#0F172A', fontSize: '0.92rem' }}>
+                                                  <LatexText text={ex.exercise_name_override || ex.name || ex.lfk_code} />
+                                                </Typography>
+                                              </Box>
+                                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                                <IconButton
+                                                  size="small"
+                                                  onClick={() => setLfkInfoModal(ex)}
+                                                  sx={{ color: '#0284C7', p: 0.5 }}
+                                                  title="Техника выполнения"
+                                                >
+                                                  <InfoIcon sx={{ fontSize: 18 }} />
+                                                </IconButton>
+                                                <IconButton
+                                                  size="small"
+                                                  onClick={() => handleRemoveLfkItem(origIndex)}
+                                                  sx={{ color: '#EF4444', p: 0.5 }}
+                                                  title="Удалить из программы"
+                                                >
+                                                  <DeleteIcon sx={{ fontSize: 18 }} />
+                                                </IconButton>
+                                              </Box>
+                                            </Box>
+
+                                            {/* Badges Bar */}
+                                            <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', mb: 1.5 }}>
+                                              {ex.stage_step && (
+                                                <Chip
+                                                  label={ex.stage_step}
+                                                  size="small"
+                                                  sx={{ fontSize: '0.64rem', height: 20, fontWeight: 700, bgcolor: '#F1F5F9', color: '#334155' }}
+                                                />
+                                              )}
+                                              {ex.kinetic_chain && (
+                                                <Chip
+                                                  label={chainBadge.short}
+                                                  size="small"
+                                                  sx={{ fontSize: '0.64rem', height: 20, fontWeight: 700, bgcolor: chainBadge.bg, color: chainBadge.color, border: `1px solid ${chainBadge.border}` }}
+                                                />
+                                              )}
+                                              {ex.target_joint && (
+                                                <Chip
+                                                  label={ex.target_joint.toUpperCase()}
+                                                  size="small"
+                                                  sx={{ fontSize: '0.64rem', height: 20, fontWeight: 600, bgcolor: '#F8FAFC', color: '#64748B' }}
+                                                />
+                                              )}
+                                              {ex.safe_angle_range && (
+                                                <Chip
+                                                  label={`Угол: ${ex.safe_angle_range}`}
+                                                  size="small"
+                                                  sx={{ fontSize: '0.64rem', height: 20, fontWeight: 700, bgcolor: '#ECFDF5', color: '#047857' }}
+                                                />
+                                              )}
+                                            </Box>
+
+                                            {/* Prescription Details Editable */}
+                                            <Grid container spacing={1} sx={{ mb: 1 }}>
+                                              <Grid size={{ xs: 12, sm: 7 }}>
+                                                <TextField
+                                                  size="small"
+                                                  fullWidth
+                                                  label="Дозировка (Подходы × Повторы)"
+                                                  value={ex.dosage_prescription || ''}
+                                                  onChange={(e) => handleUpdateLfkField(origIndex, 'dosage_prescription', e.target.value)}
+                                                  sx={{ '& .MuiInputBase-input': { fontSize: '0.8rem', fontWeight: 600 } }}
+                                                />
+                                              </Grid>
+                                              <Grid size={{ xs: 12, sm: 5 }}>
+                                                <TextField
+                                                  size="small"
+                                                  fullWidth
+                                                  label="Темп / Удержание"
+                                                  value={ex.tempo_and_hold || ''}
+                                                  onChange={(e) => handleUpdateLfkField(origIndex, 'tempo_and_hold', e.target.value)}
+                                                  sx={{ '& .MuiInputBase-input': { fontSize: '0.8rem' } }}
+                                                />
+                                              </Grid>
+                                              <Grid size={{ xs: 12, sm: 6 }}>
+                                                <TextField
+                                                  size="small"
+                                                  fullWidth
+                                                  label="Регулярность в день"
+                                                  value={ex.frequency_per_day || ''}
+                                                  onChange={(e) => handleUpdateLfkField(origIndex, 'frequency_per_day', e.target.value)}
+                                                  sx={{ '& .MuiInputBase-input': { fontSize: '0.8rem' } }}
+                                                />
+                                              </Grid>
+                                              <Grid size={{ xs: 12, sm: 6 }}>
+                                                <TextField
+                                                  size="small"
+                                                  fullWidth
+                                                  label="Сектор углов (ROM)"
+                                                  value={ex.safe_angle_range || ''}
+                                                  onChange={(e) => handleUpdateLfkField(origIndex, 'safe_angle_range', e.target.value)}
+                                                  sx={{ '& .MuiInputBase-input': { fontSize: '0.8rem' } }}
+                                                />
+                                              </Grid>
+                                            </Grid>
+
+                                            {/* Biomechanical Goal */}
+                                            <TextField
+                                              size="small"
+                                              fullWidth
+                                              label="Биомеханическая цель / Обоснование"
+                                              value={ex.biomechanical_goal || ''}
+                                              onChange={(e) => handleUpdateLfkField(origIndex, 'biomechanical_goal', e.target.value)}
+                                              sx={{ '& .MuiInputBase-input': { fontSize: '0.78rem', color: '#475569' } }}
+                                            />
+                                          </Box>
+                                        </Card>
+                                      </Grid>
+                                    );
+                                  })}
+                                </Grid>
+                              </Box>
+                            );
+                          })
+                      )}
+                    </Box>
+                  );
+                })()}
+
+                {/* TAB 8: Live Protocol Preview */}
+                {activeTab === 8 && (
                   <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                     {/* Top Action Bar */}
                     <Paper
@@ -5977,8 +6983,45 @@ export default function OrthoTemplatesManager() {
                                 }
                                 return res;
                               })(),
+                              ...(() => {
+                                const lfkList = currentTemplate.lfk || [];
+                                if (lfkList.length === 0 && !currentTemplate.lfk_stop_rationale && !currentTemplate.lfk_target_goal && !currentTemplate.lfk_has_stop) return [];
+                                const res: string[] = ['\n8. ЛЕЧЕБНАЯ ФИЗКУЛЬТУРА (ЛФК) И КИНЕЗИОТЕРАПИЯ:'];
+                                if (currentTemplate.lfk_priority) {
+                                  res.push(`  - Приоритет EBM: ${currentTemplate.lfk_priority}`);
+                                }
+                                if (currentTemplate.lfk_pain_monitoring_zone) {
+                                  const pZone = getPainMonitoringBadge(currentTemplate.lfk_pain_monitoring_zone);
+                                  res.push(`  - Шкала мониторинга боли: ${pZone.label}`);
+                                }
+                                if (currentTemplate.lfk_has_stop === 1 || currentTemplate.lfk_stop_rationale) {
+                                  res.push(`  - [ВНИМАНИЕ! КЛИНИЧЕСКИЙ CDSS STOP]: ${currentTemplate.lfk_stop_rationale || 'ЛФК категорически противопоказана'}`);
+                                }
+                                if (currentTemplate.lfk_target_goal) {
+                                  res.push(`  - Биомеханическая цель: ${currentTemplate.lfk_target_goal}`);
+                                }
+                                [1, 2, 3].forEach(pNum => {
+                                  const pItems = lfkList.filter(l => l.phase_number === pNum);
+                                  if (pItems.length > 0) {
+                                    const pTitle = pItems[0]?.phase_name || `Фаза ${pNum}`;
+                                    res.push(`  [${pTitle}]:`);
+                                    pItems.forEach((ex, idx) => {
+                                      const step = ex.stage_step ? ` [${ex.stage_step}]` : '';
+                                      const chain = ex.kinetic_chain ? ` (${ex.kinetic_chain})` : '';
+                                      const tempo = ex.tempo_and_hold ? `, темп: ${ex.tempo_and_hold}` : '';
+                                      const freq = ex.frequency_per_day ? `, ${ex.frequency_per_day}` : '';
+                                      const safeAng = ex.safe_angle_range ? `, угол: ${ex.safe_angle_range}` : '';
+                                      res.push(`    ${idx + 1}. ${ex.exercise_name_override || ex.name || ex.lfk_code}${step}${chain}: ${ex.dosage_prescription}${tempo}${freq}${safeAng}`);
+                                      if (ex.biomechanical_goal) {
+                                        res.push(`       Цель: ${ex.biomechanical_goal}`);
+                                      }
+                                    });
+                                  }
+                                });
+                                return res;
+                              })(),
                               '',
-                              '8. ОБЩИЕ РЕКОМЕНДАЦИИ И РЕЖИМ:',
+                              '9. ОБЩИЕ РЕКОМЕНДАЦИИ И РЕЖИМ:',
                               currentTemplate.recommendations_template || 'Охранительный двигательный режим.'
                             ].filter(Boolean).join('\n');
 
@@ -6698,12 +7741,26 @@ export default function OrthoTemplatesManager() {
                                   7. Ортопедические изделия, индивидуальное ортезирование и разгрузка:
                                 </Typography>
                                 <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center' }}>
-                                  {currentTemplate.orthotics_weight_bearing && (
-                                    getWeightBearingBadge(currentTemplate.orthotics_weight_bearing)
-                                  )}
-                                  {currentTemplate.orthotics_priority && (
-                                    getOrthoticsPriorityBadge(currentTemplate.orthotics_priority)
-                                  )}
+                                  {currentTemplate.orthotics_weight_bearing && (() => {
+                                    const wb = getWeightBearingBadge(currentTemplate.orthotics_weight_bearing);
+                                    return (
+                                      <Chip
+                                        size="small"
+                                        label={`${wb.icon} ${wb.label}`}
+                                        sx={{ bgcolor: wb.bg, color: wb.color, border: `1px solid ${wb.border}`, fontWeight: 700, fontSize: '0.7rem', height: 20 }}
+                                      />
+                                    );
+                                  })()}
+                                  {currentTemplate.orthotics_priority && (() => {
+                                    const p = getOrthoticsPriorityBadge(currentTemplate.orthotics_priority);
+                                    return (
+                                      <Chip
+                                        size="small"
+                                        label={`${p.icon} ${p.label}`}
+                                        sx={{ bgcolor: p.bg, color: p.color, border: `1px solid ${p.border}`, fontWeight: 700, fontSize: '0.7rem', height: 20 }}
+                                      />
+                                    );
+                                  })()}
                                 </Box>
                               </Box>
 
@@ -6851,15 +7908,127 @@ export default function OrthoTemplatesManager() {
                         })()}
                       </Box>
 
-                      {/* 8. Recommendations & General Guidance */}
-                      <Box sx={{ mb: 3 }}>
-                        <Typography sx={{ fontWeight: 800, fontSize: '0.9rem', color: '#0F3C64', textTransform: 'uppercase', mb: 0.5 }}>
-                          8. Общий двигательный режим и фармакотерапия:
-                        </Typography>
-                        <Typography sx={{ fontSize: '0.9rem', lineHeight: 1.5, color: '#1E293B', pl: 1, borderLeft: '2px solid #E2E8F0' }}>
-                          <LatexText text={currentTemplate.recommendations_template || '1. Охранительный двигательный режим, исключение ударных осевых нагрузок и бега.\n2. При болях — НПВП коротким курсом под прикрытием гастропротекторов.\n3. Контрольный осмотр ортопеда через 14-21 день после завершения первого этапа терапии.'} />
-                        </Typography>
-                      </Box>
+                        {/* 8. LFK and Kinesiotherapy in Protocol Preview */}
+                        {(() => {
+                          const lfkList = currentTemplate.lfk || [];
+                          if (lfkList.length === 0 && !currentTemplate.lfk_stop_rationale && !currentTemplate.lfk_target_goal && !currentTemplate.lfk_has_stop) return null;
+
+                          const pBadge = getLfkPriorityBadge(currentTemplate.lfk_priority);
+                          const painBadge = getPainMonitoringBadge(currentTemplate.lfk_pain_monitoring_zone);
+                          const hasStop = currentTemplate.lfk_has_stop === 1 || currentTemplate.lfk_priority === 'P0-STOP';
+
+                          return (
+                            <Box sx={{ mb: 1.5, p: 1.25, bgcolor: '#F0FDF4', border: '1px solid #A7F3D0', borderRadius: 1.5 }}>
+                              {/* Header & Badges */}
+                              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.75, flexWrap: 'wrap', gap: 0.5 }}>
+                                <Typography sx={{ fontWeight: 800, fontSize: '0.82rem', color: '#047857', textTransform: 'uppercase' }}>
+                                  8. Лечебная физкультура (ЛФК), кинезиотерапия и двигательная реабилитация:
+                                </Typography>
+                                <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center' }}>
+                                  <Chip
+                                    label={pBadge.label}
+                                    size="small"
+                                    sx={{ fontSize: '0.65rem', height: 20, fontWeight: 800, bgcolor: pBadge.bg, color: pBadge.color, border: `1px solid ${pBadge.border}` }}
+                                  />
+                                  <Chip
+                                    label={painBadge.short}
+                                    size="small"
+                                    sx={{ fontSize: '0.65rem', height: 20, fontWeight: 800, bgcolor: painBadge.bg, color: painBadge.color, border: `1px solid ${painBadge.border}` }}
+                                  />
+                                </Box>
+                              </Box>
+
+                              {/* CDSS STOP Red Flag Alert */}
+                              {hasStop && (
+                                <Box sx={{ mb: 1, p: 1, bgcolor: '#FEF2F2', border: '1.5px solid #EF4444', borderRadius: 1, display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+                                  <WarningAmberIcon sx={{ color: '#DC2626', fontSize: 18, mt: 0.2, flexShrink: 0 }} />
+                                  <Box>
+                                    <Typography sx={{ fontSize: '0.78rem', fontWeight: 900, color: '#991B1B' }}>
+                                      КЛИНИЧЕСКИЙ CDSS STOP / ПРЕДУПРЕЖДЕНИЕ БЕЗОПАСНОСТИ [P0-STOP]:
+                                    </Typography>
+                                    <Typography sx={{ fontSize: '0.76rem', color: '#B91C1C', lineHeight: 1.35, fontWeight: 600 }}>
+                                      {currentTemplate.lfk_stop_rationale || 'Категорически запрещены форсированные движения, пассивная редрессация и осевые нагрузки до заживления!'}
+                                    </Typography>
+                                  </Box>
+                                </Box>
+                              )}
+
+                              {/* Target Goal */}
+                              {currentTemplate.lfk_target_goal && (
+                                <Typography sx={{ fontSize: '0.78rem', color: '#065F46', fontWeight: 600, mb: 1, pl: 0.5 }}>
+                                  🎯 <strong>Биомеханическая цель:</strong> <LatexText text={currentTemplate.lfk_target_goal} />
+                                </Typography>
+                              )}
+
+                              {/* Phased Exercises */}
+                              {[1, 2, 3].map(phaseNum => {
+                                const pItems = lfkList.filter(l => l.phase_number === phaseNum);
+                                if (pItems.length === 0) return null;
+                                const pTitle = pItems[0]?.phase_name || `Фаза ${phaseNum}`;
+                                const phaseColor = phaseNum === 1 ? '#0E7490' : phaseNum === 2 ? '#047857' : '#6D28D9';
+                                const phaseBg = phaseNum === 1 ? '#ECFEFF' : phaseNum === 2 ? '#ECFDF5' : '#F5F3FF';
+
+                                return (
+                                  <Box key={phaseNum} sx={{ mb: 1 }}>
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.4 }}>
+                                      <Chip
+                                        label={pTitle}
+                                        size="small"
+                                        sx={{ fontSize: '0.7rem', height: 18, fontWeight: 800, bgcolor: phaseBg, color: phaseColor }}
+                                      />
+                                    </Box>
+                                    {pItems.map((ex, idx) => {
+                                      const chainBadge = getKineticChainBadge(ex.kinetic_chain);
+                                      return (
+                                        <Box key={ex.id || `${ex.lfk_code}_${idx}`} sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', py: 0.35, borderBottom: '1px dashed #A7F3D0' }}>
+                                          <Box sx={{ flex: 1, pr: 1 }}>
+                                            <Typography sx={{ fontSize: '0.82rem', fontWeight: 600, color: '#1E293B' }}>
+                                              {idx + 1}. <LatexText text={ex.exercise_name_override || ex.name || ex.lfk_code} />
+                                              {ex.stage_step && (
+                                                <Chip label={ex.stage_step} size="small" sx={{ ml: 0.75, height: 16, fontSize: '0.62rem', fontWeight: 700, bgcolor: '#E2E8F0', color: '#334155' }} />
+                                              )}
+                                              {ex.kinetic_chain && (
+                                                <Chip label={chainBadge.short} size="small" sx={{ ml: 0.5, height: 16, fontSize: '0.62rem', fontWeight: 700, bgcolor: chainBadge.bg, color: chainBadge.color }} />
+                                              )}
+                                            </Typography>
+                                            <Typography sx={{ fontSize: '0.78rem', color: '#475569', mt: 0.2 }}>
+                                              <strong>Режим:</strong> <LatexText text={ex.dosage_prescription} />
+                                              {ex.tempo_and_hold && <span> • Темп/удержание: {ex.tempo_and_hold}</span>}
+                                              {ex.frequency_per_day && <span> • {ex.frequency_per_day}</span>}
+                                              {ex.safe_angle_range && <span style={{ color: '#047857', fontWeight: 600 }}> • Углы: {ex.safe_angle_range}</span>}
+                                            </Typography>
+                                            {ex.biomechanical_goal && (
+                                              <Typography sx={{ fontSize: '0.74rem', color: '#64748B', fontStyle: 'italic', mt: 0.1 }}>
+                                                Биомеханика: <LatexText text={ex.biomechanical_goal} />
+                                              </Typography>
+                                            )}
+                                          </Box>
+                                        </Box>
+                                      );
+                                    })}
+                                  </Box>
+                                );
+                              })}
+
+                              {/* Pain Monitoring Rule Guidance */}
+                              <Box sx={{ mt: 1, p: 0.75, bgcolor: '#ECFDF5', border: '1px solid #A7F3D0', borderRadius: 1 }}>
+                                <Typography sx={{ fontSize: '0.72rem', color: '#065F46', lineHeight: 1.4 }}>
+                                  🛡️ <strong>Правило мониторинга боли (Silbernagel / Thomeé):</strong> {painBadge.desc}. Боль во время занятий не должна превышать {painBadge.vasRange} и обязана стихать до исходного уровня к утру. При нарастании боли тренировку прекратить.
+                                </Typography>
+                              </Box>
+                            </Box>
+                          );
+                        })()}
+
+                        {/* 9. Recommendations & General Guidance */}
+                        <Box sx={{ mb: 3 }}>
+                          <Typography sx={{ fontWeight: 800, fontSize: '0.9rem', color: '#0F3C64', textTransform: 'uppercase', mb: 0.5 }}>
+                            9. Общий двигательный режим и фармакотерапия:
+                          </Typography>
+                          <Typography sx={{ fontSize: '0.9rem', lineHeight: 1.5, color: '#1E293B', pl: 1, borderLeft: '2px solid #E2E8F0' }}>
+                            <LatexText text={currentTemplate.recommendations_template || '1. Охранительный двигательный режим, исключение ударных осевых нагрузок и бега.\n2. При болях — НПВП коротким курсом под прикрытием гастропротекторов.\n3. Контрольный осмотр ортопеда через 14-21 день после завершения первого этапа терапии.'} />
+                          </Typography>
+                        </Box>
 
                       {/* Doctor Signature Block */}
                       <Box
@@ -7437,6 +8606,198 @@ export default function OrthoTemplatesManager() {
           <Button onClick={() => setOrthoticsModalOpen(false)}>Закрыть</Button>
         </DialogActions>
       </Dialog>
+
+      {/* MODAL: Select LFK Exercise from Catalog */}
+      <Dialog
+        open={lfkModalOpen}
+        onClose={() => setLfkModalOpen(false)}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle sx={{ fontWeight: 800, color: '#0F3C64', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <RunIcon sx={{ color: '#047857' }} />
+            <span>Каталог стандартизированных упражнений ЛФК</span>
+          </Box>
+          <Chip label={`${lfkCatalog.length} упражнений`} size="small" sx={{ fontWeight: 800, bgcolor: '#ECFDF5', color: '#047857' }} />
+        </DialogTitle>
+        <DialogContent dividers>
+          <Grid container spacing={1.5}>
+            {lfkCatalog.map((lc) => {
+              const chainBadge = getKineticChainBadge(lc.kinetic_chain);
+              const isMatchJoint = lc.target_joint === currentTemplate?.joint_name || lc.target_joint === 'general';
+
+              return (
+                <Grid size={{ xs: 12, sm: 6 }} key={lc.code}>
+                  <Card
+                    variant="outlined"
+                    sx={{
+                      p: 1.5,
+                      borderColor: isMatchJoint ? '#047857' : '#CBD5E1',
+                      borderWidth: isMatchJoint ? 1.5 : 1,
+                      bgcolor: isMatchJoint ? '#F0FDF4' : '#FFFFFF',
+                      borderRadius: 2,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      justifyContent: 'space-between',
+                      height: '100%'
+                    }}
+                  >
+                    <Box>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 0.5 }}>
+                        <Typography variant="subtitle2" sx={{ fontWeight: 800, color: '#0F172A' }}>
+                          <LatexText text={lc.name} />
+                        </Typography>
+                        <Chip
+                          label={chainBadge.short}
+                          size="small"
+                          sx={{ fontSize: '0.62rem', height: 18, fontWeight: 700, bgcolor: chainBadge.bg, color: chainBadge.color }}
+                        />
+                      </Box>
+
+                      <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', mb: 0.75 }}>
+                        <Typography variant="caption" sx={{ color: '#047857', fontWeight: 700 }}>
+                          {lc.target_joint?.toUpperCase()} • {lc.target_muscle_group}
+                        </Typography>
+                        {lc.default_stage_step && (
+                          <Chip label={lc.default_stage_step} size="small" sx={{ height: 16, fontSize: '0.6rem', bgcolor: '#E2E8F0', color: '#334155' }} />
+                        )}
+                      </Box>
+
+                      <Typography variant="caption" sx={{ display: 'block', mb: 0.5, color: '#475569' }}>
+                        <strong>Стандарт:</strong> {lc.standard_dosage} {lc.tempo_formula ? `(темп ${lc.tempo_formula})` : ''}
+                      </Typography>
+
+                      {lc.technique_description && (
+                        <Typography variant="caption" sx={{ display: 'block', mb: 1, color: '#64748B', fontStyle: 'italic', lineHeight: 1.3 }}>
+                          <LatexText text={lc.technique_description.length > 120 ? lc.technique_description.substring(0, 120) + '...' : lc.technique_description} />
+                        </Typography>
+                      )}
+                    </Box>
+
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 1, pt: 1, borderTop: '1px solid #E2E8F0', flexWrap: 'wrap', gap: 0.5 }}>
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        onClick={() => setLfkInfoModal(lc)}
+                        sx={{ textTransform: 'none', fontSize: '0.72rem', px: 1 }}
+                      >
+                        Техника (i)
+                      </Button>
+                      <Box sx={{ display: 'flex', gap: 0.5 }}>
+                        <Button
+                          size="small"
+                          variant="contained"
+                          onClick={() => handleAddLfkItem(lc, 1)}
+                          sx={{ bgcolor: '#0E7490', '&:hover': { bgcolor: '#155E75' }, textTransform: 'none', fontSize: '0.7rem', fontWeight: 800, px: 0.75 }}
+                        >
+                          + Фаза I
+                        </Button>
+                        <Button
+                          size="small"
+                          variant="contained"
+                          onClick={() => handleAddLfkItem(lc, 2)}
+                          sx={{ bgcolor: '#047857', '&:hover': { bgcolor: '#065F46' }, textTransform: 'none', fontSize: '0.7rem', fontWeight: 800, px: 0.75 }}
+                        >
+                          + Фаза II
+                        </Button>
+                        <Button
+                          size="small"
+                          variant="contained"
+                          onClick={() => handleAddLfkItem(lc, 3)}
+                          sx={{ bgcolor: '#6D28D9', '&:hover': { bgcolor: '#5B21B6' }, textTransform: 'none', fontSize: '0.7rem', fontWeight: 800, px: 0.75 }}
+                        >
+                          + Фаза III
+                        </Button>
+                      </Box>
+                    </Box>
+                  </Card>
+                </Grid>
+              );
+            })}
+          </Grid>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setLfkModalOpen(false)}>Закрыть</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* MODAL: LFK Technique & Guidance Modal */}
+      <Dialog
+        open={Boolean(lfkInfoModal)}
+        onClose={() => setLfkInfoModal(null)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle sx={{ fontWeight: 800, color: '#0F3C64', display: 'flex', alignItems: 'center', gap: 1 }}>
+          <RunIcon sx={{ color: '#047857' }} />
+          <span>{lfkInfoModal?.exercise_name_override || lfkInfoModal?.name || lfkInfoModal?.lfk_code}</span>
+        </DialogTitle>
+        <DialogContent dividers>
+          {lfkInfoModal && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+              <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap' }}>
+                {lfkInfoModal.target_joint && (
+                  <Chip label={`Сустав: ${lfkInfoModal.target_joint.toUpperCase()}`} size="small" sx={{ fontWeight: 700, bgcolor: '#ECFDF5', color: '#047857' }} />
+                )}
+                {lfkInfoModal.target_muscle_group && (
+                  <Chip label={`Мышцы: ${lfkInfoModal.target_muscle_group}`} size="small" sx={{ fontWeight: 700, bgcolor: '#F0F9FF', color: '#0284C7' }} />
+                )}
+                {lfkInfoModal.kinetic_chain && (
+                  <Chip label={`Цепь: ${lfkInfoModal.kinetic_chain}`} size="small" sx={{ fontWeight: 700, bgcolor: '#FAF5FF', color: '#6D28D9' }} />
+                )}
+                {lfkInfoModal.stage_step && (
+                  <Chip label={lfkInfoModal.stage_step} size="small" sx={{ fontWeight: 700, bgcolor: '#F1F5F9', color: '#334155' }} />
+                )}
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" sx={{ fontWeight: 800, color: '#0F3C64', mb: 0.5 }}>
+                  📖 Методика и техника выполнения:
+                </Typography>
+                <Typography variant="body2" sx={{ color: '#334155', lineHeight: 1.55 }}>
+                  <LatexText text={lfkInfoModal.technique_description || lfkInfoModal.biomechanical_goal || 'Выполнять плавно, контролируя дыхание и стабильность оси сустава.'} />
+                </Typography>
+              </Box>
+
+              {lfkInfoModal.safe_angle_range && (
+                <Box sx={{ p: 1, bgcolor: '#ECFDF5', borderRadius: 1.5, border: '1px solid #A7F3D0' }}>
+                  <Typography variant="caption" sx={{ fontWeight: 800, color: '#065F46', display: 'block' }}>
+                    📐 Безопасный сектор амплитуды (Safe ROM):
+                  </Typography>
+                  <Typography variant="body2" sx={{ color: '#047857', fontWeight: 600 }}>
+                    {lfkInfoModal.safe_angle_range}
+                  </Typography>
+                </Box>
+              )}
+
+              {lfkInfoModal.contraindications_notes && (
+                <Box sx={{ p: 1, bgcolor: '#FEF2F2', borderRadius: 1.5, border: '1px solid #FECACA' }}>
+                  <Typography variant="caption" sx={{ fontWeight: 800, color: '#991B1B', display: 'block' }}>
+                    🚨 Ограничения и стоп-сигналы:
+                  </Typography>
+                  <Typography variant="body2" sx={{ color: '#B91C1C' }}>
+                    {lfkInfoModal.contraindications_notes}
+                  </Typography>
+                </Box>
+              )}
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setLfkInfoModal(null)} variant="contained" sx={{ bgcolor: '#047857' }}>
+            Понятно
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Unified Clinical Guidance Modal */}
+      <ClinicalGuidanceModal
+        open={clinicalGuideOpen}
+        onClose={() => setClinicalGuideOpen(false)}
+        initialSection={clinicalGuideSection}
+        jointCategory={currentTemplate?.joint_category || currentTemplate?.joint_name}
+      />
     </Box>
   );
 }

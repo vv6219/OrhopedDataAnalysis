@@ -26,6 +26,7 @@ import {
   ErrorOutlined as ErrorOutlineIcon
 } from '@mui/icons-material';
 import LatexText from './LatexText';
+import ClinicalGuidanceModal from './ClinicalGuidanceModal';
 
 export interface OrthoTestGuidanceModalProps {
   open: boolean;
@@ -76,7 +77,9 @@ export const OrthoTestGuidanceModal: React.FC<OrthoTestGuidanceModalProps> = ({
   onSetResult,
   readOnly = false
 }) => {
-  if (!test) return null;
+  if (!test) {
+    return <ClinicalGuidanceModal open={open} onClose={onClose} initialSection="tests" />;
+  }
 
   const displayName = test.name_ru || test.name || test.code;
   const jointName = JOINT_LABELS[test.joint_category || test.target_joint || ''] || test.joint_category || 'Сустав';

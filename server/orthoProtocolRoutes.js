@@ -72,23 +72,73 @@ function detectJointAndMkb(title = '', content = '') {
 }
 
 // -----------------------------------------------------------------------------
+// Helper query to fetch enriched template metadata with counts of clinical domains
+function getOrthoTemplatesSql() {
+  return `
+    SELECT ot.id, ot.title, ot.joint_name, ot.default_mkb_code, ot.template_json, ot.category,
+           ot.cluster_id, ot.cluster_name, ot.stage_or_severity, ot.is_custom, ot.author_doctor_name, ot.clinical_tags,
+           ot.default_side, ot.complaints_template, ot.anamnesis_template, ot.anamnesis_vitae_template,
+           ot.objective_template, ot.objective_status_template, ot.special_studies_template,
+           ot.performed_manipulations_template, ot.default_sections_mask, ot.recommendations_template,
+           ot.rom_norm_preset, ot.rom_priority, ot.rom_sftr_preview,
+           (SELECT COUNT(*) FROM ortho_template_tests WHERE template_id = ot.id) AS tests_count,
+           (SELECT COUNT(*) FROM ortho_template_diagnostics WHERE template_id = ot.id) AS diagnostics_count,
+           (SELECT COUNT(*) FROM ortho_template_manipulations WHERE template_id = ot.id) AS manipulations_count,
+           (SELECT COUNT(*) FROM ortho_template_physiotherapy WHERE template_id = ot.id) AS physiotherapy_count,
+           (SELECT COUNT(*) FROM ortho_template_orthotics WHERE template_id = ot.id) AS orthotics_count,
+           (SELECT COUNT(*) FROM ortho_template_lfk WHERE template_id = ot.id) AS lfk_count,
+           'biomechanics' AS source
+    FROM ortho_templates ot
+    WHERE (ot.is_active = 1 OR ot.is_active IS NULL)
+    ORDER BY ot.is_custom DESC, ot.sort_order ASC, ot.id ASC
+  `;
+}
+
+function mapOrthoTemplateRow(ot) {
+  return {
+    id: `ortho-${ot.id}`,
+    rawId: ot.id,
+    title: ot.title,
+    joint_name: ot.joint_name,
+    default_mkb_code: ot.default_mkb_code,
+    template_json: ot.template_json,
+    category: ot.category || 'Биомеханика Neutral-0 ROM',
+    cluster_id: ot.cluster_id || '',
+    cluster_name: ot.cluster_name || '',
+    stage_or_severity: ot.stage_or_severity || '',
+    default_side: ot.default_side || 'right',
+    is_custom: Boolean(ot.is_custom),
+    author_doctor_name: ot.author_doctor_name || '',
+    clinical_tags: ot.clinical_tags || '',
+    complaints_template: ot.complaints_template || '',
+    anamnesis_template: ot.anamnesis_template || '',
+    anamnesis_vitae_template: ot.anamnesis_vitae_template || '',
+    objective_template: ot.objective_template || '',
+    objective_status_template: ot.objective_status_template || '',
+    special_studies_template: ot.special_studies_template || '',
+    performed_manipulations_template: ot.performed_manipulations_template || '',
+    default_sections_mask: ot.default_sections_mask || '',
+    recommendations_template: ot.recommendations_template || '',
+    rom_norm_preset: ot.rom_norm_preset || null,
+    rom_priority: ot.rom_priority || 'P2',
+    rom_sftr_preview: ot.rom_sftr_preview || '',
+    tests_count: Number(ot.tests_count || 0),
+    diagnostics_count: Number(ot.diagnostics_count || 0),
+    manipulations_count: Number(ot.manipulations_count || 0),
+    physiotherapy_count: Number(ot.physiotherapy_count || 0),
+    orthotics_count: Number(ot.orthotics_count || 0),
+    lfk_count: Number(ot.lfk_count || 0),
+    source: 'biomechanics'
+  };
+}
+
 // 0. GET /api/ortho/templates - Unified clinical templates (ortho_templates + protdict)
 // -----------------------------------------------------------------------------
 router.get('/templates', (req, res) => {
   const search = req.query.search ? String(req.query.search).trim() : '';
   const joint = req.query.joint ? String(req.query.joint).trim() : '';
 
-  db.all(`
-    SELECT id, title, joint_name, default_mkb_code, template_json, category,
-           cluster_id, cluster_name, is_custom, author_doctor_name, clinical_tags,
-           complaints_template, anamnesis_template, anamnesis_vitae_template,
-           objective_template, objective_status_template, special_studies_template,
-           performed_manipulations_template, default_sections_mask, recommendations_template,
-           'biomechanics' AS source
-    FROM ortho_templates
-    WHERE (is_active = 1 OR is_active IS NULL)
-    ORDER BY is_custom DESC, sort_order ASC, id ASC
-  `, [], (oErr, orthoTemplates) => {
+  db.all(getOrthoTemplatesSql(), [], (oErr, orthoTemplates) => {
     if (oErr) return res.status(500).json({ success: false, error: oErr.message });
 
     let pSql = `SELECT id, name AS title, title AS full_title, content, kind, post, 'protdict' AS source FROM protdict WHERE hide_f = 0`;
@@ -102,30 +152,7 @@ router.get('/templates', (req, res) => {
     db.all(pSql, pParams, (pErr, protdictRows) => {
       if (pErr) return res.status(500).json({ success: false, error: pErr.message });
 
-      const mappedOrtho = (orthoTemplates || []).map((ot) => ({
-        id: `ortho-${ot.id}`,
-        rawId: ot.id,
-        title: ot.title,
-        joint_name: ot.joint_name,
-        default_mkb_code: ot.default_mkb_code,
-        template_json: ot.template_json,
-        category: ot.category || 'Биомеханика Neutral-0 ROM',
-        cluster_id: ot.cluster_id || '',
-        cluster_name: ot.cluster_name || '',
-        is_custom: Boolean(ot.is_custom),
-        author_doctor_name: ot.author_doctor_name || '',
-        clinical_tags: ot.clinical_tags || '',
-        complaints_template: ot.complaints_template || '',
-        anamnesis_template: ot.anamnesis_template || '',
-        anamnesis_vitae_template: ot.anamnesis_vitae_template || '',
-        objective_template: ot.objective_template || '',
-        objective_status_template: ot.objective_status_template || '',
-        special_studies_template: ot.special_studies_template || '',
-        performed_manipulations_template: ot.performed_manipulations_template || '',
-        default_sections_mask: ot.default_sections_mask || '',
-        recommendations_template: ot.recommendations_template || '',
-        source: 'biomechanics'
-      }));
+      const mappedOrtho = (orthoTemplates || []).map(mapOrthoTemplateRow);
 
       const mappedProtdict = (protdictRows || []).map((row) => {
         const detected = detectJointAndMkb(row.title, row.content);
@@ -598,19 +625,10 @@ router.get(['/context', '/context/:identifier'], (req, res) => {
                 `, [patientId], (bErr, biomechanicsHistory) => {
 
                   // 7. Fetch active templates (ortho_templates + protdict)
-                  db.all(`SELECT id, title, joint_name, default_mkb_code, template_json, 'biomechanics' AS source FROM ortho_templates ORDER BY id ASC`, [], (tErr, orthoTemplates) => {
+                  db.all(getOrthoTemplatesSql(), [], (tErr, orthoTemplates) => {
                     db.all(`SELECT id, name AS title, title AS full_title, content, kind, post, 'protdict' AS source FROM protdict WHERE hide_f = 0 ORDER BY name ASC`, [], (pdErr, protdictRows) => {
                       const allTemplates = [
-                        ...(orthoTemplates || []).map((ot) => ({
-                          id: `ortho-${ot.id}`,
-                          rawId: ot.id,
-                          title: ot.title,
-                          joint_name: ot.joint_name,
-                          default_mkb_code: ot.default_mkb_code,
-                          template_json: ot.template_json,
-                          category: 'Биомеханика Neutral-0 ROM',
-                          source: 'biomechanics'
-                        })),
+                        ...(orthoTemplates || []).map(mapOrthoTemplateRow),
                         ...(protdictRows || []).map((pr) => {
                           const detected = detectJointAndMkb(pr.title, pr.content);
                           return {
@@ -1314,7 +1332,15 @@ router.get('/tests/catalog', (req, res) => {
            t.methodology AS technique_description,
            t.positive_criteria AS positive_criterion,
            t.joint_category AS target_joint,
-           (SELECT COUNT(*) FROM ortho_template_tests WHERE test_code = t.code) AS templates_count
+           (SELECT COUNT(*) FROM ortho_template_tests WHERE test_code = t.code) AS templates_count,
+           COALESCE(
+             (SELECT priority_level FROM ortho_template_tests WHERE test_code = t.code LIMIT 1),
+             CASE 
+               WHEN t.sensitivity_pct >= 90 OR t.test_type = 'multifactor_cluster' THEN 'high'
+               WHEN t.specificity_pct >= 85 THEN 'medium'
+               ELSE 'low'
+             END
+           ) AS priority_level
     FROM ortho_test_catalog t
     WHERE (t.is_active = 1 OR ? = 1)
   `;
@@ -1819,16 +1845,430 @@ router.get('/cdss/physio-blocks', (req, res) => {
   });
 });
 
+// 9.2.10. GET /api/ortho/treatments/lfk - List LFK catalog exercises with servdict links
+router.get('/treatments/lfk', (req, res) => {
+  const { joint, type, chain, search } = req.query;
+  let sql = `
+    SELECT l.*, sd.name AS servdict_name, sd.price AS servdict_price
+    FROM ortho_lfk_catalog l
+    LEFT JOIN servdict sd ON sd.id = l.servdict_id
+    WHERE l.is_active = 1
+  `;
+  const params = [];
+  if (joint && joint !== 'all') {
+    sql += ` AND (l.target_joint = ? OR l.target_joint = 'general')`;
+    params.push(joint);
+  }
+  if (type && type !== 'all') {
+    sql += ` AND l.exercise_type = ?`;
+    params.push(type);
+  }
+  if (chain && chain !== 'all') {
+    sql += ` AND l.kinetic_chain = ?`;
+    params.push(chain);
+  }
+  if (search && search.trim()) {
+    sql += ` AND (l.name LIKE ? OR l.code LIKE ? OR l.short_name LIKE ? OR l.technique_description LIKE ? OR l.equipment_tags LIKE ?)`;
+    const term = `%${search.trim()}%`;
+    params.push(term, term, term, term, term);
+  }
+  sql += ` ORDER BY l.target_joint ASC, l.code ASC`;
+  db.all(sql, params, (err, rows) => {
+    if (err) return res.status(500).json({ success: false, error: err.message });
+    res.json({ success: true, total: (rows || []).length, lfk: rows || [] });
+  });
+});
+
+// 9.2.11. GET /api/ortho/catalogs/summary - Unified counts for all 8 catalogs
+router.get('/catalogs/summary', (req, res) => {
+  const sql = `
+    SELECT 'templates' as key, COUNT(*) as count FROM ortho_templates WHERE is_active = 1 OR is_active IS NULL
+    UNION ALL
+    SELECT 'tests' as key, COUNT(*) as count FROM ortho_test_catalog WHERE is_active = 1
+    UNION ALL
+    SELECT 'diagnostics' as key, COUNT(*) as count FROM diagnostic_methods_catalog WHERE is_active = 1
+    UNION ALL
+    SELECT 'manipulations' as key, COUNT(*) as count FROM ortho_manipulations_catalog WHERE is_active = 1
+    UNION ALL
+    SELECT 'physiotherapy' as key, COUNT(*) as count FROM ortho_physiotherapy_catalog WHERE is_active = 1
+    UNION ALL
+    SELECT 'orthotics' as key, COUNT(*) as count FROM ortho_orthotics_catalog WHERE is_active = 1
+    UNION ALL
+    SELECT 'lfk' as key, COUNT(*) as count FROM ortho_lfk_catalog WHERE is_active = 1
+  `;
+  db.all(sql, [], (err, rows) => {
+    if (err) return res.status(500).json({ success: false, error: err.message });
+    const counts = {
+      templates: 0,
+      rom_joints: 10,
+      tests: 0,
+      diagnostics: 0,
+      manipulations: 0,
+      physiotherapy: 0,
+      orthotics: 0,
+      lfk: 0
+    };
+    (rows || []).forEach(r => {
+      counts[r.key] = r.count;
+    });
+    res.json({ success: true, counts });
+  });
+});
+
+// 9.2.12. Manipulations CRUD
+router.post('/treatments/manipulations', (req, res) => {
+  const {
+    code, name, subcategory, target_joint, service_scope = 'internal', default_priority = 'high',
+    ebm_priority = 'P2', navigation_type = 'us_guided', anatomical_access = '', drug_class = '',
+    is_stop_warning = 0, stop_rationale = '', description = '', technique_details = '',
+    regimen_standard = '', patient_preparation = '', post_procedure_care = '',
+    clinical_indications = '', contraindications = '', servdict_id = null, sort_order = 0
+  } = req.body;
+
+  if (!code || !name || !target_joint) {
+    return res.status(400).json({ success: false, error: 'Код, название и сустав обязательны' });
+  }
+
+  const sql = `
+    INSERT INTO ortho_manipulations_catalog (
+      code, name, subcategory, target_joint, service_scope, default_priority,
+      ebm_priority, navigation_type, anatomical_access, drug_class,
+      is_stop_warning, stop_rationale, description, technique_details,
+      regimen_standard, patient_preparation, post_procedure_care,
+      clinical_indications, contraindications, servdict_id, sort_order, is_active
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+  `;
+  db.run(sql, [
+    code, name, subcategory || 'Инъекционная терапия', target_joint, service_scope, default_priority,
+    ebm_priority, navigation_type, anatomical_access, drug_class,
+    is_stop_warning ? 1 : 0, stop_rationale, description, technique_details,
+    regimen_standard, patient_preparation, post_procedure_care,
+    clinical_indications, contraindications, servdict_id, sort_order
+  ], function (err) {
+    if (err) return res.status(500).json({ success: false, error: err.message });
+    logOrthoAudit({ eventType: EventTypes.PROTOCOL_SAVED, message: `Создана манипуляция: ${name} (${code})` });
+    res.json({ success: true, message: 'Манипуляция успешно создана', code });
+  });
+});
+
+router.put('/treatments/manipulations/:code', (req, res) => {
+  const { code } = req.params;
+  const {
+    name, subcategory, target_joint, service_scope, default_priority,
+    ebm_priority, navigation_type, anatomical_access, drug_class,
+    is_stop_warning, stop_rationale, description, technique_details,
+    regimen_standard, patient_preparation, post_procedure_care,
+    clinical_indications, contraindications, servdict_id, sort_order, is_active
+  } = req.body;
+
+  const sql = `
+    UPDATE ortho_manipulations_catalog SET
+      name = COALESCE(?, name),
+      subcategory = COALESCE(?, subcategory),
+      target_joint = COALESCE(?, target_joint),
+      service_scope = COALESCE(?, service_scope),
+      default_priority = COALESCE(?, default_priority),
+      ebm_priority = COALESCE(?, ebm_priority),
+      navigation_type = COALESCE(?, navigation_type),
+      anatomical_access = COALESCE(?, anatomical_access),
+      drug_class = COALESCE(?, drug_class),
+      is_stop_warning = COALESCE(?, is_stop_warning),
+      stop_rationale = COALESCE(?, stop_rationale),
+      description = COALESCE(?, description),
+      technique_details = COALESCE(?, technique_details),
+      regimen_standard = COALESCE(?, regimen_standard),
+      patient_preparation = COALESCE(?, patient_preparation),
+      post_procedure_care = COALESCE(?, post_procedure_care),
+      clinical_indications = COALESCE(?, clinical_indications),
+      contraindications = COALESCE(?, contraindications),
+      servdict_id = COALESCE(?, servdict_id),
+      sort_order = COALESCE(?, sort_order),
+      is_active = COALESCE(?, is_active)
+    WHERE code = ?
+  `;
+  db.run(sql, [
+    name, subcategory, target_joint, service_scope, default_priority,
+    ebm_priority, navigation_type, anatomical_access, drug_class,
+    is_stop_warning !== undefined ? (is_stop_warning ? 1 : 0) : null, stop_rationale,
+    description, technique_details, regimen_standard, patient_preparation, post_procedure_care,
+    clinical_indications, contraindications, servdict_id, sort_order, is_active,
+    code
+  ], function (err) {
+    if (err) return res.status(500).json({ success: false, error: err.message });
+    logOrthoAudit({ eventType: EventTypes.PROTOCOL_SAVED, message: `Обновлена манипуляция: ${code}` });
+    res.json({ success: true, message: 'Манипуляция успешно обновлена' });
+  });
+});
+
+router.delete('/treatments/manipulations/:code', (req, res) => {
+  const { code } = req.params;
+  db.run(`UPDATE ortho_manipulations_catalog SET is_active = 0 WHERE code = ?`, [code], function(err) {
+    if (err) return res.status(500).json({ success: false, error: err.message });
+    logOrthoAudit({ eventType: EventTypes.PROTOCOL_SAVED, message: `Манипуляция ${code} отправлена в архив` });
+    res.json({ success: true, message: 'Манипуляция отправлена в архив' });
+  });
+});
+
+// 9.2.13. Physiotherapy CRUD
+router.post('/treatments/physiotherapy', (req, res) => {
+  const {
+    code, name, subcategory, target_joint, service_scope = 'internal', default_priority = 'high',
+    modality_tag, biophysical_profile, evidence_level = '1A', cdss_contraindication_tags, apparatus_examples,
+    description = '', technique_details = '', regimen_standard = '', patient_preparation = '',
+    post_procedure_care = '', clinical_indications = '', contraindications = '', servdict_id = null, sort_order = 0
+  } = req.body;
+
+  if (!code || !name || !target_joint) {
+    return res.status(400).json({ success: false, error: 'Код, название и сустав обязательны' });
+  }
+
+  const sql = `
+    INSERT INTO ortho_physiotherapy_catalog (
+      code, name, subcategory, target_joint, service_scope, default_priority,
+      modality_tag, biophysical_profile, evidence_level, cdss_contraindication_tags, apparatus_examples,
+      description, technique_details, regimen_standard, patient_preparation, post_procedure_care,
+      clinical_indications, contraindications, servdict_id, sort_order, is_active
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+  `;
+  db.run(sql, [
+    code, name, subcategory || 'Аппаратная физиотерапия', target_joint, service_scope, default_priority,
+    modality_tag, biophysical_profile, evidence_level, cdss_contraindication_tags, apparatus_examples,
+    description, technique_details, regimen_standard, patient_preparation, post_procedure_care,
+    clinical_indications, contraindications, servdict_id, sort_order
+  ], function (err) {
+    if (err) return res.status(500).json({ success: false, error: err.message });
+    logOrthoAudit({ eventType: EventTypes.PROTOCOL_SAVED, message: `Создан метод физиотерапии: ${name} (${code})` });
+    res.json({ success: true, message: 'Метод физиотерапии успешно создан', code });
+  });
+});
+
+router.put('/treatments/physiotherapy/:code', (req, res) => {
+  const { code } = req.params;
+  const {
+    name, subcategory, target_joint, service_scope, default_priority,
+    modality_tag, biophysical_profile, evidence_level, cdss_contraindication_tags, apparatus_examples,
+    description, technique_details, regimen_standard, patient_preparation, post_procedure_care,
+    clinical_indications, contraindications, servdict_id, sort_order, is_active
+  } = req.body;
+
+  const sql = `
+    UPDATE ortho_physiotherapy_catalog SET
+      name = COALESCE(?, name),
+      subcategory = COALESCE(?, subcategory),
+      target_joint = COALESCE(?, target_joint),
+      service_scope = COALESCE(?, service_scope),
+      default_priority = COALESCE(?, default_priority),
+      modality_tag = COALESCE(?, modality_tag),
+      biophysical_profile = COALESCE(?, biophysical_profile),
+      evidence_level = COALESCE(?, evidence_level),
+      cdss_contraindication_tags = COALESCE(?, cdss_contraindication_tags),
+      apparatus_examples = COALESCE(?, apparatus_examples),
+      description = COALESCE(?, description),
+      technique_details = COALESCE(?, technique_details),
+      regimen_standard = COALESCE(?, regimen_standard),
+      patient_preparation = COALESCE(?, patient_preparation),
+      post_procedure_care = COALESCE(?, post_procedure_care),
+      clinical_indications = COALESCE(?, clinical_indications),
+      contraindications = COALESCE(?, contraindications),
+      servdict_id = COALESCE(?, servdict_id),
+      sort_order = COALESCE(?, sort_order),
+      is_active = COALESCE(?, is_active)
+    WHERE code = ?
+  `;
+  db.run(sql, [
+    name, subcategory, target_joint, service_scope, default_priority,
+    modality_tag, biophysical_profile, evidence_level, cdss_contraindication_tags, apparatus_examples,
+    description, technique_details, regimen_standard, patient_preparation, post_procedure_care,
+    clinical_indications, contraindications, servdict_id, sort_order, is_active,
+    code
+  ], function (err) {
+    if (err) return res.status(500).json({ success: false, error: err.message });
+    logOrthoAudit({ eventType: EventTypes.PROTOCOL_SAVED, message: `Обновлен метод физиотерапии: ${code}` });
+    res.json({ success: true, message: 'Метод физиотерапии успешно обновлен' });
+  });
+});
+
+router.delete('/treatments/physiotherapy/:code', (req, res) => {
+  const { code } = req.params;
+  db.run(`UPDATE ortho_physiotherapy_catalog SET is_active = 0 WHERE code = ?`, [code], function(err) {
+    if (err) return res.status(500).json({ success: false, error: err.message });
+    logOrthoAudit({ eventType: EventTypes.PROTOCOL_SAVED, message: `Метод физиотерапии ${code} отправлен в архив` });
+    res.json({ success: true, message: 'Метод физиотерапии отправлен в архив' });
+  });
+});
+
+// 9.2.14. Orthotics CRUD
+router.post('/treatments/orthotics', (req, res) => {
+  const {
+    code, name, subcategory, target_joint, service_scope = 'internal', default_priority = 'high',
+    description = '', technique_details = '', regimen_standard = '', patient_preparation = '',
+    post_procedure_care = '', clinical_indications = '', contraindications = '', servdict_id = null, sort_order = 0
+  } = req.body;
+
+  if (!code || !name || !target_joint) {
+    return res.status(400).json({ success: false, error: 'Код, название и сустав обязательны' });
+  }
+
+  const sql = `
+    INSERT INTO ortho_orthotics_catalog (
+      code, name, subcategory, target_joint, service_scope, default_priority,
+      description, technique_details, regimen_standard, patient_preparation, post_procedure_care,
+      clinical_indications, contraindications, servdict_id, sort_order, is_active
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+  `;
+  db.run(sql, [
+    code, name, subcategory || 'Ортопедические изделия', target_joint, service_scope, default_priority,
+    description, technique_details, regimen_standard, patient_preparation, post_procedure_care,
+    clinical_indications, contraindications, servdict_id, sort_order
+  ], function (err) {
+    if (err) return res.status(500).json({ success: false, error: err.message });
+    logOrthoAudit({ eventType: EventTypes.PROTOCOL_SAVED, message: `Создано ортопедическое изделие: ${name} (${code})` });
+    res.json({ success: true, message: 'Изделие успешно создано', code });
+  });
+});
+
+router.put('/treatments/orthotics/:code', (req, res) => {
+  const { code } = req.params;
+  const {
+    name, subcategory, target_joint, service_scope, default_priority,
+    description, technique_details, regimen_standard, patient_preparation, post_procedure_care,
+    clinical_indications, contraindications, servdict_id, sort_order, is_active
+  } = req.body;
+
+  const sql = `
+    UPDATE ortho_orthotics_catalog SET
+      name = COALESCE(?, name),
+      subcategory = COALESCE(?, subcategory),
+      target_joint = COALESCE(?, target_joint),
+      service_scope = COALESCE(?, service_scope),
+      default_priority = COALESCE(?, default_priority),
+      description = COALESCE(?, description),
+      technique_details = COALESCE(?, technique_details),
+      regimen_standard = COALESCE(?, regimen_standard),
+      patient_preparation = COALESCE(?, patient_preparation),
+      post_procedure_care = COALESCE(?, post_procedure_care),
+      clinical_indications = COALESCE(?, clinical_indications),
+      contraindications = COALESCE(?, contraindications),
+      servdict_id = COALESCE(?, servdict_id),
+      sort_order = COALESCE(?, sort_order),
+      is_active = COALESCE(?, is_active)
+    WHERE code = ?
+  `;
+  db.run(sql, [
+    name, subcategory, target_joint, service_scope, default_priority,
+    description, technique_details, regimen_standard, patient_preparation, post_procedure_care,
+    clinical_indications, contraindications, servdict_id, sort_order, is_active,
+    code
+  ], function (err) {
+    if (err) return res.status(500).json({ success: false, error: err.message });
+    logOrthoAudit({ eventType: EventTypes.PROTOCOL_SAVED, message: `Обновлено ортопедическое изделие: ${code}` });
+    res.json({ success: true, message: 'Изделие успешно обновлено' });
+  });
+});
+
+router.delete('/treatments/orthotics/:code', (req, res) => {
+  const { code } = req.params;
+  db.run(`UPDATE ortho_orthotics_catalog SET is_active = 0 WHERE code = ?`, [code], function(err) {
+    if (err) return res.status(500).json({ success: false, error: err.message });
+    logOrthoAudit({ eventType: EventTypes.PROTOCOL_SAVED, message: `Ортопедическое изделие ${code} отправлено в архив` });
+    res.json({ success: true, message: 'Изделие отправлено в архив' });
+  });
+});
+
+// 9.2.15. LFK CRUD
+router.post('/treatments/lfk', (req, res) => {
+  const {
+    code, name, short_name, exercise_type, target_joint, target_muscle_group,
+    kinetic_chain = 'CKC', default_phase = 'Phase 1', default_stage_step = 'Ступень 1',
+    standard_dosage = '3 подхода × 12 повторений', tempo_formula = '3-1-3',
+    equipment_tags = '', technique_description = '', contraindications_notes = '', servdict_id = null
+  } = req.body;
+
+  if (!code || !name || !target_joint) {
+    return res.status(400).json({ success: false, error: 'Код, название и сустав обязательны' });
+  }
+
+  const sql = `
+    INSERT INTO ortho_lfk_catalog (
+      code, name, short_name, exercise_type, target_joint, target_muscle_group,
+      kinetic_chain, default_phase, default_stage_step, standard_dosage,
+      tempo_formula, equipment_tags, technique_description, contraindications_notes,
+      servdict_id, is_active
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+  `;
+  db.run(sql, [
+    code, name, short_name, exercise_type || 'Силовое / Укрепление', target_joint, target_muscle_group,
+    kinetic_chain, default_phase, default_stage_step, standard_dosage,
+    tempo_formula, equipment_tags, technique_description, contraindications_notes,
+    servdict_id
+  ], function (err) {
+    if (err) return res.status(500).json({ success: false, error: err.message });
+    logOrthoAudit({ eventType: EventTypes.PROTOCOL_SAVED, message: `Создано упражнение ЛФК: ${name} (${code})` });
+    res.json({ success: true, message: 'Упражнение ЛФК успешно создано', code });
+  });
+});
+
+router.put('/treatments/lfk/:code', (req, res) => {
+  const { code } = req.params;
+  const {
+    name, short_name, exercise_type, target_joint, target_muscle_group,
+    kinetic_chain, default_phase, default_stage_step, standard_dosage,
+    tempo_formula, equipment_tags, technique_description, contraindications_notes,
+    servdict_id, is_active
+  } = req.body;
+
+  const sql = `
+    UPDATE ortho_lfk_catalog SET
+      name = COALESCE(?, name),
+      short_name = COALESCE(?, short_name),
+      exercise_type = COALESCE(?, exercise_type),
+      target_joint = COALESCE(?, target_joint),
+      target_muscle_group = COALESCE(?, target_muscle_group),
+      kinetic_chain = COALESCE(?, kinetic_chain),
+      default_phase = COALESCE(?, default_phase),
+      default_stage_step = COALESCE(?, default_stage_step),
+      standard_dosage = COALESCE(?, standard_dosage),
+      tempo_formula = COALESCE(?, tempo_formula),
+      equipment_tags = COALESCE(?, equipment_tags),
+      technique_description = COALESCE(?, technique_description),
+      contraindications_notes = COALESCE(?, contraindications_notes),
+      servdict_id = COALESCE(?, servdict_id),
+      is_active = COALESCE(?, is_active)
+    WHERE code = ?
+  `;
+  db.run(sql, [
+    name, short_name, exercise_type, target_joint, target_muscle_group,
+    kinetic_chain, default_phase, default_stage_step, standard_dosage,
+    tempo_formula, equipment_tags, technique_description, contraindications_notes,
+    servdict_id, is_active,
+    code
+  ], function (err) {
+    if (err) return res.status(500).json({ success: false, error: err.message });
+    logOrthoAudit({ eventType: EventTypes.PROTOCOL_SAVED, message: `Обновлено упражнение ЛФК: ${code}` });
+    res.json({ success: true, message: 'Упражнение ЛФК успешно обновлено' });
+  });
+});
+
+router.delete('/treatments/lfk/:code', (req, res) => {
+  const { code } = req.params;
+  db.run(`UPDATE ortho_lfk_catalog SET is_active = 0 WHERE code = ?`, [code], function(err) {
+    if (err) return res.status(500).json({ success: false, error: err.message });
+    logOrthoAudit({ eventType: EventTypes.PROTOCOL_SAVED, message: `Упражнение ЛФК ${code} отправлено в архив` });
+    res.json({ success: true, message: 'Упражнение ЛФК отправлено в архив' });
+  });
+});
+
 // 9.3. GET /api/ortho/templates/detailed - List templates with counts, cluster metadata & filters
 router.get('/templates/detailed', (req, res) => {
-  const { joint, search, cluster, with_details, only_custom, rom_priority, manipulations_priority, orthotics_priority, orthotics_weight_bearing } = req.query;
+  const { joint, search, cluster, with_details, only_custom, rom_priority, manipulations_priority, orthotics_priority, orthotics_weight_bearing, lfk_priority, lfk_pain_monitoring_zone } = req.query;
   let sql = `
     SELECT ot.*,
       (SELECT COUNT(*) FROM ortho_template_tests WHERE template_id = ot.id) AS tests_count,
       (SELECT COUNT(*) FROM ortho_template_diagnostics WHERE template_id = ot.id) AS diagnostics_count,
       (SELECT COUNT(*) FROM ortho_template_manipulations WHERE template_id = ot.id) AS manipulations_count,
       (SELECT COUNT(*) FROM ortho_template_physiotherapy WHERE template_id = ot.id) AS physiotherapy_count,
-      (SELECT COUNT(*) FROM ortho_template_orthotics WHERE template_id = ot.id) AS orthotics_count
+      (SELECT COUNT(*) FROM ortho_template_orthotics WHERE template_id = ot.id) AS orthotics_count,
+      (SELECT COUNT(*) FROM ortho_template_lfk WHERE template_id = ot.id) AS lfk_count
     FROM ortho_templates ot
     WHERE (ot.is_active = 1 OR ot.is_active IS NULL)
   `;
@@ -1856,6 +2296,14 @@ router.get('/templates/detailed', (req, res) => {
   if (orthotics_weight_bearing && orthotics_weight_bearing !== 'all') {
     sql += ` AND ot.orthotics_weight_bearing = ?`;
     params.push(orthotics_weight_bearing);
+  }
+  if (lfk_priority && lfk_priority !== 'all') {
+    sql += ` AND ot.lfk_priority = ?`;
+    params.push(lfk_priority);
+  }
+  if (lfk_pain_monitoring_zone && lfk_pain_monitoring_zone !== 'all') {
+    sql += ` AND ot.lfk_pain_monitoring_zone = ?`;
+    params.push(lfk_pain_monitoring_zone);
   }
   if (only_custom === 'true' || only_custom === '1') {
     sql += ` AND ot.is_custom = 1`;
@@ -2116,6 +2564,28 @@ router.get('/templates/:id/full', (req, res) => {
             oto.sort_order ASC, oto.id ASC
         `;
 
+        const lfkSql = `
+          SELECT otl.id, otl.template_id, otl.lfk_code, otl.phase_number, otl.phase_name,
+                 otl.stage_step, otl.exercise_order, otl.exercise_name_override,
+                 otl.dosage_prescription, otl.tempo_and_hold, otl.frequency_per_day,
+                 otl.biomechanical_goal, otl.ebm_priority, otl.pain_threshold_zone,
+                 otl.kinetic_chain, otl.safe_angle_range, otl.tags,
+                 otl.is_stop_warning, otl.stop_rationale, otl.sort_order,
+                 lc.name, lc.short_name, lc.exercise_type, lc.target_joint,
+                 lc.target_muscle_group, lc.default_stage_step, lc.standard_dosage,
+                 lc.tempo_formula, lc.equipment_tags, lc.technique_description,
+                 lc.contraindications_notes
+          FROM ortho_template_lfk otl
+          JOIN ortho_lfk_catalog lc ON lc.code = otl.lfk_code
+          WHERE otl.template_id = ?
+          ORDER BY 
+            CASE 
+              WHEN otl.is_stop_warning = 1 OR otl.ebm_priority = 'P0-STOP' THEN 0
+              ELSE otl.phase_number
+            END ASC,
+            otl.exercise_order ASC, otl.sort_order ASC, otl.id ASC
+        `;
+
         db.all(manSql, [templateId], (mErr, manipulations) => {
           if (mErr) return res.status(500).json({ success: false, error: mErr.message });
 
@@ -2125,16 +2595,21 @@ router.get('/templates/:id/full', (req, res) => {
             db.all(orthSql, [templateId], (oErr, orthotics) => {
               if (oErr) return res.status(500).json({ success: false, error: oErr.message });
 
-              res.json({
-                success: true,
-                template: {
-                  ...template,
-                  tests: tests || [],
-                  diagnostics: diagnostics || [],
-                  manipulations: manipulations || [],
-                  physiotherapy: physiotherapy || [],
-                  orthotics: orthotics || []
-                }
+              db.all(lfkSql, [templateId], (lErr, lfk) => {
+                if (lErr) return res.status(500).json({ success: false, error: lErr.message });
+
+                res.json({
+                  success: true,
+                  template: {
+                    ...template,
+                    tests: tests || [],
+                    diagnostics: diagnostics || [],
+                    manipulations: manipulations || [],
+                    physiotherapy: physiotherapy || [],
+                    orthotics: orthotics || [],
+                    lfk: lfk || []
+                  }
+                });
               });
             });
           });
@@ -2154,9 +2629,10 @@ router.post('/templates', (req, res) => {
     rom_norm_preset, rom_priority, rom_sftr_preview, rom_end_feel, rom_has_stop_warning,
     manipulations_priority, manipulations_summary, manipulations_has_stop, manipulations_stop_rationale,
     orthotics_priority, orthotics_weight_bearing, orthotics_summary, orthotics_has_stop, orthotics_stop_rationale,
+    lfk_priority, lfk_has_stop, lfk_stop_rationale, lfk_pain_monitoring_zone, lfk_target_goal, lfk_phases_summary,
     recommendations_template, cluster_id, cluster_name,
     stage_or_severity, clinical_tags, tests = [], diagnostics = [],
-    manipulations = [], physiotherapy = [], orthotics = []
+    manipulations = [], physiotherapy = [], orthotics = [], lfk = []
   } = req.body;
 
   if (!title || !joint_name) {
@@ -2180,10 +2656,11 @@ router.post('/templates', (req, res) => {
       rom_norm_preset, rom_priority, rom_sftr_preview, rom_end_feel, rom_has_stop_warning,
       manipulations_priority, manipulations_summary, manipulations_has_stop, manipulations_stop_rationale,
       orthotics_priority, orthotics_weight_bearing, orthotics_summary, orthotics_has_stop, orthotics_stop_rationale,
+      lfk_priority, lfk_has_stop, lfk_stop_rationale, lfk_pain_monitoring_zone, lfk_target_goal, lfk_phases_summary,
       recommendations_template, is_active, sort_order,
       cluster_id, cluster_name, stage_or_severity, clinical_tags,
       is_custom, author_doctor_name
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, ?, ?, ?, ?, ?, ?)
   `, [
     title, joint_name, default_mkb_code || null, rawJson, category || null,
     default_side || 'right', complaints_template || null, anamnesis_template || null,
@@ -2193,6 +2670,7 @@ router.post('/templates', (req, res) => {
     romPresetStr || null, rom_priority || 'P2', rom_sftr_preview || '', rom_end_feel || '', rom_has_stop_warning ? 1 : 0,
     manipulations_priority || 'P2', manipulations_summary || '', manipulations_has_stop ? 1 : 0, manipulations_stop_rationale || '',
     orthotics_priority || 'P2', orthotics_weight_bearing || 'WBAT', orthotics_summary || '', orthotics_has_stop ? 1 : 0, orthotics_stop_rationale || '',
+    lfk_priority || 'P1', lfk_has_stop ? 1 : 0, lfk_stop_rationale || '', lfk_pain_monitoring_zone || 'green', lfk_target_goal || '', lfk_phases_summary || '',
     recommendations_template || null,
     cluster_id || null, cluster_name || null, stage_or_severity || null, tagsStr,
     isCustomVal, authorDoctorNameVal
@@ -2335,6 +2813,42 @@ router.post('/templates', (req, res) => {
         ]);
       });
       oStmt.finalize();
+    }
+
+    // Insert lfk
+    if (Array.isArray(lfk) && lfk.length > 0) {
+      const lStmt = db.prepare(`
+        INSERT INTO ortho_template_lfk (
+          template_id, lfk_code, phase_number, phase_name, stage_step, exercise_order,
+          exercise_name_override, dosage_prescription, tempo_and_hold, frequency_per_day,
+          biomechanical_goal, ebm_priority, pain_threshold_zone, kinetic_chain,
+          safe_angle_range, tags, is_stop_warning, stop_rationale, sort_order
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+      lfk.forEach((l, i) => {
+        lStmt.run([
+          newId,
+          l.lfk_code || l.code,
+          l.phase_number || 1,
+          l.phase_name || 'Фаза I',
+          l.stage_step || 'Ступень 1',
+          l.exercise_order || (i + 1),
+          l.exercise_name_override || l.name || null,
+          l.dosage_prescription || l.dosage || '3 подхода × 12 повторений',
+          l.tempo_and_hold || null,
+          l.frequency_per_day || '2–3 раза в день',
+          l.biomechanical_goal || null,
+          l.ebm_priority || 'P1',
+          l.pain_threshold_zone || 'green',
+          l.kinetic_chain || 'CKC',
+          l.safe_angle_range || null,
+          l.tags || null,
+          l.is_stop_warning ? 1 : 0,
+          l.stop_rationale || null,
+          l.sort_order ?? (i * 10)
+        ]);
+      });
+      lStmt.finalize();
     }
 
     logOrthoAudit({
@@ -2509,9 +3023,10 @@ router.put('/templates/:id', (req, res) => {
     rom_norm_preset, rom_priority, rom_sftr_preview, rom_end_feel, rom_has_stop_warning,
     manipulations_priority, manipulations_summary, manipulations_has_stop, manipulations_stop_rationale,
     orthotics_priority, orthotics_weight_bearing, orthotics_summary, orthotics_has_stop, orthotics_stop_rationale,
+    lfk_priority, lfk_has_stop, lfk_stop_rationale, lfk_pain_monitoring_zone, lfk_target_goal, lfk_phases_summary,
     recommendations_template, cluster_id, cluster_name,
     stage_or_severity, clinical_tags, tests = [], diagnostics = [],
-    manipulations = [], physiotherapy = [], orthotics = []
+    manipulations = [], physiotherapy = [], orthotics = [], lfk = []
   } = req.body;
 
   const rawJson = typeof template_json === 'object' ? JSON.stringify(template_json) : (template_json || '{}');
@@ -2549,6 +3064,12 @@ router.put('/templates/:id', (req, res) => {
       orthotics_summary = COALESCE(?, orthotics_summary),
       orthotics_has_stop = COALESCE(?, orthotics_has_stop),
       orthotics_stop_rationale = COALESCE(?, orthotics_stop_rationale),
+      lfk_priority = COALESCE(?, lfk_priority),
+      lfk_has_stop = COALESCE(?, lfk_has_stop),
+      lfk_stop_rationale = COALESCE(?, lfk_stop_rationale),
+      lfk_pain_monitoring_zone = COALESCE(?, lfk_pain_monitoring_zone),
+      lfk_target_goal = COALESCE(?, lfk_target_goal),
+      lfk_phases_summary = COALESCE(?, lfk_phases_summary),
       recommendations_template = ?,
       cluster_id = COALESCE(?, cluster_id),
       cluster_name = COALESCE(?, cluster_name),
@@ -2563,6 +3084,7 @@ router.put('/templates/:id', (req, res) => {
     romPresetStr, rom_priority || null, rom_sftr_preview || null, rom_end_feel || null, rom_has_stop_warning !== undefined ? (rom_has_stop_warning ? 1 : 0) : null,
     manipulations_priority || null, manipulations_summary || null, manipulations_has_stop !== undefined ? (manipulations_has_stop ? 1 : 0) : null, manipulations_stop_rationale || null,
     orthotics_priority || null, orthotics_weight_bearing || null, orthotics_summary || null, orthotics_has_stop !== undefined ? (orthotics_has_stop ? 1 : 0) : null, orthotics_stop_rationale || null,
+    lfk_priority || null, lfk_has_stop !== undefined ? (lfk_has_stop ? 1 : 0) : null, lfk_stop_rationale || null, lfk_pain_monitoring_zone || null, lfk_target_goal || null, lfk_phases_summary || null,
     recommendations_template,
     cluster_id || null, cluster_name || null, stage_or_severity || null, tagsStr,
     templateId
@@ -2716,6 +3238,44 @@ router.put('/templates/:id', (req, res) => {
       }
     });
 
+    // Sync lfk
+    db.run(`DELETE FROM ortho_template_lfk WHERE template_id = ?`, [templateId], () => {
+      if (Array.isArray(lfk) && lfk.length > 0) {
+        const lStmt = db.prepare(`
+          INSERT INTO ortho_template_lfk (
+            template_id, lfk_code, phase_number, phase_name, stage_step, exercise_order,
+            exercise_name_override, dosage_prescription, tempo_and_hold, frequency_per_day,
+            biomechanical_goal, ebm_priority, pain_threshold_zone, kinetic_chain,
+            safe_angle_range, tags, is_stop_warning, stop_rationale, sort_order
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `);
+        lfk.forEach((l, i) => {
+          lStmt.run([
+            templateId,
+            l.lfk_code || l.code,
+            l.phase_number || 1,
+            l.phase_name || 'Фаза I',
+            l.stage_step || 'Ступень 1',
+            l.exercise_order || (i + 1),
+            l.exercise_name_override || l.name || null,
+            l.dosage_prescription || l.dosage || '3 подхода × 12 повторений',
+            l.tempo_and_hold || null,
+            l.frequency_per_day || '2–3 раза в день',
+            l.biomechanical_goal || null,
+            l.ebm_priority || 'P1',
+            l.pain_threshold_zone || 'green',
+            l.kinetic_chain || 'CKC',
+            l.safe_angle_range || null,
+            l.tags || null,
+            l.is_stop_warning ? 1 : 0,
+            l.stop_rationale || null,
+            l.sort_order ?? (i * 10)
+          ]);
+        });
+        lStmt.finalize();
+      }
+    });
+
     logOrthoAudit({
       eventType: EventTypes.PROTOCOL_SAVED,
       message: `Обновлен шаблон осмотра #${templateId}: "${title}"`
@@ -2831,4 +3391,380 @@ router.post('/audit/export', (req, res) => {
   res.json({ success: true });
 });
 
+// -----------------------------------------------------------------------------
+// 11. PATIENT REFERRALS & ORDERS API (Направления для пациентов)
+// -----------------------------------------------------------------------------
+
+function fetchReferralById(referralId, callback) {
+  const refSql = `
+    SELECT r.*,
+           p.full_name AS patient_name,
+           p.bdate AS patient_birth_date,
+           p.sex AS patient_gender,
+           p.phone AS patient_phone,
+           p.mednum AS patient_card_num
+    FROM ortho_referrals r
+    LEFT JOIN patients p ON p.id = r.patient_id
+    WHERE r.id = ?
+  `;
+  db.get(refSql, [referralId], (err, refRow) => {
+    if (err) return callback(err);
+    if (!refRow) return callback(null, null);
+
+    db.all(
+      'SELECT * FROM ortho_referral_items WHERE referral_id = ? ORDER BY sort_order ASC, id ASC',
+      [referralId],
+      (iErr, items) => {
+        if (iErr) return callback(iErr);
+
+        db.all(
+          'SELECT * FROM ortho_referral_audit_log WHERE referral_id = ? ORDER BY id DESC',
+          [referralId],
+          (aErr, auditLogs) => {
+            if (aErr) return callback(aErr);
+
+            callback(null, {
+              ...refRow,
+              items: items || [],
+              audit_log: auditLogs || []
+            });
+          }
+        );
+      }
+    );
+  });
+}
+
+// 11.1. GET /api/ortho/referrals/performers - List clinical performers
+router.get('/referrals/performers', (req, res) => {
+  const { is_internal } = req.query;
+  let sql = 'SELECT * FROM ortho_referral_performers WHERE is_active = 1';
+  const params = [];
+  if (is_internal !== undefined) {
+    sql += ' AND is_internal = ?';
+    params.push(Number(is_internal));
+  }
+  sql += ' ORDER BY is_internal DESC, sort_order ASC, name ASC';
+  db.all(sql, params, (err, rows) => {
+    if (err) return res.status(500).json({ success: false, error: err.message });
+    res.json({ success: true, performers: rows || [] });
+  });
+});
+
+// 11.2. POST /api/ortho/referrals/issue - Issue referral with auto-prep from DB catalogs
+router.post('/referrals/issue', async (req, res) => {
+  try {
+    const {
+      patient_id,
+      appointment_id,
+      protocol_id,
+      doctor_name = 'Добрушкин А.М',
+      valid_days = 90,
+      performer_id,
+      icd10_code,
+      icd10_name,
+      clinical_diagnosis,
+      target_joint,
+      target_side,
+      anamnesis_summary,
+      special_notes,
+      items = []
+    } = req.body;
+
+    if (!patient_id) {
+      return res.status(400).json({ success: false, error: 'patient_id is required' });
+    }
+    if (!performer_id) {
+      return res.status(400).json({ success: false, error: 'performer_id is required' });
+    }
+
+    db.get('SELECT * FROM ortho_referral_performers WHERE id = ?', [performer_id], async (pErr, performer) => {
+      if (pErr) return res.status(500).json({ success: false, error: pErr.message });
+      if (!performer) return res.status(404).json({ success: false, error: 'Performer not found' });
+
+      // Aggregate preparation notes from DB catalogs
+      const itemPreparationPromises = items.map((it) => {
+        return new Promise((resolve) => {
+          const dom = (it.domain || '').toLowerCase();
+          const code = it.service_code || '';
+          const title = it.item_title || '';
+
+          if (dom === 'diagnostics' || dom === 'diagnostic') {
+            db.get(
+              'SELECT patient_preparation FROM diagnostic_methods_catalog WHERE code = ? OR name = ? LIMIT 1',
+              [code, title],
+              (err, row) => resolve(row?.patient_preparation || '')
+            );
+          } else if (dom === 'manipulation' || dom === 'surgery') {
+            db.get(
+              'SELECT patient_preparation FROM ortho_manipulations_catalog WHERE code = ? OR name = ? LIMIT 1',
+              [code, title],
+              (err, row) => resolve(row?.patient_preparation || '')
+            );
+          } else if (dom === 'physio' || dom === 'physiotherapy') {
+            db.get(
+              'SELECT patient_preparation FROM ortho_physiotherapy_catalog WHERE code = ? OR name = ? LIMIT 1',
+              [code, title],
+              (err, row) => resolve(row?.patient_preparation || '')
+            );
+          } else if (dom === 'orthotics') {
+            db.get(
+              'SELECT patient_preparation FROM ortho_orthotics_catalog WHERE code = ? OR name = ? LIMIT 1',
+              [code, title],
+              (err, row) => resolve(row?.patient_preparation || '')
+            );
+          } else {
+            resolve('');
+          }
+        });
+      });
+
+      const preparationNotes = await Promise.all(itemPreparationPromises);
+      const uniquePrep = [];
+      preparationNotes.forEach((note) => {
+        if (note && note.trim() && !uniquePrep.includes(note.trim())) {
+          uniquePrep.push(note.trim());
+        }
+      });
+      const aggregatedPrep = uniquePrep.join('\n\n');
+
+      const year = new Date().getFullYear();
+      db.get(
+        "SELECT COUNT(*) AS cnt FROM ortho_referrals WHERE referral_number LIKE ?",
+        [`НАПР-${year}-%`],
+        (cErr, cRow) => {
+          if (cErr) return res.status(500).json({ success: false, error: cErr.message });
+          const nextSeq = (cRow?.cnt || 0) + 1;
+          const referral_number = `НАПР-${year}-${String(nextSeq).padStart(6, '0')}`;
+
+          const now = new Date();
+          const issue_date = now.toISOString().replace('T', ' ').substring(0, 19);
+          const effectiveValidDays = Number(valid_days) > 0 ? Number(valid_days) : 90;
+          const expDate = new Date(now.getTime() + effectiveValidDays * 24 * 60 * 60 * 1000);
+          const expires_at = expDate.toISOString().substring(0, 10);
+
+          const hashPayload = `${referral_number}|${patient_id}|${issue_date}|${expires_at}|${performer.name}`;
+          const verification_hash = crypto.createHash('sha256').update(hashPayload).digest('hex').substring(0, 32);
+
+          const insertRefSql = `
+            INSERT INTO ortho_referrals (
+              referral_number, patient_id, appointment_id, protocol_id, doctor_name,
+              issue_date, valid_days, expires_at,
+              performer_id, performer_name, performer_is_internal, performer_address,
+              icd10_code, icd10_name, clinical_diagnosis, target_joint, target_side,
+              anamnesis_summary, preparation_instructions, special_notes,
+              status, verification_hash, printed_count
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'issued', ?, 0)
+          `;
+
+          db.run(
+            insertRefSql,
+            [
+              referral_number,
+              patient_id,
+              appointment_id || null,
+              protocol_id || null,
+              doctor_name || 'Добрушкин А.М',
+              issue_date,
+              effectiveValidDays,
+              expires_at,
+              performer.id,
+              performer.name,
+              performer.is_internal ? 1 : 0,
+              performer.organization_address || '',
+              icd10_code || 'M19.9',
+              icd10_name || '',
+              clinical_diagnosis || '',
+              target_joint || '',
+              target_side || '',
+              anamnesis_summary || '',
+              aggregatedPrep,
+              special_notes || '',
+              verification_hash
+            ],
+            function (insErr) {
+              if (insErr) return res.status(500).json({ success: false, error: insErr.message });
+              const referralId = this.lastID;
+
+              if (items.length > 0) {
+                const itemStmt = db.prepare(`
+                  INSERT INTO ortho_referral_items (
+                    referral_id, domain, service_code, item_title, item_details, formula_latex, preparation_notes, sort_order
+                  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                `);
+                items.forEach((it, idx) => {
+                  itemStmt.run([
+                    referralId,
+                    it.domain || 'diagnostics',
+                    it.service_code || '',
+                    it.item_title || it.name || it.title || 'Медицинская услуга',
+                    it.item_details || it.dosage_notes || '',
+                    it.formula_latex || '',
+                    preparationNotes[idx] || '',
+                    idx
+                  ]);
+                });
+                itemStmt.finalize();
+              }
+
+              db.run(`
+                INSERT INTO ortho_referral_audit_log (referral_id, action_type, performed_by_name, details_json)
+                VALUES (?, 'CREATED', ?, ?)
+              `, [
+                referralId,
+                doctor_name || 'Добрушкин А.М',
+                JSON.stringify({
+                  referral_number,
+                  performer: performer.name,
+                  items_count: items.length,
+                  valid_days: effectiveValidDays
+                })
+              ]);
+
+              fetchReferralById(referralId, (fErr, fullReferral) => {
+                if (fErr) return res.status(500).json({ success: false, error: fErr.message });
+                res.json({
+                  success: true,
+                  message: `Направление №${referral_number} успешно выписано`,
+                  referral: fullReferral
+                });
+              });
+            }
+          );
+        }
+      );
+    });
+  } catch (err) {
+    console.error('Error issuing referral:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 11.25. GET /api/ortho/referrals - General registry of all referrals with filters
+router.get('/referrals', (req, res) => {
+  const { search = '', status = '', is_internal, limit = 200, offset = 0 } = req.query;
+  const whereClauses = [];
+  const params = [];
+
+  if (search && search.trim()) {
+    const q = `%${search.trim()}%`;
+    whereClauses.push('(r.referral_number LIKE ? OR p.full_name LIKE ? OR r.performer_name LIKE ? OR r.clinical_diagnosis LIKE ? OR r.icd10_code LIKE ?)');
+    params.push(q, q, q, q, q);
+  }
+
+  if (status && status.trim()) {
+    whereClauses.push('r.status = ?');
+    params.push(status.trim());
+  }
+
+  if (is_internal !== undefined && is_internal !== '') {
+    whereClauses.push('r.performer_is_internal = ?');
+    params.push(Number(is_internal));
+  }
+
+  const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
+  const sql = `
+    SELECT r.*,
+           COUNT(ri.id) AS items_count,
+           p.full_name AS patient_name,
+           p.bdate AS patient_birth_date,
+           p.phone AS patient_phone
+    FROM ortho_referrals r
+    LEFT JOIN ortho_referral_items ri ON ri.referral_id = r.id
+    LEFT JOIN patients p ON p.id = r.patient_id
+    ${whereSql}
+    GROUP BY r.id
+    ORDER BY r.id DESC
+    LIMIT ? OFFSET ?
+  `;
+  params.push(Number(limit), Number(offset));
+
+  db.all(sql, params, (err, rows) => {
+    if (err) return res.status(500).json({ success: false, error: err.message });
+    res.json({ success: true, referrals: rows || [] });
+  });
+});
+
+// 11.3. GET /api/ortho/referrals/patient/:patientId - List all referrals for patient
+router.get('/referrals/patient/:patientId', (req, res) => {
+  const patientId = req.params.patientId;
+  const sql = `
+    SELECT r.*,
+           COUNT(ri.id) AS items_count,
+           p.full_name AS patient_name,
+           p.bdate AS patient_birth_date,
+           p.phone AS patient_phone
+    FROM ortho_referrals r
+    LEFT JOIN ortho_referral_items ri ON ri.referral_id = r.id
+    LEFT JOIN patients p ON p.id = r.patient_id
+    WHERE r.patient_id = ?
+    GROUP BY r.id
+    ORDER BY r.id DESC
+  `;
+  db.all(sql, [patientId], (err, rows) => {
+    if (err) return res.status(500).json({ success: false, error: err.message });
+    res.json({ success: true, referrals: rows || [] });
+  });
+});
+
+// 11.4. GET /api/ortho/referrals/:id - Get single referral with items and audit trail
+router.get('/referrals/:id', (req, res) => {
+  fetchReferralById(req.params.id, (err, referral) => {
+    if (err) return res.status(500).json({ success: false, error: err.message });
+    if (!referral) return res.status(404).json({ success: false, error: 'Referral not found' });
+    res.json({ success: true, referral });
+  });
+});
+
+// 11.5. POST /api/ortho/referrals/:id/audit-print - Log print or export action
+router.post('/referrals/:id/audit-print', (req, res) => {
+  const referralId = req.params.id;
+  const { format = 'pdf', performed_by = 'Добрушкин А.М' } = req.body;
+
+  db.run(
+    'UPDATE ortho_referrals SET printed_count = printed_count + 1, updated_at = datetime("now", "localtime") WHERE id = ?',
+    [referralId],
+    (upErr) => {
+      if (upErr) return res.status(500).json({ success: false, error: upErr.message });
+
+      db.run(
+        `INSERT INTO ortho_referral_audit_log (referral_id, action_type, performed_by_name, details_json)
+         VALUES (?, ?, ?, ?)`,
+        [referralId, `PRINTED_${String(format).toUpperCase()}`, performed_by, JSON.stringify({ format, timestamp: new Date().toISOString() })],
+        (logErr) => {
+          if (logErr) return res.status(500).json({ success: false, error: logErr.message });
+          res.json({ success: true, message: 'Аудит печати зафиксирован' });
+        }
+      );
+    }
+  );
+});
+
+// 11.6. PATCH /api/ortho/referrals/:id/status - Update referral status
+router.patch('/referrals/:id/status', (req, res) => {
+  const referralId = req.params.id;
+  const { status, reason = '', performed_by = 'Добрушкин А.М' } = req.body;
+
+  if (!status) return res.status(400).json({ success: false, error: 'Status is required' });
+
+  db.run(
+    'UPDATE ortho_referrals SET status = ?, updated_at = datetime("now", "localtime") WHERE id = ?',
+    [status, referralId],
+    (upErr) => {
+      if (upErr) return res.status(500).json({ success: false, error: upErr.message });
+
+      db.run(
+        `INSERT INTO ortho_referral_audit_log (referral_id, action_type, performed_by_name, details_json)
+         VALUES (?, 'STATUS_CHANGED', ?, ?)`,
+        [referralId, performed_by, JSON.stringify({ new_status: status, reason, timestamp: new Date().toISOString() })],
+        (logErr) => {
+          if (logErr) return res.status(500).json({ success: false, error: logErr.message });
+          res.json({ success: true, message: `Статус направления обновлен на «${status}»` });
+        }
+      );
+    }
+  );
+});
+
 module.exports = router;
+

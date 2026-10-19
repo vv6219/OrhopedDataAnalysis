@@ -31,6 +31,7 @@ import UsbIcon from '@mui/icons-material/Usb';
 import CreditCardIcon from '@mui/icons-material/CreditCard';
 import MedicalServicesIcon from '@mui/icons-material/MedicalServices';
 import DescriptionIcon from '@mui/icons-material/Description';
+import AssignmentIcon from '@mui/icons-material/Assignment';
 
 export interface NavItem {
   text: string;
@@ -70,6 +71,12 @@ export const navigationGroups: NavGroup[] = [
         path: '/protocols-registry',
         icon: <DescriptionIcon sx={{ fontSize: 20, color: '#0F3C64' }} />,
         tooltip: 'Электронный архив протоколов: полнотекстовый поиск FTS5 по 32 881 записям, фильтры по суставам и статусам, аналитика назначений и верификация ЭЦП'
+      },
+      {
+        text: 'Направления пациентов',
+        path: '/patient-referrals',
+        icon: <AssignmentIcon sx={{ fontSize: 20, color: '#0F3C64' }} />,
+        tooltip: 'Реестр официальных направлений Центра Ортопедии Добрушкина: внутренние кабинеты и внешние центры, контроль 90-дневного срока действия, печать и экспорт Word'
       },
       {
         text: 'Справочник шаблонов 2.0',

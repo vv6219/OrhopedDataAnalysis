@@ -18,13 +18,16 @@ import LatexText from '../ortho/LatexText';
 export interface OrthoPrescriptionItem {
   id?: string | number;
   serviceId?: number;
+  serviceCode?: string;
   code?: string;
   name: string;
   title?: string;
   category?: string;
   quantity?: number;
   price?: number;
+  unitPrice?: number;
   dosage_notes?: string;
+  [key: string]: any;
 }
 
 export interface OrthoProtocolData {
@@ -608,30 +611,57 @@ export const OrthoProtocolPrintTemplate = React.forwardRef<HTMLDivElement, Ortho
                               </TableRow>
                             </TableHead>
                             <TableBody>
-                              {data.prescriptions.map((presc, pIdx) => (
-                                <TableRow key={pIdx}>
-                                  <TableCell sx={{ fontSize: '0.78rem', py: 0.5 }}>{pIdx + 1}</TableCell>
-                                  <TableCell sx={{ fontSize: '0.82rem', py: 0.5 }}>
-                                    <Typography variant="body2" sx={{ fontWeight: 600, fontSize: '0.82rem' }}>
-                                      {presc.name || (presc as any).title || 'Медицинская услуга'}
-                                    </Typography>
-                                    {presc.dosage_notes && (
-                                      <Typography variant="caption" sx={{ color: '#64748B', display: 'block' }}>
-                                        {presc.dosage_notes}
-                                      </Typography>
-                                    )}
-                                  </TableCell>
-                                  <TableCell align="center" sx={{ fontSize: '0.82rem', py: 0.5 }}>
-                                    {presc.quantity || 1}
-                                  </TableCell>
-                                  <TableCell align="right" sx={{ fontSize: '0.82rem', fontWeight: 600, py: 0.5 }}>
-                                    {(((presc.price ?? (presc as any).unitPrice ?? (presc as any).unit_price ?? 0)) * (presc.quantity || 1)).toLocaleString('ru-RU', {
-                                      minimumFractionDigits: 2,
-                                      maximumFractionDigits: 2
-                                    })}
-                                  </TableCell>
-                                </TableRow>
-                              ))}
+                              {data.prescriptions.map((presc, pIdx) => {
+                                const isLfk = presc.category === 'lfk' || presc.category === 'ЛФК';
+                                const itemPrice = Number(presc.price ?? (presc as any).unitPrice ?? (presc as any).unit_price ?? 0);
+                                const itemQty = Number(presc.quantity || 1);
+                                return (
+                                  <TableRow key={pIdx}>
+                                    <TableCell sx={{ fontSize: '0.78rem', py: 0.5 }}>{pIdx + 1}</TableCell>
+                                    <TableCell sx={{ fontSize: '0.82rem', py: 0.5 }}>
+                                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8, mb: 0.2 }}>
+                                        {isLfk && (
+                                          <Chip
+                                            label="ЛФК"
+                                            size="small"
+                                            sx={{
+                                              fontSize: '0.65rem',
+                                              height: 18,
+                                              bgcolor: '#ECFDF5',
+                                              color: '#047857',
+                                              border: '1px solid #A7F3D0',
+                                              fontWeight: 800
+                                            }}
+                                          />
+                                        )}
+                                        <Typography variant="body2" sx={{ fontWeight: 600, fontSize: '0.82rem' }}>
+                                          {presc.name || (presc as any).title || 'Медицинская услуга'}
+                                        </Typography>
+                                      </Box>
+                                      {presc.dosage_notes && (
+                                        <Typography variant="caption" sx={{ color: '#475569', display: 'block', pl: isLfk ? 0.5 : 0 }}>
+                                          <LatexText text={presc.dosage_notes} />
+                                        </Typography>
+                                      )}
+                                    </TableCell>
+                                    <TableCell align="center" sx={{ fontSize: '0.82rem', py: 0.5 }}>
+                                      {itemQty}
+                                    </TableCell>
+                                    <TableCell align="right" sx={{ fontSize: '0.82rem', fontWeight: 600, py: 0.5 }}>
+                                      {itemPrice === 0 && isLfk ? (
+                                        <Box component="span" sx={{ color: '#047857', fontWeight: 700, fontSize: '0.75rem' }}>
+                                          Включено в план
+                                        </Box>
+                                      ) : (
+                                        `${(itemPrice * itemQty).toLocaleString('ru-RU', {
+                                          minimumFractionDigits: 2,
+                                          maximumFractionDigits: 2
+                                        })} ₽`
+                                      )}
+                                    </TableCell>
+                                  </TableRow>
+                                );
+                              })}
                             </TableBody>
                           </Table>
                         </TableContainer>

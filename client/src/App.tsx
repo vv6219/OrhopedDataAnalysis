@@ -28,6 +28,7 @@ import FiscalShiftsAnalytics from './pages/FiscalShiftsAnalytics';
 import OrthoWorkstation from './pages/OrthoWorkstation';
 import ProtocolsRegistry from './pages/ProtocolsRegistry';
 import OrthoTemplatesManager from './pages/OrthoTemplatesManager';
+import PatientReferralsManager from './pages/PatientReferralsManager';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { FiscalProvider } from './context/FiscalContext';
 import { PosProvider } from './context/PosContext';
@@ -230,6 +231,8 @@ function AppContent() {
             <Route path="/templates-manager" element={<OrthoTemplatesManager />} />
             <Route path="/protocols-registry" element={<ProtocolsRegistry />} />
             <Route path="/protocols" element={<ProtocolsRegistry />} />
+            <Route path="/patient-referrals" element={<PatientReferralsManager />} />
+            <Route path="/referrals" element={<PatientReferralsManager />} />
             <Route path="/staff-payouts" element={<StaffPayouts />} />
             <Route path="/payouts" element={<StaffPayouts />} />
             <Route path="/user-guide" element={<UserGuide />} />

@@ -35,8 +35,9 @@ import {
   FitnessCenter as FitnessIcon
 } from '@mui/icons-material';
 import LatexText, { cleanLatexText } from './LatexText';
+import ClinicalGuidanceModal from './ClinicalGuidanceModal';
 
-export type TreatmentCategory = 'manipulation' | 'physiotherapy' | 'orthotics';
+export type TreatmentCategory = 'manipulation' | 'physiotherapy' | 'orthotics' | 'lfk';
 
 export interface TreatmentItem {
   code: string;
@@ -71,8 +72,9 @@ export interface TreatmentItem {
 export interface TreatmentGuidanceModalProps {
   open: boolean;
   onClose: () => void;
-  treatment: TreatmentItem | null;
+  treatment?: TreatmentItem | null;
   category?: TreatmentCategory;
+  title?: string;
   onAssign?: (treatment: TreatmentItem) => void;
   assignButtonText?: string;
   readOnly?: boolean;
@@ -92,6 +94,11 @@ const CATEGORY_THEMES: Record<TreatmentCategory, { headerBg: string; title: stri
   orthotics: {
     headerBg: 'linear-gradient(135deg, #047857 0%, #059669 100%)',
     title: 'Ортопедическое изделие, ортез и разгрузка',
+    icon: <FitnessIcon sx={{ fontSize: 22 }} />
+  },
+  lfk: {
+    headerBg: 'linear-gradient(135deg, #15803D 0%, #16A34A 100%)',
+    title: 'Лечебная физкультура и кинезиотерапия',
     icon: <FitnessIcon sx={{ fontSize: 22 }} />
   }
 };
@@ -120,7 +127,10 @@ export const TreatmentGuidanceModal: React.FC<TreatmentGuidanceModalProps> = ({
   const [copiedPhrase, setCopiedPhrase] = React.useState<boolean>(false);
   const [viewMode, setViewMode] = React.useState<'tabs' | 'scroll'>('tabs');
 
-  if (!treatment) return null;
+  if (!treatment) {
+    const sec = category === 'physiotherapy' ? 'physiotherapy' : category === 'orthotics' ? 'orthotics' : category === 'lfk' ? 'lfk' : 'manipulations';
+    return <ClinicalGuidanceModal open={open} onClose={onClose} initialSection={sec} />;
+  }
 
   const actualCategory = treatment.category || category;
   const theme = CATEGORY_THEMES[actualCategory] || CATEGORY_THEMES.manipulation;

@@ -40,11 +40,13 @@ import EditNoteIcon from '@mui/icons-material/EditNote';
 import BlockIcon from '@mui/icons-material/Block';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import MedicalServicesIcon from '@mui/icons-material/MedicalServices';
+import AssignmentIcon from '@mui/icons-material/Assignment';
 import CloseIcon from '@mui/icons-material/Close';
 import { useReactToPrint } from 'react-to-print';
 import { API_BASE_URL } from '../config/apiConfig';
 import OrthoProtocolPrintTemplate from '../components/reports/OrthoProtocolPrintTemplate';
 import type { OrthoProtocolData } from '../components/reports/OrthoProtocolPrintTemplate';
+import IssueReferralModal from '../components/ortho/IssueReferralModal';
 import { parseProtocolContent, stripProtocolXml } from '../utils/protocolXmlParser';
 
 export interface ProtocolRow {
@@ -217,6 +219,50 @@ export default function ProtocolsRegistry() {
   const [protocolToRevoke, setProtocolToRevoke] = useState<ProtocolRow | null>(null);
   const [revocationReason, setRevocationReason] = useState('');
   const [revoking, setRevoking] = useState(false);
+
+  // Referral Issuance Modal State
+  const [referralModalOpen, setReferralModalOpen] = useState(false);
+  const [referralModalProtocol, setReferralModalProtocol] = useState<ProtocolRow | null>(null);
+  const [referralPrescriptions, setReferralPrescriptions] = useState<any[]>([]);
+
+  const handleOpenReferralModal = async (row: ProtocolRow) => {
+    setReferralModalProtocol(row);
+    let parsedJson: any = null;
+    if (row.protocol_json) {
+      try {
+        parsedJson = JSON.parse(row.protocol_json);
+      } catch {
+        // ignore
+      }
+    }
+
+    if (parsedJson?.prescriptions && parsedJson.prescriptions.length > 0) {
+      setReferralPrescriptions(parsedJson.prescriptions);
+      setReferralModalOpen(true);
+    } else {
+      try {
+        const res = await fetch(`/api/ortho/prescriptions/${row.id}`);
+        const data = await res.json();
+        if (data.success && Array.isArray(data.prescriptions) && data.prescriptions.length > 0) {
+          setReferralPrescriptions(
+            data.prescriptions.map((p: any) => ({
+              name: p.title || p.name || 'Медицинская услуга',
+              title: p.title || p.name || 'Медицинская услуга',
+              code: p.service_code || p.code,
+              quantity: p.quantity || 1,
+              price: p.unit_price ?? p.price ?? 0,
+              dosage_notes: p.category || ''
+            }))
+          );
+        } else {
+          setReferralPrescriptions([]);
+        }
+      } catch {
+        setReferralPrescriptions([]);
+      }
+      setReferralModalOpen(true);
+    }
+  };
 
   // Print ref for Drawer Preview
   const printRef = useRef<HTMLDivElement>(null);
@@ -562,7 +608,7 @@ export default function ProtocolsRegistry() {
     {
       field: 'actions',
       headerName: 'Действия',
-      width: 160,
+      width: 200,
       sortable: false,
       filterable: false,
       align: 'center',
@@ -580,7 +626,7 @@ export default function ProtocolsRegistry() {
                 <EditNoteIcon fontSize="small" />
               </IconButton>
             </Tooltip>
-            <Tooltip title="Быстрый просмотр и печать">
+            <Tooltip title="Быстрый просмотр и печать протокола">
               <IconButton
                 size="small"
                 onClick={() => {
@@ -590,6 +636,15 @@ export default function ProtocolsRegistry() {
                 sx={{ color: '#0284C7' }}
               >
                 <VisibilityIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+            <Tooltip title="Выписать / Печать Направления для пациента (на бланке Центра, 90 дней)">
+              <IconButton
+                size="small"
+                onClick={() => handleOpenReferralModal(row)}
+                sx={{ color: '#0F766E' }}
+              >
+                <AssignmentIcon fontSize="small" />
               </IconButton>
             </Tooltip>
             {row.status === 'signed' && (
@@ -626,6 +681,21 @@ export default function ProtocolsRegistry() {
         </Box>
 
         <Box sx={{ display: 'flex', gap: 1.5 }}>
+          <Button
+            variant="outlined"
+            startIcon={<AssignmentIcon />}
+            onClick={() => navigate('/patient-referrals')}
+            sx={{
+              borderColor: '#0F3C64',
+              color: '#0F3C64',
+              fontWeight: 700,
+              textTransform: 'none',
+              bgcolor: '#FFFFFF',
+              '&:hover': { bgcolor: '#F0F9FF' }
+            }}
+          >
+            Реестр направлений (90 дней)
+          </Button>
           <Button
             variant="contained"
             startIcon={<MedicalServicesIcon />}
@@ -803,6 +873,26 @@ export default function ProtocolsRegistry() {
           </Box>
           <Box sx={{ display: 'flex', gap: 1 }}>
             <Button
+              variant="outlined"
+              size="small"
+              startIcon={<AssignmentIcon />}
+              onClick={() => {
+                if (selectedProtocol) {
+                  handleOpenReferralModal(selectedProtocol);
+                }
+              }}
+              sx={{
+                borderColor: '#0284C7',
+                color: '#0284C7',
+                fontWeight: 700,
+                textTransform: 'none',
+                bgcolor: '#FFFFFF',
+                '&:hover': { bgcolor: '#F0F9FF', borderColor: '#0369A1' }
+              }}
+            >
+              Печать Направления
+            </Button>
+            <Button
               variant="contained"
               size="small"
               startIcon={<PrintIcon />}
@@ -859,6 +949,35 @@ export default function ProtocolsRegistry() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* ISSUE REFERRAL MODAL */}
+      {referralModalProtocol && (
+        <IssueReferralModal
+          open={referralModalOpen}
+          onClose={() => {
+            setReferralModalOpen(false);
+            setReferralModalProtocol(null);
+          }}
+          patient={{
+            id: referralModalProtocol.pt_id,
+            fullName: referralModalProtocol.patient_name,
+            birthDate: referralModalProtocol.patient_bdate,
+            phone: referralModalProtocol.patient_phone,
+            cardNum: String(referralModalProtocol.patient_mednum || '')
+          }}
+          protocolId={referralModalProtocol.id}
+          doctorName={referralModalProtocol.doctor_name || 'Добрушкин А.М'}
+          defaultMkbCode={referralModalProtocol.mkb_code || 'M17.1'}
+          defaultDiagnosis={referralModalProtocol.mkb_name || referralModalProtocol.title || ''}
+          targetJoint={referralModalProtocol.primary_joint || ''}
+          targetSide={referralModalProtocol.side === 'left' ? 'Левая' : referralModalProtocol.side === 'right' ? 'Правая' : ''}
+          anamnesisSummary={referralModalProtocol.title || ''}
+          availablePrescriptions={referralPrescriptions}
+          onReferralIssued={(ref) => {
+            setToastMessage(`Направление ${ref.referral_number} успешно выписано на бланке Центра`);
+          }}
+        />
+      )}
 
       {/* SNACKBAR */}
       <Snackbar

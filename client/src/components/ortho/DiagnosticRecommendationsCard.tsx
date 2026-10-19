@@ -9,7 +9,8 @@ import {
   Tooltip,
   CircularProgress,
   Alert,
-  IconButton
+  IconButton,
+  Collapse
 } from '@mui/material';
 import {
   Biotech as BiotechIcon,
@@ -17,9 +18,12 @@ import {
   CheckCircle as AddedIcon,
   OpenInNew as ExternalIcon,
   AttachMoney as CashIcon,
-  InfoOutlined as InfoIcon
+  InfoOutlined as InfoIcon,
+  ExpandMore as ExpandMoreIcon,
+  ExpandLess as ExpandLessIcon
 } from '@mui/icons-material';
 import DiagnosticMethodGuidanceModal from './DiagnosticMethodGuidanceModal';
+import LatexText from './LatexText';
 
 interface DiagnosticCatalogItem {
   code: string;
@@ -71,9 +75,9 @@ interface DiagnosticRecommendationsCardProps {
 }
 
 const DIAG_TIER_CONFIG = [
-  { key: 'high', label: 'Tier 1: Базовый стандарт (Первая линия)', short: 'Tier 1: Базовый', color: '#DC2626', bg: '#FEF2F2', border: '#FCA5A5' },
-  { key: 'medium', label: 'Tier 2: Верификация диагноза (Вторая линия)', short: 'Tier 2: Верификация', color: '#D97706', bg: '#FFFBEB', border: '#FCD34D' },
-  { key: 'low', label: 'Tier 3: Экспертный / Предоперационный', short: 'Tier 3: Экспертный', color: '#2563EB', bg: '#EFF6FF', border: '#93C5FD' }
+  { key: 'high', label: 'Tier 1: Базовый стандарт (Первая линия, $Sn \\ge 95\\%$)', short: 'Tier 1: Базовый', color: '#DC2626', bg: '#FEF2F2', border: '#FCA5A5' },
+  { key: 'medium', label: 'Tier 2: Верификация диагноза (Вторая линия, $B_0 \\ge 1.5\\text{ Тл}$)', short: 'Tier 2: Верификация', color: '#D97706', bg: '#FFFBEB', border: '#FCD34D' },
+  { key: 'low', label: 'Tier 3: Экспертный / Предоперационный ($3\\text{D-КТ}$, $LR+ > 10$)', short: 'Tier 3: Экспертный', color: '#2563EB', bg: '#EFF6FF', border: '#93C5FD' }
 ];
 
 export default function DiagnosticRecommendationsCard({
@@ -136,7 +140,60 @@ export default function DiagnosticRecommendationsCard({
     return relevantItems.filter(item => getItemPriority(item) === 'low');
   }, [relevantItems, templateDiagnostics]);
 
+  const isAlreadyPrescribed = (item: DiagnosticCatalogItem) => {
+    return existingPrescriptions.some(p =>
+      (item.servdict_id && p.service_id === item.servdict_id) ||
+      p.title.toLowerCase().includes(item.name.toLowerCase()) ||
+      item.name.toLowerCase().includes(p.title.toLowerCase())
+    );
+  };
+
+  const tier1PrescribedCount = useMemo(() => {
+    return tier1Diags.filter(item => isAlreadyPrescribed(item)).length;
+  }, [tier1Diags, existingPrescriptions]);
+
+  const tier2PrescribedCount = useMemo(() => {
+    return tier2Diags.filter(item => isAlreadyPrescribed(item)).length;
+  }, [tier2Diags, existingPrescriptions]);
+
+  const tier3PrescribedCount = useMemo(() => {
+    return tier3Diags.filter(item => isAlreadyPrescribed(item)).length;
+  }, [tier3Diags, existingPrescriptions]);
+
+  // Accordion states: inactive tiers are collapsed into accordions for all tiers
+  const [tier1Expanded, setTier1Expanded] = useState<boolean>(tier1PrescribedCount > 0);
+  const [tier2Expanded, setTier2Expanded] = useState<boolean>(tier2PrescribedCount > 0);
+  const [tier3Expanded, setTier3Expanded] = useState<boolean>(tier3PrescribedCount > 0);
+
+  // Sync accordion expansion on joint change: collapse inactive for all tiers
+  useEffect(() => {
+    setTier1Expanded(tier1PrescribedCount > 0);
+    setTier2Expanded(tier2PrescribedCount > 0);
+    setTier3Expanded(tier3PrescribedCount > 0);
+  }, [jointCategory, templateDiagnostics]);
+
+  // Auto-expand only when a tier becomes active (has prescribed items)
+  useEffect(() => {
+    if (tier1PrescribedCount > 0) setTier1Expanded(true);
+  }, [tier1PrescribedCount]);
+
+  useEffect(() => {
+    if (tier2PrescribedCount > 0) setTier2Expanded(true);
+  }, [tier2PrescribedCount]);
+
+  useEffect(() => {
+    if (tier3PrescribedCount > 0) setTier3Expanded(true);
+  }, [tier3PrescribedCount]);
+
   const handleAddDiagnostic = (item: DiagnosticCatalogItem) => {
+    if (tier1Diags.some(d => d.code === item.code)) {
+      setTier1Expanded(true);
+    } else if (tier2Diags.some(d => d.code === item.code)) {
+      setTier2Expanded(true);
+    } else if (tier3Diags.some(d => d.code === item.code)) {
+      setTier3Expanded(true);
+    }
+
     // 1. Add to protocol recommendations text if callback provided
     if (onAppendRecommendationText) {
       onAppendRecommendationText(item.protocol_phrase || item.name);
@@ -154,15 +211,8 @@ export default function DiagnosticRecommendationsCard({
     }
   };
 
-  const isAlreadyPrescribed = (item: DiagnosticCatalogItem) => {
-    return existingPrescriptions.some(p =>
-      (item.servdict_id && p.service_id === item.servdict_id) ||
-      p.title.toLowerCase().includes(item.name.toLowerCase()) ||
-      item.name.toLowerCase().includes(p.title.toLowerCase())
-    );
-  };
-
   const handleAddAllTier1 = () => {
+    setTier1Expanded(true);
     tier1Diags.forEach(item => {
       if (!isAlreadyPrescribed(item)) {
         handleAddDiagnostic(item);
@@ -182,151 +232,207 @@ export default function DiagnosticRecommendationsCard({
     }
   };
 
-  const renderTierSection = (tierKey: string, tierConfig: typeof DIAG_TIER_CONFIG[0], items: DiagnosticCatalogItem[]) => {
+  const renderTierSection = (
+    tierKey: string,
+    tierConfig: typeof DIAG_TIER_CONFIG[0],
+    items: DiagnosticCatalogItem[],
+    isExpanded: boolean,
+    onToggle: () => void,
+    prescribedCount: number
+  ) => {
     if (items.length === 0) return null;
+    const hasPrescribed = prescribedCount > 0;
+
     return (
       <Paper
         key={tierKey}
         variant="outlined"
         sx={{
           p: 1.5,
-          mb: 2,
+          mb: 1.5,
           borderRadius: 2,
-          borderColor: tierConfig.border,
-          bgcolor: tierConfig.bg
+          borderColor: hasPrescribed ? tierConfig.color : '#E2E8F0',
+          bgcolor: hasPrescribed ? tierConfig.bg : (isExpanded ? '#FAFBFD' : '#FAFAFA'),
+          transition: 'all 0.2s ease'
         }}
       >
-        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.25 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+        <Box
+          onClick={onToggle}
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            cursor: 'pointer',
+            userSelect: 'none'
+          }}
+        >
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
             <Chip
               label={tierConfig.short}
               size="small"
-              sx={{ bgcolor: tierConfig.color, color: '#FFF', fontWeight: 800, fontSize: '0.68rem', height: 20 }}
+              sx={{ bgcolor: tierConfig.color, color: '#FFF', fontWeight: 800, fontSize: '0.68rem', height: 22 }}
             />
-            <Typography sx={{ fontWeight: 800, fontSize: '0.85rem', color: '#1E293B' }}>
-              {tierConfig.label} ({items.length})
+            <Typography component="div" sx={{ fontWeight: 800, fontSize: '0.82rem', color: hasPrescribed ? '#0F172A' : '#334155' }}>
+              <LatexText text={`${tierConfig.label} (${items.length})`} />
             </Typography>
+            {hasPrescribed ? (
+              <Chip
+                label={`Назначено: ${prescribedCount} из ${items.length}`}
+                size="small"
+                color="success"
+                sx={{ height: 20, fontSize: '0.66rem', fontWeight: 800 }}
+              />
+            ) : (
+              <Chip
+                label="Неактивен / Не назначено"
+                size="small"
+                sx={{
+                  bgcolor: '#F1F5F9',
+                  color: '#64748B',
+                  height: 20,
+                  fontSize: '0.66rem',
+                  fontWeight: 600
+                }}
+              />
+            )}
+          </Box>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+            <Typography variant="caption" sx={{ color: '#64748B', display: { xs: 'none', sm: 'inline' } }}>
+              {isExpanded ? 'Свернуть' : 'Раскрыть'}
+            </Typography>
+            <IconButton size="small">
+              {isExpanded ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
+            </IconButton>
           </Box>
         </Box>
 
-        <Grid container spacing={1.5}>
-          {items.map((item) => {
-            const added = isAlreadyPrescribed(item);
-            const style = getModalityColor(item.modality);
-            return (
-              <Grid size={{ xs: 12, sm: 6, lg: 4 }} key={item.code}>
-                <Paper
-                  variant="outlined"
-                  sx={{
-                    p: 1.25,
-                    borderRadius: 1.5,
-                    border: '1px solid',
-                    borderColor: added ? '#86EFAC' : '#E2E8F0',
-                    bgcolor: added ? '#F0FDF4' : '#FFFFFF',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    justifyContent: 'space-between',
-                    gap: 1,
-                    transition: 'all 0.15s ease-in-out',
-                    '&:hover': {
-                      boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
-                      borderColor: '#0F3C64'
-                    }
-                  }}
-                >
-                  <Box>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
-                      <Chip
-                        label={item.modality?.toUpperCase()}
-                        size="small"
-                        sx={{
-                          fontSize: '0.62rem',
-                          height: 18,
-                          fontWeight: 800,
-                          bgcolor: style.text,
-                          color: '#FFF'
-                        }}
-                      />
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                        <IconButton
-                          size="small"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedDiagForGuidance(item);
-                          }}
-                          sx={{
-                            p: 0.35,
-                            color: '#0284C7',
-                            bgcolor: '#F0F9FF',
-                            border: '1px solid #BAE6FD',
-                            '&:hover': { bgcolor: '#E0F2FE', borderColor: '#0284C7' }
-                          }}
-                          title="Подробное клиническое описание метода диагностики"
-                        >
-                          <InfoIcon sx={{ fontSize: 16 }} />
-                        </IconButton>
-                        {item.servdict_price ? (
+        <Collapse in={isExpanded}>
+          <Box sx={{ pt: 1.5 }}>
+            <Grid container spacing={1.5}>
+              {items.map((item) => {
+                const added = isAlreadyPrescribed(item);
+                const style = getModalityColor(item.modality);
+                return (
+                  <Grid size={{ xs: 12, sm: 6, lg: 4 }} key={item.code}>
+                    <Paper
+                      variant="outlined"
+                      sx={{
+                        p: 1.25,
+                        borderRadius: 1.5,
+                        border: '1px solid',
+                        borderColor: added ? '#86EFAC' : '#E2E8F0',
+                        bgcolor: added ? '#F0FDF4' : '#FFFFFF',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        justifyContent: 'space-between',
+                        gap: 1,
+                        transition: 'all 0.15s ease-in-out',
+                        '&:hover': {
+                          boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
+                          borderColor: '#0F3C64'
+                        }
+                      }}
+                    >
+                      <Box>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
                           <Chip
-                            icon={<CashIcon sx={{ fontSize: '14px !important' }} />}
-                            label={`${item.servdict_price.toLocaleString('ru-RU')} ₽`}
+                            label={item.modality?.toUpperCase()}
                             size="small"
-                            color="success"
-                            sx={{ fontWeight: 700, fontSize: '0.72rem', height: 20 }}
+                            sx={{
+                              fontSize: '0.62rem',
+                              height: 18,
+                              fontWeight: 800,
+                              bgcolor: style.text,
+                              color: '#FFF'
+                            }}
                           />
-                        ) : (
-                          <Chip
-                            icon={<ExternalIcon sx={{ fontSize: '12px !important' }} />}
-                            label="Внешнее"
-                            size="small"
-                            variant="outlined"
-                            sx={{ fontSize: '0.65rem', height: 18 }}
-                          />
-                        )}
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                            <IconButton
+                              size="small"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedDiagForGuidance(item);
+                              }}
+                              sx={{
+                                p: 0.35,
+                                color: '#0284C7',
+                                bgcolor: '#F0F9FF',
+                                border: '1px solid #BAE6FD',
+                                '&:hover': { bgcolor: '#E0F2FE', borderColor: '#0284C7' }
+                              }}
+                              title="Подробное клиническое описание метода диагностики"
+                            >
+                              <InfoIcon sx={{ fontSize: 16 }} />
+                            </IconButton>
+                            {item.servdict_price ? (
+                              <Chip
+                                icon={<CashIcon sx={{ fontSize: '14px !important' }} />}
+                                label={`${item.servdict_price.toLocaleString('ru-RU')} ₽`}
+                                size="small"
+                                color="success"
+                                sx={{ fontWeight: 700, fontSize: '0.72rem', height: 20 }}
+                              />
+                            ) : (
+                              <Chip
+                                icon={<ExternalIcon sx={{ fontSize: '12px !important' }} />}
+                                label="Внешнее"
+                                size="small"
+                                variant="outlined"
+                                sx={{ fontSize: '0.65rem', height: 18 }}
+                              />
+                            )}
+                          </Box>
+                        </Box>
+
+                        <Typography component="div" variant="body2" sx={{ fontWeight: 700, color: '#1E293B', lineHeight: 1.3, mb: 0.5 }}>
+                          <LatexText text={item.name} />
+                        </Typography>
+
+                        <Tooltip title={item.protocol_phrase} arrow placement="top">
+                          <Box
+                            sx={{
+                              display: '-webkit-box',
+                              WebkitLineClamp: 2,
+                              WebkitBoxOrient: 'vertical',
+                              overflow: 'hidden',
+                              lineHeight: 1.2
+                            }}
+                          >
+                            <Typography
+                              variant="caption"
+                              color="text.secondary"
+                              component="div"
+                              sx={{ lineHeight: 1.2 }}
+                            >
+                              «<LatexText text={item.protocol_phrase} />»
+                            </Typography>
+                          </Box>
+                        </Tooltip>
                       </Box>
-                    </Box>
 
-                    <Typography variant="body2" sx={{ fontWeight: 700, color: '#1E293B', lineHeight: 1.3, mb: 0.5 }}>
-                      {item.name}
-                    </Typography>
-
-                    <Tooltip title={item.protocol_phrase} arrow placement="top">
-                      <Typography
-                        variant="caption"
-                        color="text.secondary"
+                      <Button
+                        size="small"
+                        variant={added ? 'outlined' : 'contained'}
+                        color={added ? 'success' : 'primary'}
+                        disabled={added}
+                        startIcon={added ? <AddedIcon /> : <AddIcon />}
+                        onClick={() => handleAddDiagnostic(item)}
                         sx={{
-                          display: '-webkit-box',
-                          WebkitLineClamp: 2,
-                          WebkitBoxOrient: 'vertical',
-                          overflow: 'hidden',
-                          lineHeight: 1.2
+                          textTransform: 'none',
+                          fontWeight: 700,
+                          fontSize: '0.75rem',
+                          py: 0.3
                         }}
                       >
-                        «{item.protocol_phrase}»
-                      </Typography>
-                    </Tooltip>
-                  </Box>
-
-                  <Button
-                    size="small"
-                    variant={added ? 'outlined' : 'contained'}
-                    color={added ? 'success' : 'primary'}
-                    disabled={added}
-                    startIcon={added ? <AddedIcon /> : <AddIcon />}
-                    onClick={() => handleAddDiagnostic(item)}
-                    sx={{
-                      textTransform: 'none',
-                      fontWeight: 700,
-                      fontSize: '0.75rem',
-                      py: 0.3
-                    }}
-                  >
-                    {added ? 'В плане приёма' : item.servdict_price ? '+ Назначить и в кассу' : '+ Добавить в протокол'}
-                  </Button>
-                </Paper>
-              </Grid>
-            );
-          })}
-        </Grid>
+                        {added ? 'В плане приёма' : item.servdict_price ? '+ Назначить и в кассу' : '+ Добавить в протокол'}
+                      </Button>
+                    </Paper>
+                  </Grid>
+                );
+              })}
+            </Grid>
+          </Box>
+        </Collapse>
       </Paper>
     );
   };
@@ -349,7 +455,29 @@ export default function DiagnosticRecommendationsCard({
             План аппаратного и функционального обследования:
           </Typography>
         </Box>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+          <Button
+            size="small"
+            variant="outlined"
+            color="inherit"
+            onClick={() => {
+              const anyInactiveExpanded = (!tier1PrescribedCount && tier1Expanded) || (!tier2PrescribedCount && tier2Expanded) || (!tier3PrescribedCount && tier3Expanded);
+              if (anyInactiveExpanded) {
+                setTier1Expanded(tier1PrescribedCount > 0);
+                setTier2Expanded(tier2PrescribedCount > 0);
+                setTier3Expanded(tier3PrescribedCount > 0);
+              } else {
+                setTier1Expanded(true);
+                setTier2Expanded(true);
+                setTier3Expanded(true);
+              }
+            }}
+            sx={{ textTransform: 'none', fontSize: '0.75rem', fontWeight: 700, borderColor: '#CBD5E1', color: '#475569' }}
+          >
+            {((!tier1PrescribedCount && tier1Expanded) || (!tier2PrescribedCount && tier2Expanded) || (!tier3PrescribedCount && tier3Expanded))
+              ? 'Свернуть неактивные'
+              : 'Развернуть все'}
+          </Button>
           {tier1Diags.length > 0 && (
             <Button
               size="small"
@@ -386,9 +514,9 @@ export default function DiagnosticRecommendationsCard({
         </Alert>
       ) : (
         <Box>
-          {renderTierSection('high', DIAG_TIER_CONFIG[0], tier1Diags)}
-          {renderTierSection('medium', DIAG_TIER_CONFIG[1], tier2Diags)}
-          {renderTierSection('low', DIAG_TIER_CONFIG[2], tier3Diags)}
+          {renderTierSection('high', DIAG_TIER_CONFIG[0], tier1Diags, tier1Expanded, () => setTier1Expanded(prev => !prev), tier1PrescribedCount)}
+          {renderTierSection('medium', DIAG_TIER_CONFIG[1], tier2Diags, tier2Expanded, () => setTier2Expanded(prev => !prev), tier2PrescribedCount)}
+          {renderTierSection('low', DIAG_TIER_CONFIG[2], tier3Diags, tier3Expanded, () => setTier3Expanded(prev => !prev), tier3PrescribedCount)}
         </Box>
       )}
 
@@ -397,7 +525,7 @@ export default function DiagnosticRecommendationsCard({
         open={Boolean(selectedDiagForGuidance)}
         onClose={() => setSelectedDiagForGuidance(null)}
         diagnostic={selectedDiagForGuidance}
-        onAssign={(diag) => handleAddDiagnostic(diag)}
+        onAssign={(diag) => handleAddDiagnostic(diag as any)}
         assignButtonText={selectedDiagForGuidance?.servdict_price ? 'Добавить в назначения и кассу' : 'Добавить в протокол'}
       />
     </Paper>

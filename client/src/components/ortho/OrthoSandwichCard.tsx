@@ -14,18 +14,19 @@ import {
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import PrintDisabledIcon from '@mui/icons-material/PrintDisabled';
 import PrintIcon from '@mui/icons-material/Print';
+import LatexText from './LatexText';
 
 export interface OrthoSandwichCardProps {
   id: string;
-  title: string;
-  subtitle?: string;
+  title: string | React.ReactNode;
+  subtitle?: string | React.ReactNode;
   icon?: React.ReactNode;
   expanded: boolean;
   onToggleExpand: () => void;
   isActive: boolean;
   onToggleActive: (active: boolean) => void;
   hasContent?: boolean;
-  previewSnippet?: string;
+  previewSnippet?: string | React.ReactNode;
   badge?: React.ReactNode;
   headerActions?: React.ReactNode;
   children: React.ReactNode;
@@ -60,6 +61,7 @@ export const OrthoSandwichCard: React.FC<OrthoSandwichCardProps> = ({
 
   return (
     <Paper
+      id={id}
       elevation={expanded ? 2 : 1}
       sx={{
         borderRadius: 2.5,
@@ -149,7 +151,11 @@ export const OrthoSandwichCard: React.FC<OrthoSandwichCardProps> = ({
                   whiteSpace: 'nowrap'
                 }}
               >
-                {title}
+                {typeof title === 'string' && (title.includes('$') || title.includes('\\')) ? (
+                  <LatexText text={title} />
+                ) : (
+                  title
+                )}
               </Typography>
 
               {badge}
@@ -203,8 +209,7 @@ export const OrthoSandwichCard: React.FC<OrthoSandwichCardProps> = ({
             </Box>
 
             {subtitle && (
-              <Typography
-                variant="caption"
+              <Box
                 sx={{
                   color: 'text.secondary',
                   display: 'block',
@@ -215,8 +220,12 @@ export const OrthoSandwichCard: React.FC<OrthoSandwichCardProps> = ({
                   whiteSpace: 'nowrap'
                 }}
               >
-                {subtitle}
-              </Typography>
+                {typeof subtitle === 'string' && (subtitle.includes('$') || subtitle.includes('\\')) ? (
+                  <LatexText text={subtitle} />
+                ) : (
+                  subtitle
+                )}
+              </Box>
             )}
           </Box>
         </Box>
@@ -233,9 +242,8 @@ export const OrthoSandwichCard: React.FC<OrthoSandwichCardProps> = ({
           onClick={(e) => e.stopPropagation()}
         >
           {!expanded && previewSnippet && isActive && (
-            <Typography
+            <Box
               key="preview-snippet"
-              variant="caption"
               sx={{
                 maxWidth: { xs: 120, sm: 260, md: 380 },
                 color: 'text.secondary',
@@ -243,11 +251,16 @@ export const OrthoSandwichCard: React.FC<OrthoSandwichCardProps> = ({
                 textOverflow: 'ellipsis',
                 whiteSpace: 'nowrap',
                 fontStyle: 'italic',
+                fontSize: '0.75rem',
                 display: { xs: 'none', sm: 'block' }
               }}
             >
-              {previewSnippet}
-            </Typography>
+              {typeof previewSnippet === 'string' && (previewSnippet.includes('$') || previewSnippet.includes('\\')) ? (
+                <LatexText text={previewSnippet} />
+              ) : (
+                previewSnippet
+              )}
+            </Box>
           )}
 
           {headerActions}

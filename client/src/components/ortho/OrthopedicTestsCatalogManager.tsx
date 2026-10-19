@@ -424,7 +424,7 @@ export default function OrthopedicTestsCatalogManager({ onCatalogChanged }: Orth
                   size="small"
                   variant="outlined"
                   startIcon={<MenuBookIcon sx={{ fontSize: 16 }} />}
-                  onClick={() => window.open('/guide?section=section-ortho-tests-registry', '_blank')}
+                  onClick={() => setPreviewInfoOpen(true)}
                   sx={{
                     color: '#0284C7',
                     borderColor: '#BAE6FD',
@@ -436,7 +436,7 @@ export default function OrthopedicTestsCatalogManager({ onCatalogChanged }: Orth
                     '&:hover': { bgcolor: '#F0F9FF', borderColor: '#0284C7' }
                   }}
                 >
-                  Гид 39 тестов
+                  Клинический гид
                 </Button>
                 <Button
                   size="small"

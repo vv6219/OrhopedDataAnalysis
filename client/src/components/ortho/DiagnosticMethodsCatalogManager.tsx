@@ -314,7 +314,7 @@ export default function DiagnosticMethodsCatalogManager({ onCatalogChanged }: Di
             variant="outlined"
             size="small"
             startIcon={<MenuBookIcon />}
-            onClick={() => window.open('/guide?section=section-diagnostic-methods-registry', '_blank')}
+            onClick={() => setGuidanceModalOpen(true)}
             sx={{
               color: '#0284C7',
               borderColor: '#BAE6FD',
@@ -323,7 +323,7 @@ export default function DiagnosticMethodsCatalogManager({ onCatalogChanged }: Di
               '&:hover': { bgcolor: '#F0F9FF', borderColor: '#0284C7' }
             }}
           >
-            Гид 25+ методов диагностики
+            Клинический гид
           </Button>
           <Button
             variant="outlined"

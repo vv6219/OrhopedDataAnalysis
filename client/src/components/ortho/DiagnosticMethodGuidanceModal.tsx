@@ -32,6 +32,7 @@ import {
   ViewHeadline as FullViewIcon
 } from '@mui/icons-material';
 import LatexText, { cleanLatexText } from './LatexText';
+import ClinicalGuidanceModal from './ClinicalGuidanceModal';
 
 export interface DiagnosticMethodItem {
   code: string;
@@ -103,7 +104,9 @@ export const DiagnosticMethodGuidanceModal: React.FC<DiagnosticMethodGuidanceMod
   const [copiedPhrase, setCopiedPhrase] = React.useState<boolean>(false);
   const [viewMode, setViewMode] = React.useState<'tabs' | 'scroll'>('tabs');
 
-  if (!diagnostic) return null;
+  if (!diagnostic) {
+    return <ClinicalGuidanceModal open={open} onClose={onClose} initialSection="diagnostics" />;
+  }
 
   const modalityInfo = MODALITY_MAP[diagnostic.modality || 'xray'] || {
     label: diagnostic.modality?.toUpperCase() || 'ДИАГНОСТИКА',
