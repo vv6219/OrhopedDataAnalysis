@@ -977,7 +977,7 @@ export default function PatientReferralsManager() {
                         {it.service_code && <Chip size="small" label={it.service_code} sx={{ height: 18, fontSize: '0.68rem', mt: 0.3 }} />}
                       </TableCell>
                       <TableCell>
-                        {it.item_details && <Typography variant="caption" sx={{ display: 'block' }}>{it.item_details}</Typography>}
+                        {it.item_details && typeof it.item_details === 'string' && <Typography variant="caption" sx={{ display: 'block' }}>{it.item_details}</Typography>}
                         {it.formula_latex && (
                           <Box sx={{ mt: 0.3, p: 0.4, bgcolor: '#FFFFFF', borderRadius: 1 }}>
                             <LatexText text={it.formula_latex} />

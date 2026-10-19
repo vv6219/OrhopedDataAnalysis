@@ -402,7 +402,7 @@ const OrthoReferralPrintTemplate = forwardRef<HTMLDivElement, OrthoReferralPrint
                           />
                         </TableCell>
                         <TableCell sx={{ fontSize: '0.82rem', py: 0.6 }}>
-                          {item.item_details && (
+                          {item.item_details && typeof item.item_details === 'string' && (
                             <Typography variant="body2" sx={{ fontSize: '0.82rem', color: '#334155' }}>
                               <LatexText text={item.item_details} />
                             </Typography>

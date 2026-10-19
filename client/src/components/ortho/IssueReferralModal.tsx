@@ -163,11 +163,11 @@ export default function IssueReferralModal({
   // Load Performers from DB on open
   useEffect(() => {
     if (open) {
-      setIcd10Code(defaultMkbCode || '');
-      setClinicalDiagnosis(defaultDiagnosis || '');
-      setJointZone(targetJoint || '');
-      setJointSide(targetSide || '');
-      setJustification(anamnesisSummary || '');
+      setIcd10Code(typeof defaultMkbCode === 'string' ? defaultMkbCode : (defaultMkbCode ? String(defaultMkbCode) : ''));
+      setClinicalDiagnosis(typeof defaultDiagnosis === 'string' ? defaultDiagnosis : (defaultDiagnosis ? String(defaultDiagnosis) : ''));
+      setJointZone(typeof targetJoint === 'string' ? targetJoint : (targetJoint ? String(targetJoint) : ''));
+      setJointSide(typeof targetSide === 'string' ? targetSide : (targetSide ? String(targetSide) : ''));
+      setJustification(typeof anamnesisSummary === 'string' ? anamnesisSummary : (anamnesisSummary ? String(anamnesisSummary) : ''));
       setErrorMessage(null);
       setSuccessMessage(null);
 
@@ -196,13 +196,23 @@ export default function IssueReferralModal({
 
       // 1. Diagnostics from active template
       activeDiagnostics.forEach((diag, idx) => {
+        const diagDetails = (typeof diag.clinical_objective === 'string' && diag.clinical_objective.trim())
+          ? diag.clinical_objective.trim()
+          : (typeof diag.target_anatomical_zone === 'string' && diag.target_anatomical_zone.trim()
+              ? diag.target_anatomical_zone.trim()
+              : '');
+
+        const prepNotes = typeof diag.patient_preparation === 'string' ? diag.patient_preparation : '';
+        const diagTitle = typeof diag.method_name === 'string' ? diag.method_name : (typeof diag.name === 'string' ? diag.name : 'Диагностическое исследование');
+        const sCode = typeof diag.method_code === 'string' ? diag.method_code : (typeof diag.code === 'string' ? diag.code : '');
+
         initialItems.push({
           id: `diag_${diag.id || idx}`,
           domain: 'diagnostics',
-          service_code: diag.method_code || diag.code || '',
-          item_title: diag.method_name || diag.name || 'Диагностическое исследование',
-          item_details: diag.clinical_objective || diag.target_anatomical_zone || '',
-          preparation_notes: diag.patient_preparation || '',
+          service_code: sCode,
+          item_title: diagTitle,
+          item_details: diagDetails,
+          preparation_notes: prepNotes,
           selected: true
         });
       });
@@ -216,14 +226,30 @@ export default function IssueReferralModal({
         else if (presc.category === 'surgery') domain = 'surgery';
         else if (presc.category === 'diagnostic') domain = 'diagnostics';
 
+        let prescDetails = '';
+        if (typeof presc.dosage_notes === 'string' && presc.dosage_notes.trim()) {
+          prescDetails = presc.dosage_notes.trim();
+        } else if (typeof presc.details === 'string' && presc.details.trim()) {
+          prescDetails = presc.details.trim();
+        } else if (presc.details && typeof presc.details === 'object') {
+          if (typeof presc.details.notes === 'string') prescDetails = presc.details.notes;
+          else if (typeof presc.details.text === 'string') prescDetails = presc.details.text;
+          else if (typeof presc.details.protocol === 'string') prescDetails = presc.details.protocol;
+        }
+
+        const prescTitle = typeof presc.name === 'string' ? presc.name : (typeof presc.title === 'string' ? presc.title : 'Медицинская процедура');
+        const prescCode = typeof presc.code === 'string' ? presc.code : (typeof presc.serviceCode === 'string' ? presc.serviceCode : (typeof presc.service_code === 'string' ? presc.service_code : ''));
+        const prescFormula = typeof presc.formula_latex === 'string' ? presc.formula_latex : '';
+        const prescPrep = typeof presc.preparation_notes === 'string' ? presc.preparation_notes : '';
+
         initialItems.push({
           id: `presc_${presc.id || idx}`,
           domain: domain,
-          service_code: presc.code || '',
-          item_title: presc.name || presc.title || 'Медицинская процедура',
-          item_details: presc.dosage_notes || presc.details || '',
-          formula_latex: presc.formula_latex || '',
-          preparation_notes: presc.preparation_notes || '',
+          service_code: prescCode,
+          item_title: prescTitle,
+          item_details: prescDetails,
+          formula_latex: prescFormula,
+          preparation_notes: prescPrep,
           selected: true
         });
       });
@@ -834,7 +860,7 @@ export default function IssueReferralModal({
                           />
                         </Box>
 
-                        {item.item_details && (
+                        {item.item_details && typeof item.item_details === 'string' && (
                           <Typography variant="body2" sx={{ color: '#475569', fontSize: '0.84rem', mt: 0.5 }}>
                             {item.item_details}
                           </Typography>

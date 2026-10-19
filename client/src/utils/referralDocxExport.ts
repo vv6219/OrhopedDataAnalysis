@@ -49,7 +49,7 @@ export async function exportReferralToDocx(data: OrthoReferralData): Promise<voi
 
   data.items.forEach((item, index) => {
     const detailsParagraphs: Paragraph[] = [];
-    if (item.item_details) {
+    if (item.item_details && typeof item.item_details === 'string') {
       detailsParagraphs.push(new Paragraph({
         children: [new TextRun({ text: item.item_details })],
         spacing: { after: 60 }
