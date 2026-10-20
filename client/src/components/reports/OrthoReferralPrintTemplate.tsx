@@ -13,6 +13,7 @@ import {
 } from '@mui/material';
 import { QRCodeSVG } from 'qrcode.react';
 import LatexText from '../ortho/LatexText';
+import { resolveClinicalProtocolText, resolveItemPreparation, resolveAggregatedPreparation } from '../../utils/clinicalProtocolResolver';
 
 export interface OrthoReferralItemData {
   id?: number | string;
@@ -153,7 +154,7 @@ const OrthoReferralPrintTemplate = forwardRef<HTMLDivElement, OrthoReferralPrint
                 Центр Ортопедии и Травматологии Добрушкина
               </Typography>
               <Typography variant="caption" sx={{ color: '#475569', display: 'block', fontSize: '0.78rem', mt: 0.3 }}>
-                Клиника доктора Добрушкина • г. Сочи • Лицензия ЛО-23-01-014522 • Тел. +7 (862) 295-00-55
+                г. Сочи • Лицензия ЛО-23-01-014522 • Тел. +7 (862) 295-00-55
               </Typography>
               <Typography variant="caption" sx={{ color: '#64748B', display: 'block', fontSize: '0.74rem' }}>
                 Специализированная травматолого-ортопедическая помощь экспертного уровня
@@ -230,12 +231,15 @@ const OrthoReferralPrintTemplate = forwardRef<HTMLDivElement, OrthoReferralPrint
         {/* 4. PERFORMER (ОРГАНИЗАЦИЯ-ИСПОЛНИТЕЛЬ ИЗ БД) */}
         <Paper
           variant="outlined"
+          className="print-section"
           sx={{
             p: 1.25,
             mb: 2,
             borderColor: isInternal ? '#BBF7D0' : '#CBD5E1',
             bgcolor: isInternal ? '#F8FAFC' : '#FAFBFD',
-            borderRadius: 1.5
+            borderRadius: 1.5,
+            pageBreakInside: 'avoid !important',
+            breakInside: 'avoid !important'
           }}
         >
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 0.4 }}>
@@ -270,12 +274,15 @@ const OrthoReferralPrintTemplate = forwardRef<HTMLDivElement, OrthoReferralPrint
         {/* 5. PATIENT INFORMATION */}
         <Paper
           variant="outlined"
+          className="print-section"
           sx={{
             p: 1.25,
             mb: 2,
             borderColor: '#CBD5E1',
             bgcolor: '#F8FAFC',
-            borderRadius: 1.5
+            borderRadius: 1.5,
+            pageBreakInside: 'avoid !important',
+            breakInside: 'avoid !important'
           }}
         >
           <Box sx={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 1 }}>
@@ -307,10 +314,26 @@ const OrthoReferralPrintTemplate = forwardRef<HTMLDivElement, OrthoReferralPrint
         </Paper>
 
         {/* 6. CLINICAL CONTEXT & DIAGNOSIS */}
-        <Box sx={{ mb: 2 }}>
+        <Box
+          className="print-section"
+          sx={{
+            mb: 2,
+            pageBreakInside: 'avoid !important',
+            breakInside: 'avoid !important'
+          }}
+        >
           <Typography
             variant="subtitle2"
-            sx={{ fontWeight: 800, color: '#0F3C64', borderBottom: '1px solid #E2E8F0', pb: 0.4, mb: 0.8 }}
+            className="print-heading"
+            sx={{
+              fontWeight: 800,
+              color: '#0F3C64',
+              borderBottom: '1px solid #E2E8F0',
+              pb: 0.4,
+              mb: 0.8,
+              pageBreakAfter: 'avoid !important',
+              breakAfter: 'avoid !important'
+            }}
           >
             Клинический диагноз и цель направления
           </Typography>
@@ -353,17 +376,44 @@ const OrthoReferralPrintTemplate = forwardRef<HTMLDivElement, OrthoReferralPrint
         </Box>
 
         {/* 7. PRESCRIBED ITEMS TABLE */}
-        <Box sx={{ mb: 2 }}>
+        <Box
+          className="print-section"
+          sx={{
+            mb: 2,
+            pageBreakInside: (data.items?.length || 0) <= 3 ? 'avoid !important' : 'auto',
+            breakInside: (data.items?.length || 0) <= 3 ? 'avoid !important' : 'auto'
+          }}
+        >
           <Typography
             variant="subtitle2"
-            sx={{ fontWeight: 800, color: '#0F3C64', borderBottom: '1px solid #E2E8F0', pb: 0.4, mb: 0.8 }}
+            className="print-heading"
+            sx={{
+              fontWeight: 800,
+              color: '#0F3C64',
+              borderBottom: '1px solid #E2E8F0',
+              pb: 0.4,
+              mb: 0.8,
+              pageBreakAfter: 'avoid !important',
+              breakAfter: 'avoid !important'
+            }}
           >
-            Перечень назначаемых процедур / исследований / операций ({data.items?.length || 0})
+            {data.items?.length === 1
+              ? 'Назначенное исследование / процедура'
+              : `Перечень назначаемых процедур / исследований / операций (${data.items?.length || 0})`}
           </Typography>
-          <TableContainer component={Paper} variant="outlined" sx={{ borderColor: '#CBD5E1' }}>
+          <TableContainer
+            component={Paper}
+            variant="outlined"
+            sx={{
+              borderColor: '#CBD5E1',
+              overflow: 'visible !important',
+              pageBreakInside: 'auto',
+              breakInside: 'auto'
+            }}
+          >
             <Table size="small">
-              <TableHead sx={{ bgcolor: '#F1F5F9' }}>
-                <TableRow>
+              <TableHead sx={{ bgcolor: '#F1F5F9', display: 'table-header-group !important' }}>
+                <TableRow sx={{ pageBreakInside: 'avoid !important', breakInside: 'avoid !important' }}>
                   <TableCell sx={{ fontWeight: 800, fontSize: '0.78rem', py: 0.6, width: 36 }}>№</TableCell>
                   <TableCell sx={{ fontWeight: 800, fontSize: '0.78rem', py: 0.6 }}>Наименование назначения</TableCell>
                   <TableCell sx={{ fontWeight: 800, fontSize: '0.78rem', py: 0.6, width: 110 }} align="center">Профиль</TableCell>
@@ -375,7 +425,7 @@ const OrthoReferralPrintTemplate = forwardRef<HTMLDivElement, OrthoReferralPrint
                   data.items.map((item, idx) => {
                     const badge = getDomainBadge(item.domain);
                     return (
-                      <TableRow key={idx}>
+                      <TableRow key={idx} sx={{ pageBreakInside: 'avoid !important', breakInside: 'avoid !important' }}>
                         <TableCell sx={{ fontSize: '0.8rem', py: 0.6, fontWeight: 700 }}>{idx + 1}</TableCell>
                         <TableCell sx={{ fontSize: '0.84rem', py: 0.6 }}>
                           <Typography variant="body2" sx={{ fontWeight: 700, fontSize: '0.84rem', color: '#0F172A' }}>
@@ -402,22 +452,34 @@ const OrthoReferralPrintTemplate = forwardRef<HTMLDivElement, OrthoReferralPrint
                           />
                         </TableCell>
                         <TableCell sx={{ fontSize: '0.82rem', py: 0.6 }}>
-                          {item.item_details && typeof item.item_details === 'string' && (
-                            <Typography variant="body2" sx={{ fontSize: '0.82rem', color: '#334155' }}>
-                              <LatexText text={item.item_details} />
-                            </Typography>
-                          )}
+                          <Typography variant="body2" sx={{ fontSize: '0.82rem', color: '#1E293B', lineHeight: 1.35 }}>
+                            <LatexText text={resolveClinicalProtocolText(item, {
+                              targetJoint: data.target_joint,
+                              targetSide: data.target_side,
+                              diagnosis: data.clinical_diagnosis
+                            })} />
+                          </Typography>
                           {item.formula_latex && (
-                            <Typography variant="caption" sx={{ display: 'block', color: '#047857', fontWeight: 600 }}>
+                            <Typography variant="caption" sx={{ display: 'block', color: '#047857', fontWeight: 600, mt: 0.3 }}>
                               <LatexText text={item.formula_latex} />
                             </Typography>
                           )}
+                          {(() => {
+                            const prep = resolveItemPreparation(item);
+                            return prep ? (
+                              <Box sx={{ mt: 0.5, p: '3px 8px', bgcolor: '#FEF3C7', border: '1px solid #FDE68A', borderRadius: 1 }}>
+                                <Typography variant="caption" sx={{ color: '#92400E', fontSize: '0.74rem', lineHeight: 1.35, display: 'block' }}>
+                                  <strong style={{ color: '#78350F' }}>Подготовка:</strong> <LatexText text={prep} />
+                                </Typography>
+                              </Box>
+                            ) : null;
+                          })()}
                         </TableCell>
                       </TableRow>
                     );
                   })
                 ) : (
-                  <TableRow>
+                  <TableRow sx={{ pageBreakInside: 'avoid !important', breakInside: 'avoid !important' }}>
                     <TableCell colSpan={4} align="center" sx={{ py: 1.5, color: '#64748B', fontSize: '0.82rem' }}>
                       Позиции назначения не выбраны
                     </TableCell>
@@ -428,39 +490,77 @@ const OrthoReferralPrintTemplate = forwardRef<HTMLDivElement, OrthoReferralPrint
           </TableContainer>
         </Box>
 
-        {/* 8. PREPARATION INSTRUCTIONS (ИЗВЛЕЧЕНО ИЗ КАТАЛОГОВ БД) */}
-        {data.preparation_instructions && data.preparation_instructions.trim() && (
-          <Paper
-            variant="outlined"
-            sx={{
-              p: 1.25,
-              mb: 2,
-              bgcolor: '#FFFBEB',
-              borderColor: '#FDE68A',
-              borderRadius: 1.5,
-              pageBreakInside: 'avoid'
-            }}
-          >
-            <Typography variant="subtitle2" sx={{ fontWeight: 800, color: '#92400E', fontSize: '0.84rem', mb: 0.5 }}>
-              Памятка пациенту по подготовке к процедурам (из клинического стандарта Центра):
-            </Typography>
-            <Typography
-              variant="body2"
+        {/* 8. PREPARATION INSTRUCTIONS (ИЗВЛЕЧЕНО ИЗ КАТАЛОГОВ БД / КЛИНИЧЕСКИЙ СТАНДАРТ) */}
+        {(() => {
+          const aggregatedMemo = resolveAggregatedPreparation(data.items, data.preparation_instructions);
+          if (!aggregatedMemo || !aggregatedMemo.trim()) return null;
+          return (
+            <Paper
+              variant="outlined"
+              className="print-section"
               sx={{
-                fontSize: '0.8rem',
-                color: '#78350F',
-                lineHeight: 1.45,
-                whiteSpace: 'pre-line'
+                p: 1.5,
+                mb: 2,
+                bgcolor: '#FFFBEB',
+                borderColor: '#FDE68A',
+                borderRadius: 1.5,
+                pageBreakInside: 'avoid !important',
+                breakInside: 'avoid !important'
               }}
             >
-              <LatexText text={data.preparation_instructions} />
-            </Typography>
-          </Paper>
-        )}
+              <Typography
+                variant="subtitle2"
+                className="print-heading"
+                sx={{
+                  fontWeight: 800,
+                  color: '#92400E',
+                  fontSize: '0.86rem',
+                  mb: 0.8,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 0.8,
+                  pageBreakAfter: 'avoid !important',
+                  breakAfter: 'avoid !important'
+                }}
+              >
+                Памятка пациенту по подготовке к процедурам (из клинического стандарта Центра):
+              </Typography>
+              <Typography
+                variant="body2"
+                component="div"
+                sx={{
+                  fontSize: '0.8rem',
+                  color: '#78350F',
+                  lineHeight: 1.55,
+                  whiteSpace: 'pre-line'
+                }}
+              >
+                <LatexText text={aggregatedMemo} />
+              </Typography>
+            </Paper>
+          );
+        })()}
 
         {data.special_notes && (
-          <Box sx={{ mb: 1.5 }}>
-            <Typography variant="caption" sx={{ fontWeight: 700, color: '#475569', display: 'block' }}>
+          <Box
+            className="print-section"
+            sx={{
+              mb: 1.5,
+              pageBreakInside: 'avoid !important',
+              breakInside: 'avoid !important'
+            }}
+          >
+            <Typography
+              variant="caption"
+              className="print-heading"
+              sx={{
+                fontWeight: 700,
+                color: '#475569',
+                display: 'block',
+                pageBreakAfter: 'avoid !important',
+                breakAfter: 'avoid !important'
+              }}
+            >
               Особые клинические отметки:
             </Typography>
             <Typography variant="body2" sx={{ fontSize: '0.82rem', color: '#1E293B' }}>
@@ -471,12 +571,13 @@ const OrthoReferralPrintTemplate = forwardRef<HTMLDivElement, OrthoReferralPrint
 
         {/* 9. SIGNATURES & STAMP (PAGE-BREAK AVOID CONTAINER) */}
         <Box
+          className="print-section"
           sx={{
             mt: 2.5,
             pt: 1.5,
             borderTop: '1px solid #CBD5E1',
-            pageBreakInside: 'avoid',
-            breakInside: 'avoid',
+            pageBreakInside: 'avoid !important',
+            breakInside: 'avoid !important',
             position: 'relative'
           }}
         >

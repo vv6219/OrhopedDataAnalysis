@@ -37,7 +37,7 @@ import {
   GridToolbarExport,
   GridToolbarQuickFilter
 } from '@mui/x-data-grid';
-import type { GridColDef } from '@mui/x-data-grid';
+import type { GridColDef, GridRowSelectionModel } from '@mui/x-data-grid';
 import AssignmentIcon from '@mui/icons-material/Assignment';
 import PrintIcon from '@mui/icons-material/Print';
 import DescriptionIcon from '@mui/icons-material/Description';
@@ -52,6 +52,8 @@ import OrthoReferralPrintTemplate from '../components/reports/OrthoReferralPrint
 import type { OrthoReferralData } from '../components/reports/OrthoReferralPrintTemplate';
 import { exportReferralToDocx } from '../utils/referralDocxExport';
 import LatexText from '../components/ortho/LatexText';
+import { resolveClinicalProtocolText } from '../utils/clinicalProtocolResolver';
+import { COMMON_PRINT_PAGE_STYLE } from '../utils/printStyles';
 
 interface ReferralRow {
   id: number;
@@ -87,9 +89,25 @@ interface ReferralRow {
 // Module-level custom toolbar complying strictly with grid-improvements skill
 interface ReferralsToolbarProps {
   onResetFilters: () => void;
+  selectedCount?: number;
+  totalCount?: number;
+  onBulkPrint?: () => void;
+  onBulkDocx?: () => void;
+  onSelectAll?: () => void;
+  onDeselectAll?: () => void;
+  bulkLoading?: boolean;
 }
 
-function CustomReferralsToolbar({ onResetFilters }: ReferralsToolbarProps) {
+function CustomReferralsToolbar({
+  onResetFilters,
+  selectedCount = 0,
+  totalCount = 0,
+  onBulkPrint,
+  onBulkDocx,
+  onSelectAll,
+  onDeselectAll,
+  bulkLoading = false
+}: ReferralsToolbarProps) {
   return (
     <GridToolbarContainer
       sx={{
@@ -119,6 +137,69 @@ function CustomReferralsToolbar({ onResetFilters }: ReferralsToolbarProps) {
         >
           Сбросить фильтры
         </Button>
+
+        {/* Quick Select All / Deselect All for print list */}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8, ml: { xs: 0, sm: 0.5 }, bgcolor: '#FFFFFF', px: 1, py: 0.3, borderRadius: 1.5, border: '1px solid #E2E8F0' }}>
+          <Button
+            size="small"
+            onClick={onSelectAll}
+            disabled={totalCount === 0 || selectedCount === totalCount}
+            sx={{ textTransform: 'none', color: '#0F3C64', fontWeight: 700, fontSize: '0.8rem', p: 0.3 }}
+          >
+            Выбрать все
+          </Button>
+          <Typography variant="caption" sx={{ color: '#CBD5E1' }}>|</Typography>
+          <Button
+            size="small"
+            onClick={onDeselectAll}
+            disabled={selectedCount === 0}
+            sx={{ textTransform: 'none', color: '#64748B', fontWeight: 600, fontSize: '0.8rem', p: 0.3 }}
+          >
+            Снять все
+          </Button>
+        </Box>
+
+        {selectedCount > 0 && (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, ml: { xs: 0, md: 1 } }}>
+            <Button
+              size="small"
+              variant="contained"
+              startIcon={<PrintIcon />}
+              onClick={onBulkPrint}
+              disabled={bulkLoading}
+              sx={{
+                bgcolor: '#0F3C64',
+                color: '#FFFFFF',
+                fontWeight: 700,
+                textTransform: 'none',
+                fontSize: '0.82rem',
+                borderRadius: 1.5,
+                boxShadow: '0 2px 6px rgba(15, 60, 100, 0.2)',
+                '&:hover': { bgcolor: '#0B2D4B' }
+              }}
+            >
+              Печать выбранных ({selectedCount} бланков)
+            </Button>
+            <Button
+              size="small"
+              variant="outlined"
+              startIcon={<DescriptionIcon />}
+              onClick={onBulkDocx}
+              disabled={bulkLoading}
+              sx={{
+                borderColor: '#1D4ED8',
+                color: '#1D4ED8',
+                fontWeight: 700,
+                textTransform: 'none',
+                fontSize: '0.82rem',
+                borderRadius: 1.5,
+                '&:hover': { bgcolor: '#EFF6FF' }
+              }}
+            >
+              Word ({selectedCount} док.)
+            </Button>
+          </Box>
+        )}
       </Box>
       <Box
         sx={{
@@ -192,6 +273,37 @@ function CustomReferralsFooter({
   );
 }
 
+// Helper to convert DB referral record to OrthoReferralData
+function mapReferralToPrintData(ref: any): OrthoReferralData {
+  return {
+    id: ref.id,
+    referral_number: ref.referral_number,
+    issue_date: ref.issue_date,
+    valid_days: ref.valid_days || 90,
+    expires_at: ref.expires_at,
+    doctor_name: 'Добрушкин А.М',
+    performer_id: ref.performer_id,
+    performer_name: ref.performer_name,
+    performer_is_internal: ref.performer_is_internal,
+    performer_address: ref.performer_address,
+    patient: {
+      id: ref.patient_id,
+      fullName: ref.patient_name || 'Пациент',
+      birthDate: ref.patient_birth_date,
+      phone: ref.patient_phone
+    },
+    icd10_code: ref.icd10_code,
+    clinical_diagnosis: ref.clinical_diagnosis,
+    target_joint: ref.target_joint,
+    target_side: ref.target_side,
+    anamnesis_summary: ref.anamnesis_summary,
+    preparation_instructions: ref.preparation_instructions,
+    special_notes: ref.special_notes,
+    verification_hash: ref.verification_hash,
+    items: ref.items || []
+  };
+}
+
 export default function PatientReferralsManager() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -218,34 +330,35 @@ export default function PatientReferralsManager() {
   const [statusChangeReason, setStatusChangeReason] = useState('');
   const [updatingStatus, setUpdatingStatus] = useState(false);
 
+  // Multi-selection state for batch printing & export
+  const [selectedRowIds, setSelectedRowIds] = useState<GridRowSelectionModel>({ type: 'include', ids: new Set() });
+  const [bulkProcessing, setBulkProcessing] = useState(false);
+
+  const selectedIdsArray = useMemo(() => {
+    if (Array.isArray(selectedRowIds)) return selectedRowIds;
+    if (selectedRowIds && (selectedRowIds as any).ids instanceof Set) return Array.from((selectedRowIds as any).ids);
+    return [];
+  }, [selectedRowIds]);
+
   // Printing hidden state
   const printComponentRef = useRef<HTMLDivElement>(null);
-  const [printData, setPrintData] = useState<OrthoReferralData | null>(null);
+  const [printDataList, setPrintDataList] = useState<OrthoReferralData[]>([]);
   const [pendingPrintTrigger, setPendingPrintTrigger] = useState<number | null>(null);
 
   const handlePrint = useReactToPrint({
     contentRef: printComponentRef,
-    documentTitle: printData ? `Направление_${printData.referral_number}_${printData.patient?.fullName || 'Пациент'}` : 'Направление',
-    pageStyle: `
-      @page {
-        size: A4 portrait;
-        margin: 8mm 10mm;
-      }
-      @media print {
-        body {
-          -webkit-print-color-adjust: exact !important;
-          print-color-adjust: exact !important;
-        }
-      }
-    `
+    documentTitle: printDataList.length === 1
+      ? `Направление_${printDataList[0]?.referral_number || ''}_${printDataList[0]?.patient?.fullName || 'Пациент'}`
+      : `Направления_${printDataList.length}_бланков`,
+    pageStyle: COMMON_PRINT_PAGE_STYLE
   });
 
   useEffect(() => {
-    if (printData && pendingPrintTrigger) {
+    if (printDataList.length > 0 && pendingPrintTrigger) {
       handlePrint();
       setPendingPrintTrigger(null);
     }
-  }, [printData, pendingPrintTrigger, handlePrint]);
+  }, [printDataList, pendingPrintTrigger, handlePrint]);
 
   // Fetch referrals list
   const fetchReferrals = useCallback(async () => {
@@ -308,37 +421,9 @@ export default function PatientReferralsManager() {
       const res = await fetch(`/api/ortho/referrals/${row.id}`);
       const data = await res.json();
       if (!data.success || !data.referral) throw new Error('Не удалось получить данные направления');
-      
-      const ref = data.referral;
-      const formatted: OrthoReferralData = {
-        id: ref.id,
-        referral_number: ref.referral_number,
-        issue_date: ref.issue_date,
-        valid_days: ref.valid_days || 90,
-        expires_at: ref.expires_at,
-        doctor_name: 'Добрушкин А.М',
-        performer_id: ref.performer_id,
-        performer_name: ref.performer_name,
-        performer_is_internal: ref.performer_is_internal,
-        performer_address: ref.performer_address,
-        patient: {
-          id: ref.patient_id,
-          fullName: ref.patient_name || 'Пациент',
-          birthDate: ref.patient_birth_date,
-          phone: ref.patient_phone
-        },
-        icd10_code: ref.icd10_code,
-        clinical_diagnosis: ref.clinical_diagnosis,
-        target_joint: ref.target_joint,
-        target_side: ref.target_side,
-        anamnesis_summary: ref.anamnesis_summary,
-        preparation_instructions: ref.preparation_instructions,
-        special_notes: ref.special_notes,
-        verification_hash: ref.verification_hash,
-        items: ref.items || []
-      };
 
-      setPrintData(formatted);
+      const formatted = mapReferralToPrintData(data.referral);
+      setPrintDataList([formatted]);
       setPendingPrintTrigger(Date.now());
 
       // Audit print
@@ -361,35 +446,7 @@ export default function PatientReferralsManager() {
       const data = await res.json();
       if (!data.success || !data.referral) throw new Error('Не удалось получить данные направления');
 
-      const ref = data.referral;
-      const formatted: OrthoReferralData = {
-        id: ref.id,
-        referral_number: ref.referral_number,
-        issue_date: ref.issue_date,
-        valid_days: ref.valid_days || 90,
-        expires_at: ref.expires_at,
-        doctor_name: 'Добрушкин А.М',
-        performer_id: ref.performer_id,
-        performer_name: ref.performer_name,
-        performer_is_internal: ref.performer_is_internal,
-        performer_address: ref.performer_address,
-        patient: {
-          id: ref.patient_id,
-          fullName: ref.patient_name || 'Пациент',
-          birthDate: ref.patient_birth_date,
-          phone: ref.patient_phone
-        },
-        icd10_code: ref.icd10_code,
-        clinical_diagnosis: ref.clinical_diagnosis,
-        target_joint: ref.target_joint,
-        target_side: ref.target_side,
-        anamnesis_summary: ref.anamnesis_summary,
-        preparation_instructions: ref.preparation_instructions,
-        special_notes: ref.special_notes,
-        verification_hash: ref.verification_hash,
-        items: ref.items || []
-      };
-
+      const formatted = mapReferralToPrintData(data.referral);
       await exportReferralToDocx(formatted);
 
       // Audit export
@@ -402,6 +459,83 @@ export default function PatientReferralsManager() {
       setToastMessage(`Документ Word (.docx) направления ${row.referral_number} успешно сформирован`);
     } catch (err: any) {
       setToastMessage(`Ошибка экспорта DOCX: ${err.message}`);
+    }
+  };
+
+  // Bulk Print: prints each selected referral as an individual document with page break
+  const handleBulkPrint = async () => {
+    const ids = selectedIdsArray;
+    if (ids.length === 0) return;
+
+    setBulkProcessing(true);
+    setToastMessage(`Подготовка ${ids.length} бланков к печати...`);
+    try {
+      const list: OrthoReferralData[] = [];
+      for (const id of ids) {
+        const res = await fetch(`/api/ortho/referrals/${id}`);
+        const data = await res.json();
+        if (data.success && data.referral) {
+          list.push(mapReferralToPrintData(data.referral));
+
+          // Audit
+          fetch(`/api/ortho/referrals/${id}/audit-print`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ performed_by_name: 'Добрушкин А.М', format: 'pdf', notes: 'Групповая печать бланков из реестра' })
+          }).catch(e => console.error(e));
+        }
+      }
+
+      if (list.length === 0) {
+        throw new Error('Не удалось загрузить данные выбранных направлений');
+      }
+
+      setPrintDataList(list);
+      setPendingPrintTrigger(Date.now());
+      setToastMessage(`Отправлено на печать: ${list.length} отдельных бланков`);
+    } catch (err: any) {
+      console.error('Bulk print error:', err);
+      setToastMessage(`Ошибка групповой печати: ${err.message}`);
+    } finally {
+      setBulkProcessing(false);
+    }
+  };
+
+  // Bulk Word (.docx) Export: exports all selected into separate sections in Word
+  const handleBulkDocx = async () => {
+    const ids = selectedIdsArray;
+    if (ids.length === 0) return;
+
+    setBulkProcessing(true);
+    setToastMessage(`Формирование Word документа для ${ids.length} направлений...`);
+    try {
+      const list: OrthoReferralData[] = [];
+      for (const id of ids) {
+        const res = await fetch(`/api/ortho/referrals/${id}`);
+        const data = await res.json();
+        if (data.success && data.referral) {
+          list.push(mapReferralToPrintData(data.referral));
+
+          // Audit
+          fetch(`/api/ortho/referrals/${id}/audit-print`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ performed_by_name: 'Добрушкин А.М', format: 'docx', notes: 'Групповой экспорт в Word из реестра' })
+          }).catch(e => console.error(e));
+        }
+      }
+
+      if (list.length === 0) {
+        throw new Error('Не удалось загрузить данные выбранных направлений');
+      }
+
+      await exportReferralToDocx(list);
+      setToastMessage(`Успешно экспортировано ${list.length} направлений в Word`);
+    } catch (err: any) {
+      console.error('Bulk docx export error:', err);
+      setToastMessage(`Ошибка экспорта в Word: ${err.message}`);
+    } finally {
+      setBulkProcessing(false);
     }
   };
 
@@ -447,6 +581,14 @@ export default function PatientReferralsManager() {
     setSearchTerm('');
     setStatusFilter('');
     setPerformerFilter('');
+  };
+
+  const handleSelectAllRows = () => {
+    setSelectedRowIds({ type: 'include', ids: new Set(rows.map(r => r.id)) });
+  };
+
+  const handleDeselectAllRows = () => {
+    setSelectedRowIds({ type: 'include', ids: new Set() });
   };
 
   // Calculate remaining days from 90
@@ -821,6 +963,9 @@ export default function PatientReferralsManager() {
           rows={rows}
           columns={columns}
           loading={loading}
+          checkboxSelection
+          rowSelectionModel={selectedRowIds}
+          onRowSelectionModelChange={(newModel) => setSelectedRowIds(newModel)}
           getRowHeight={() => 'auto'}
           pageSizeOptions={[10, 25, 50, 100]}
           initialState={{
@@ -828,18 +973,29 @@ export default function PatientReferralsManager() {
             sorting: { sortModel: [{ field: 'referral_number', sort: 'desc' }] }
           }}
           slots={{
-            toolbar: () => <CustomReferralsToolbar onResetFilters={handleResetFilters} />,
-            footer: () => (
-              <CustomReferralsFooter
-                totalCount={totalCount}
-                issuedCount={issuedCount}
-                inProgressCount={inProgressCount}
-                completedCount={completedCount}
-                cancelledCount={cancelledCount}
-                internalCount={internalCount}
-                externalCount={externalCount}
-              />
-            )
+            toolbar: CustomReferralsToolbar as any,
+            footer: CustomReferralsFooter as any
+          }}
+          slotProps={{
+            toolbar: {
+              onResetFilters: handleResetFilters,
+              selectedCount: selectedIdsArray.length,
+              totalCount: rows.length,
+              onBulkPrint: handleBulkPrint,
+              onBulkDocx: handleBulkDocx,
+              onSelectAll: handleSelectAllRows,
+              onDeselectAll: handleDeselectAllRows,
+              bulkLoading: bulkProcessing
+            } as any,
+            footer: {
+              totalCount,
+              issuedCount,
+              inProgressCount,
+              completedCount,
+              cancelledCount,
+              internalCount,
+              externalCount
+            } as any
           }}
           sx={{
             border: 'none',
@@ -977,7 +1133,13 @@ export default function PatientReferralsManager() {
                         {it.service_code && <Chip size="small" label={it.service_code} sx={{ height: 18, fontSize: '0.68rem', mt: 0.3 }} />}
                       </TableCell>
                       <TableCell>
-                        {it.item_details && typeof it.item_details === 'string' && <Typography variant="caption" sx={{ display: 'block' }}>{it.item_details}</Typography>}
+                        <Typography variant="caption" sx={{ display: 'block', color: '#1E293B' }}>
+                          {resolveClinicalProtocolText(it, {
+                            targetJoint: selectedReferral.target_joint,
+                            targetSide: selectedReferral.target_side,
+                            diagnosis: selectedReferral.clinical_diagnosis
+                          })}
+                        </Typography>
                         {it.formula_latex && (
                           <Box sx={{ mt: 0.3, p: 0.4, bgcolor: '#FFFFFF', borderRadius: 1 }}>
                             <LatexText text={it.formula_latex} />
@@ -1087,9 +1249,20 @@ export default function PatientReferralsManager() {
 
       {/* 6. HIDDEN PRINT COMPONENT */}
       <Box sx={{ display: 'none' }}>
-        {printData && (
+        {printDataList.length > 0 && (
           <div ref={printComponentRef}>
-            <OrthoReferralPrintTemplate data={printData} />
+            {printDataList.map((data, idx) => (
+              <Box
+                key={data.id || idx}
+                className="page-break"
+                sx={{
+                  pageBreakAfter: idx < printDataList.length - 1 ? 'always' : 'auto',
+                  breakAfter: idx < printDataList.length - 1 ? 'page' : 'auto'
+                }}
+              >
+                <OrthoReferralPrintTemplate data={data} />
+              </Box>
+            ))}
           </div>
         )}
       </Box>

@@ -6,6 +6,10 @@ const crypto = require('crypto');
 const multer = require('multer');
 const db = require('./database');
 const { logOrthoAudit, LogLevels, EventTypes } = require('./orthoAuditLogger');
+const { resolveItemProtocol, getRuleBasedProtocol, migrateExistingReferralItems, getItemPreparation, getAggregatedPreparation } = require('./clinicalProtocolHelper');
+
+// Automatically ensure existing and future referral items have complete clinical protocols
+migrateExistingReferralItems(db).catch(err => console.error('Referral items protocol migration notice:', err));
 
 // Configure multer storage for patient media uploads
 const uploadsDir = path.resolve(__dirname, '../uploads/patient_media');
@@ -3423,9 +3427,19 @@ function fetchReferralById(referralId, callback) {
           (aErr, auditLogs) => {
             if (aErr) return callback(aErr);
 
+            const enrichedItems = (items || []).map(it => {
+              if (!it.item_details || !it.item_details.trim() || it.item_details === '-') {
+                return {
+                  ...it,
+                  item_details: getRuleBasedProtocol(it.item_title, it.domain, it.service_code)
+                };
+              }
+              return it;
+            });
+
             callback(null, {
               ...refRow,
-              items: items || [],
+              items: enrichedItems,
               audit_log: auditLogs || []
             });
           }
@@ -3526,16 +3540,15 @@ router.post('/referrals/issue', async (req, res) => {
           uniquePrep.push(note.trim());
         }
       });
-      const aggregatedPrep = uniquePrep.join('\n\n');
+      const aggregatedPrep = getAggregatedPreparation(items, uniquePrep.join('\n\n'));
 
       const year = new Date().getFullYear();
       db.get(
         "SELECT COUNT(*) AS cnt FROM ortho_referrals WHERE referral_number LIKE ?",
         [`НАПР-${year}-%`],
-        (cErr, cRow) => {
+        async (cErr, cRow) => {
           if (cErr) return res.status(500).json({ success: false, error: cErr.message });
-          const nextSeq = (cRow?.cnt || 0) + 1;
-          const referral_number = `НАПР-${year}-${String(nextSeq).padStart(6, '0')}`;
+          const baseSeq = (cRow?.cnt || 0);
 
           const now = new Date();
           const issue_date = now.toISOString().replace('T', ' ').substring(0, 19);
@@ -3543,94 +3556,154 @@ router.post('/referrals/issue', async (req, res) => {
           const expDate = new Date(now.getTime() + effectiveValidDays * 24 * 60 * 60 * 1000);
           const expires_at = expDate.toISOString().substring(0, 10);
 
-          const hashPayload = `${referral_number}|${patient_id}|${issue_date}|${expires_at}|${performer.name}`;
-          const verification_hash = crypto.createHash('sha256').update(hashPayload).digest('hex').substring(0, 32);
+          const insertSingleReferral = (refNum, itemArr, prepText) => {
+            return new Promise((resolve, reject) => {
+              const hashPayload = `${refNum}|${patient_id}|${issue_date}|${expires_at}|${performer.name}`;
+              const verification_hash = crypto.createHash('sha256').update(hashPayload).digest('hex').substring(0, 32);
 
-          const insertRefSql = `
-            INSERT INTO ortho_referrals (
-              referral_number, patient_id, appointment_id, protocol_id, doctor_name,
-              issue_date, valid_days, expires_at,
-              performer_id, performer_name, performer_is_internal, performer_address,
-              icd10_code, icd10_name, clinical_diagnosis, target_joint, target_side,
-              anamnesis_summary, preparation_instructions, special_notes,
-              status, verification_hash, printed_count
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'issued', ?, 0)
-          `;
+              const insertRefSql = `
+                INSERT INTO ortho_referrals (
+                  referral_number, patient_id, appointment_id, protocol_id, doctor_name,
+                  issue_date, valid_days, expires_at,
+                  performer_id, performer_name, performer_is_internal, performer_address,
+                  icd10_code, icd10_name, clinical_diagnosis, target_joint, target_side,
+                  anamnesis_summary, preparation_instructions, special_notes,
+                  status, verification_hash, printed_count
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'issued', ?, 0)
+              `;
 
-          db.run(
-            insertRefSql,
-            [
-              referral_number,
-              patient_id,
-              appointment_id || null,
-              protocol_id || null,
-              doctor_name || 'Добрушкин А.М',
-              issue_date,
-              effectiveValidDays,
-              expires_at,
-              performer.id,
-              performer.name,
-              performer.is_internal ? 1 : 0,
-              performer.organization_address || '',
-              icd10_code || 'M19.9',
-              icd10_name || '',
-              clinical_diagnosis || '',
-              target_joint || '',
-              target_side || '',
-              anamnesis_summary || '',
-              aggregatedPrep,
-              special_notes || '',
-              verification_hash
-            ],
-            function (insErr) {
-              if (insErr) return res.status(500).json({ success: false, error: insErr.message });
-              const referralId = this.lastID;
+              db.run(
+                insertRefSql,
+                [
+                  refNum,
+                  patient_id,
+                  appointment_id || null,
+                  protocol_id || null,
+                  doctor_name || 'Добрушкин А.М',
+                  issue_date,
+                  effectiveValidDays,
+                  expires_at,
+                  performer.id,
+                  performer.name,
+                  performer.is_internal ? 1 : 0,
+                  performer.organization_address || '',
+                  icd10_code || 'M19.9',
+                  icd10_name || '',
+                  clinical_diagnosis || '',
+                  target_joint || '',
+                  target_side || '',
+                  anamnesis_summary || '',
+                  prepText,
+                  special_notes || '',
+                  verification_hash
+                ],
+                async function (insErr) {
+                  if (insErr) return reject(insErr);
+                  const referralId = this.lastID;
 
-              if (items.length > 0) {
-                const itemStmt = db.prepare(`
-                  INSERT INTO ortho_referral_items (
-                    referral_id, domain, service_code, item_title, item_details, formula_latex, preparation_notes, sort_order
-                  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                `);
-                items.forEach((it, idx) => {
-                  itemStmt.run([
+                  if (itemArr.length > 0) {
+                    try {
+                      const resolvedItems = await Promise.all(
+                        itemArr.map(async (it) => {
+                          const resolvedDetails = await resolveItemProtocol(it, db);
+                          const resolvedPrep = getItemPreparation(it);
+                          return {
+                            ...it,
+                            resolvedDetails,
+                            resolvedPrep
+                          };
+                        })
+                      );
+
+                      const itemStmt = db.prepare(`
+                        INSERT INTO ortho_referral_items (
+                          referral_id, domain, service_code, item_title, item_details, formula_latex, preparation_notes, sort_order
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                      `);
+                      resolvedItems.forEach((it, idx) => {
+                        itemStmt.run([
+                          referralId,
+                          it.domain || 'diagnostics',
+                          it.service_code || '',
+                          it.item_title || it.name || it.title || 'Медицинская услуга',
+                          it.resolvedDetails || it.item_details || it.dosage_notes || '',
+                          it.formula_latex || '',
+                          it.preparation_notes || it.resolvedPrep || '',
+                          idx
+                        ]);
+                      });
+                      itemStmt.finalize();
+                    } catch (resErr) {
+                      console.error('Error resolving referral item protocols on insert:', resErr);
+                    }
+                  }
+
+                  db.run(`
+                    INSERT INTO ortho_referral_audit_log (referral_id, action_type, performed_by_name, details_json)
+                    VALUES (?, 'CREATED', ?, ?)
+                  `, [
                     referralId,
-                    it.domain || 'diagnostics',
-                    it.service_code || '',
-                    it.item_title || it.name || it.title || 'Медицинская услуга',
-                    it.item_details || it.dosage_notes || '',
-                    it.formula_latex || '',
-                    preparationNotes[idx] || '',
-                    idx
+                    doctor_name || 'Добрушкин А.М',
+                    JSON.stringify({
+                      referral_number: refNum,
+                      performer: performer.name,
+                      items_count: itemArr.length,
+                      valid_days: effectiveValidDays
+                    })
                   ]);
-                });
-                itemStmt.finalize();
+
+                  fetchReferralById(referralId, (fErr, fullReferral) => {
+                    if (fErr) return reject(fErr);
+                    resolve(fullReferral);
+                  });
+                }
+              );
+            });
+          };
+
+          const isSeparate = Boolean(req.body.separate_documents) && items.length > 1;
+
+          if (isSeparate) {
+            try {
+              const createdList = [];
+              for (let i = 0; i < items.length; i++) {
+                const singleItem = items[i];
+                const seq = baseSeq + i + 1;
+                const refNum = `НАПР-${year}-${String(seq).padStart(6, '0')}`;
+                const itemPrep = preparationNotes[i] || '';
+                const created = await insertSingleReferral(refNum, [{ ...singleItem, preparation_notes: itemPrep }], itemPrep);
+                createdList.push(created);
               }
-
-              db.run(`
-                INSERT INTO ortho_referral_audit_log (referral_id, action_type, performed_by_name, details_json)
-                VALUES (?, 'CREATED', ?, ?)
-              `, [
-                referralId,
-                doctor_name || 'Добрушкин А.М',
-                JSON.stringify({
-                  referral_number,
-                  performer: performer.name,
-                  items_count: items.length,
-                  valid_days: effectiveValidDays
-                })
-              ]);
-
-              fetchReferralById(referralId, (fErr, fullReferral) => {
-                if (fErr) return res.status(500).json({ success: false, error: fErr.message });
+              return res.json({
+                success: true,
+                message: `Успешно выписано ${createdList.length} отдельных направлений на бланках Центра`,
+                referrals: createdList,
+                referral: createdList[0]
+              });
+            } catch (err) {
+              return res.status(500).json({ success: false, error: err.message });
+            }
+          } else {
+            // Combined single referral with all items
+            const seq = baseSeq + 1;
+            const refNum = `НАПР-${year}-${String(seq).padStart(6, '0')}`;
+            const itemsWithPrep = items.map((it, idx) => ({
+              ...it,
+              preparation_notes: preparationNotes[idx] || it.preparation_notes || ''
+            }));
+            insertSingleReferral(refNum, itemsWithPrep, aggregatedPrep)
+              .then((created) => {
                 res.json({
                   success: true,
-                  message: `Направление №${referral_number} успешно выписано`,
-                  referral: fullReferral
+                  message: `Направление №${refNum} успешно выписано`,
+                  referrals: [created],
+                  referral: created
                 });
+              })
+              .catch((err) => {
+                res.status(500).json({ success: false, error: err.message });
               });
-            }
-          );
+          }
         }
       );
     });

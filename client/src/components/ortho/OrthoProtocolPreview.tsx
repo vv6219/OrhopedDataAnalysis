@@ -29,6 +29,7 @@ import {
 import OrthoProtocolPrintTemplate from '../reports/OrthoProtocolPrintTemplate';
 import type { OrthoProtocolData } from '../reports/OrthoProtocolPrintTemplate';
 import { cleanLatexText } from './LatexText';
+import { COMMON_PRINT_PAGE_STYLE } from '../../utils/printStyles';
 
 interface OrthoProtocolPreviewProps {
   data: OrthoProtocolData;
@@ -50,18 +51,7 @@ export default function OrthoProtocolPreview({
   const handlePrintTrigger = useReactToPrint({
     contentRef: printRef,
     documentTitle: `Протокол_${data.patient?.fullName || 'Пациент'}_${new Date().toLocaleDateString('ru-RU')}`,
-    pageStyle: `
-      @page {
-        size: A4 portrait;
-        margin: 8mm 10mm;
-      }
-      @media print {
-        body {
-          -webkit-print-color-adjust: exact !important;
-          print-color-adjust: exact !important;
-        }
-      }
-    `
+    pageStyle: COMMON_PRINT_PAGE_STYLE
   });
 
   // 1. Text Generator (Monospace clinical note)

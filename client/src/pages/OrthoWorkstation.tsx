@@ -2163,7 +2163,7 @@ export default function OrthoWorkstation() {
                 '&:hover': { bgcolor: '#0B2D4B' }
               }}
             >
-              Направление
+              Направления
             </Button>
           </Badge>
 
@@ -3431,7 +3431,7 @@ export default function OrthoWorkstation() {
                     '&:hover': { bgcolor: '#F0F9FF', borderColor: '#0284C7' }
                   }}
                 >
-                  Выписать официальное направление на бланке Центра (90 дней)
+                  Выписать официальные направления на бланках Центра (90 дней)
                 </Button>
               </Box>
             )}

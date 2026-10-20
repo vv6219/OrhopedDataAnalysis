@@ -252,7 +252,7 @@ export const OrthoProtocolPrintTemplate = React.forwardRef<HTMLDivElement, Ortho
                 Центр Ортопедии и Травматологии
               </Typography>
               <Typography variant="caption" sx={{ color: '#4A5568', display: 'block', fontSize: '0.78rem' }}>
-                Клиника доктора Добрушкина • г. Сочи • Тел. +7 (862) 295-00-55
+                г. Сочи • Тел. +7 (862) 295-00-55
               </Typography>
               <Typography variant="caption" sx={{ color: '#718096', fontSize: '0.72rem' }}>
                 Лицензия на осуществление медицинской деятельности ЛО-23-01-014522
@@ -358,8 +358,24 @@ export const OrthoProtocolPrintTemplate = React.forwardRef<HTMLDivElement, Ortho
             <>
               {/* 1. COMPLAINTS */}
               {isVisible('complaints', cleanComplaints) && (
-                <Box key="sec-complaints" sx={{ mb: 2, pageBreakInside: 'avoid' }}>
-                  <Typography variant="subtitle2" sx={{ fontWeight: 800, color: '#0F3C64', borderBottom: '1px solid #E2E8F0', pb: 0.4, mb: 1 }}>
+                <Box
+                  key="sec-complaints"
+                  className="print-section"
+                  sx={{ mb: 2, pageBreakInside: 'avoid !important', breakInside: 'avoid !important' }}
+                >
+                  <Typography
+                    variant="subtitle2"
+                    className="print-heading"
+                    sx={{
+                      fontWeight: 800,
+                      color: '#0F3C64',
+                      borderBottom: '1px solid #E2E8F0',
+                      pb: 0.4,
+                      mb: 1,
+                      pageBreakAfter: 'avoid !important',
+                      breakAfter: 'avoid !important'
+                    }}
+                  >
                     {getNextIndex()}. Жалобы при обращении
                   </Typography>
                   <Box sx={{ pl: 1 }}>
@@ -388,8 +404,24 @@ export const OrthoProtocolPrintTemplate = React.forwardRef<HTMLDivElement, Ortho
 
               {/* 2. ANAMNESIS MORBI */}
               {isVisible('anamnesis_morbi', cleanAnamnesis) && (
-                <Box key="sec-anamnesis-morbi" sx={{ mb: 2, pageBreakInside: 'avoid' }}>
-                  <Typography variant="subtitle2" sx={{ fontWeight: 800, color: '#0F3C64', borderBottom: '1px solid #E2E8F0', pb: 0.4, mb: 1 }}>
+                <Box
+                  key="sec-anamnesis-morbi"
+                  className="print-section"
+                  sx={{ mb: 2, pageBreakInside: 'avoid !important', breakInside: 'avoid !important' }}
+                >
+                  <Typography
+                    variant="subtitle2"
+                    className="print-heading"
+                    sx={{
+                      fontWeight: 800,
+                      color: '#0F3C64',
+                      borderBottom: '1px solid #E2E8F0',
+                      pb: 0.4,
+                      mb: 1,
+                      pageBreakAfter: 'avoid !important',
+                      breakAfter: 'avoid !important'
+                    }}
+                  >
                     {getNextIndex()}. Анамнез заболевания (Anamnesis morbi)
                   </Typography>
                   <Box sx={{ pl: 1 }}>
@@ -402,8 +434,24 @@ export const OrthoProtocolPrintTemplate = React.forwardRef<HTMLDivElement, Ortho
 
               {/* 3. ANAMNESIS VITAE */}
               {isVisible('anamnesis_vitae', data.anamnesisVitae) && (
-                <Box key="sec-anamnesis-vitae" sx={{ mb: 2, pageBreakInside: 'avoid' }}>
-                  <Typography variant="subtitle2" sx={{ fontWeight: 800, color: '#0F3C64', borderBottom: '1px solid #E2E8F0', pb: 0.4, mb: 1 }}>
+                <Box
+                  key="sec-anamnesis-vitae"
+                  className="print-section"
+                  sx={{ mb: 2, pageBreakInside: 'avoid !important', breakInside: 'avoid !important' }}
+                >
+                  <Typography
+                    variant="subtitle2"
+                    className="print-heading"
+                    sx={{
+                      fontWeight: 800,
+                      color: '#0F3C64',
+                      borderBottom: '1px solid #E2E8F0',
+                      pb: 0.4,
+                      mb: 1,
+                      pageBreakAfter: 'avoid !important',
+                      breakAfter: 'avoid !important'
+                    }}
+                  >
                     {getNextIndex()}. Анамнез жизни (Anamnesis vitae)
                   </Typography>
                   <Box sx={{ pl: 1 }}>
@@ -416,8 +464,24 @@ export const OrthoProtocolPrintTemplate = React.forwardRef<HTMLDivElement, Ortho
 
               {/* 4. OBJECTIVE STATUS (STATUS PRAESENS) */}
               {isVisible('objective_status', data.objectiveStatus) && (
-                <Box key="sec-objective-status" sx={{ mb: 2, pageBreakInside: 'avoid' }}>
-                  <Typography variant="subtitle2" sx={{ fontWeight: 800, color: '#0F3C64', borderBottom: '1px solid #E2E8F0', pb: 0.4, mb: 1 }}>
+                <Box
+                  key="sec-objective-status"
+                  className="print-section"
+                  sx={{ mb: 2, pageBreakInside: 'avoid !important', breakInside: 'avoid !important' }}
+                >
+                  <Typography
+                    variant="subtitle2"
+                    className="print-heading"
+                    sx={{
+                      fontWeight: 800,
+                      color: '#0F3C64',
+                      borderBottom: '1px solid #E2E8F0',
+                      pb: 0.4,
+                      mb: 1,
+                      pageBreakAfter: 'avoid !important',
+                      breakAfter: 'avoid !important'
+                    }}
+                  >
                     {getNextIndex()}. Общий объективный статус (Status praesens)
                   </Typography>
                   <Box sx={{ pl: 1 }}>
@@ -430,8 +494,24 @@ export const OrthoProtocolPrintTemplate = React.forwardRef<HTMLDivElement, Ortho
 
               {/* 5. ORTHOPEDIC STATUS / STATUS LOCALIS */}
               {isVisible('status_localis', data.jointExams?.length ? 'has' : (data.gait || data.posture ? 'has' : '')) && (
-                <Box key="sec-status-localis" sx={{ mb: 2 }}>
-                  <Typography variant="subtitle2" sx={{ fontWeight: 800, color: '#0F3C64', borderBottom: '1px solid #E2E8F0', pb: 0.4, mb: 1 }}>
+                <Box
+                  key="sec-status-localis"
+                  className="print-section"
+                  sx={{ mb: 2 }}
+                >
+                  <Typography
+                    variant="subtitle2"
+                    className="print-heading"
+                    sx={{
+                      fontWeight: 800,
+                      color: '#0F3C64',
+                      borderBottom: '1px solid #E2E8F0',
+                      pb: 0.4,
+                      mb: 1,
+                      pageBreakAfter: 'avoid !important',
+                      breakAfter: 'avoid !important'
+                    }}
+                  >
                     {getNextIndex()}. Ортопедический статус (Status Localis)
                   </Typography>
                   
@@ -454,16 +534,18 @@ export const OrthoProtocolPrintTemplate = React.forwardRef<HTMLDivElement, Ortho
                       <Paper
                         key={idx}
                         variant="outlined"
+                        className="print-section"
                         sx={{
                           p: 1.25,
                           mb: 1.5,
                           borderColor: '#E2E8F0',
                           bgcolor: '#FAFBFD',
-                          pageBreakInside: 'avoid'
+                          pageBreakInside: 'avoid !important',
+                          breakInside: 'avoid !important'
                         }}
                       >
                         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.8 }}>
-                          <Typography variant="subtitle2" sx={{ fontWeight: 800, color: '#0369A1', fontSize: '0.88rem' }}>
+                          <Typography variant="subtitle2" className="print-heading" sx={{ fontWeight: 800, color: '#0369A1', fontSize: '0.88rem', pageBreakAfter: 'avoid !important', breakAfter: 'avoid !important' }}>
                             {getJointTitle(exam.jointArea)} ({getSideLabel(exam.side)})
                           </Typography>
                           <Typography variant="caption" sx={{ color: '#64748B' }}>
@@ -527,8 +609,24 @@ export const OrthoProtocolPrintTemplate = React.forwardRef<HTMLDivElement, Ortho
 
               {/* 6. SPECIAL STUDIES (МРТ, КТ, рентген, УЗИ, анализы) */}
               {isVisible('special_studies', data.specialStudies) && (
-                <Box key="sec-special-studies" sx={{ mb: 2, pageBreakInside: 'avoid' }}>
-                  <Typography variant="subtitle2" sx={{ fontWeight: 800, color: '#0F3C64', borderBottom: '1px solid #E2E8F0', pb: 0.4, mb: 1 }}>
+                <Box
+                  key="sec-special-studies"
+                  className="print-section"
+                  sx={{ mb: 2, pageBreakInside: 'avoid !important', breakInside: 'avoid !important' }}
+                >
+                  <Typography
+                    variant="subtitle2"
+                    className="print-heading"
+                    sx={{
+                      fontWeight: 800,
+                      color: '#0F3C64',
+                      borderBottom: '1px solid #E2E8F0',
+                      pb: 0.4,
+                      mb: 1,
+                      pageBreakAfter: 'avoid !important',
+                      breakAfter: 'avoid !important'
+                    }}
+                  >
                     {getNextIndex()}. Специальные методы исследования (МРТ, КТ, рентген, УЗИ, анализы)
                   </Typography>
                   <Box sx={{ pl: 1 }}>
@@ -541,8 +639,24 @@ export const OrthoProtocolPrintTemplate = React.forwardRef<HTMLDivElement, Ortho
 
               {/* 7. PERFORMED MANIPULATIONS */}
               {isVisible('performed_manipulations', data.performedManipulations) && (
-                <Box key="sec-performed-manipulations" sx={{ mb: 2, pageBreakInside: 'avoid' }}>
-                  <Typography variant="subtitle2" sx={{ fontWeight: 800, color: '#0F3C64', borderBottom: '1px solid #E2E8F0', pb: 0.4, mb: 1 }}>
+                <Box
+                  key="sec-performed-manipulations"
+                  className="print-section"
+                  sx={{ mb: 2, pageBreakInside: 'avoid !important', breakInside: 'avoid !important' }}
+                >
+                  <Typography
+                    variant="subtitle2"
+                    className="print-heading"
+                    sx={{
+                      fontWeight: 800,
+                      color: '#0F3C64',
+                      borderBottom: '1px solid #E2E8F0',
+                      pb: 0.4,
+                      mb: 1,
+                      pageBreakAfter: 'avoid !important',
+                      breakAfter: 'avoid !important'
+                    }}
+                  >
                     {getNextIndex()}. Выполненные манипуляции и процедуры
                   </Typography>
                   <Box sx={{ pl: 1 }}>
@@ -555,8 +669,24 @@ export const OrthoProtocolPrintTemplate = React.forwardRef<HTMLDivElement, Ortho
 
               {/* 8. CLINICAL DIAGNOSIS */}
               {isVisible('diagnosis', cleanDiagnosis) && (
-                <Box key="sec-diagnosis" sx={{ mb: 2, pageBreakInside: 'avoid' }}>
-                  <Typography variant="subtitle2" sx={{ fontWeight: 800, color: '#0F3C64', borderBottom: '1px solid #E2E8F0', pb: 0.4, mb: 1 }}>
+                <Box
+                  key="sec-diagnosis"
+                  className="print-section"
+                  sx={{ mb: 2, pageBreakInside: 'avoid !important', breakInside: 'avoid !important' }}
+                >
+                  <Typography
+                    variant="subtitle2"
+                    className="print-heading"
+                    sx={{
+                      fontWeight: 800,
+                      color: '#0F3C64',
+                      borderBottom: '1px solid #E2E8F0',
+                      pb: 0.4,
+                      mb: 1,
+                      pageBreakAfter: 'avoid !important',
+                      breakAfter: 'avoid !important'
+                    }}
+                  >
                     {getNextIndex()}. Клинический диагноз
                   </Typography>
                   <Box sx={{ pl: 1 }}>
@@ -583,8 +713,28 @@ export const OrthoProtocolPrintTemplate = React.forwardRef<HTMLDivElement, Ortho
 
               {/* 9. RECOMMENDATIONS & PRESCRIPTIONS */}
               {isVisible('recommendations', data.recommendations || (data.prescriptions && data.prescriptions.length > 0 ? 'has' : '')) && (
-                <Box key="sec-recommendations" sx={{ mb: 2, pageBreakInside: 'avoid' }}>
-                  <Typography variant="subtitle2" sx={{ fontWeight: 800, color: '#0F3C64', borderBottom: '1px solid #E2E8F0', pb: 0.4, mb: 1 }}>
+                <Box
+                  key="sec-recommendations"
+                  className="print-section"
+                  sx={{
+                    mb: 2,
+                    pageBreakInside: (data.prescriptions?.length || 0) <= 3 ? 'avoid !important' : 'auto',
+                    breakInside: (data.prescriptions?.length || 0) <= 3 ? 'avoid !important' : 'auto'
+                  }}
+                >
+                  <Typography
+                    variant="subtitle2"
+                    className="print-heading"
+                    sx={{
+                      fontWeight: 800,
+                      color: '#0F3C64',
+                      borderBottom: '1px solid #E2E8F0',
+                      pb: 0.4,
+                      mb: 1,
+                      pageBreakAfter: 'avoid !important',
+                      breakAfter: 'avoid !important'
+                    }}
+                  >
                     {getNextIndex()}. Рекомендации и план лечения
                   </Typography>
                   <Box sx={{ pl: 1 }}>
@@ -597,13 +747,22 @@ export const OrthoProtocolPrintTemplate = React.forwardRef<HTMLDivElement, Ortho
                     {/* Prescribed Services Table */}
                     {data.prescriptions && data.prescriptions.length > 0 && (
                       <Box sx={{ mt: 1, mb: 1.5 }}>
-                        <Typography variant="caption" sx={{ fontWeight: 700, color: '#475569', display: 'block', mb: 0.5 }}>
+                        <Typography variant="caption" className="print-heading" sx={{ fontWeight: 700, color: '#475569', display: 'block', mb: 0.5, pageBreakAfter: 'avoid !important', breakAfter: 'avoid !important' }}>
                           Назначенные медицинские услуги и манипуляции:
                         </Typography>
-                        <TableContainer component={Paper} variant="outlined" sx={{ borderColor: '#E2E8F0' }}>
+                        <TableContainer
+                          component={Paper}
+                          variant="outlined"
+                          sx={{
+                            borderColor: '#E2E8F0',
+                            overflow: 'visible !important',
+                            pageBreakInside: 'auto',
+                            breakInside: 'auto'
+                          }}
+                        >
                           <Table size="small">
-                            <TableHead sx={{ bgcolor: '#F1F5F9' }}>
-                              <TableRow>
+                            <TableHead sx={{ bgcolor: '#F1F5F9', display: 'table-header-group !important' }}>
+                              <TableRow sx={{ pageBreakInside: 'avoid !important', breakInside: 'avoid !important' }}>
                                 <TableCell sx={{ fontWeight: 700, fontSize: '0.78rem', py: 0.5 }}>№</TableCell>
                                 <TableCell sx={{ fontWeight: 700, fontSize: '0.78rem', py: 0.5 }}>Наименование услуги / манипуляции</TableCell>
                                 <TableCell align="center" sx={{ fontWeight: 700, fontSize: '0.78rem', py: 0.5 }}>Кол-во</TableCell>
@@ -616,7 +775,7 @@ export const OrthoProtocolPrintTemplate = React.forwardRef<HTMLDivElement, Ortho
                                 const itemPrice = Number(presc.price ?? (presc as any).unitPrice ?? (presc as any).unit_price ?? 0);
                                 const itemQty = Number(presc.quantity || 1);
                                 return (
-                                  <TableRow key={pIdx}>
+                                  <TableRow key={pIdx} sx={{ pageBreakInside: 'avoid !important', breakInside: 'avoid !important' }}>
                                     <TableCell sx={{ fontSize: '0.78rem', py: 0.5 }}>{pIdx + 1}</TableCell>
                                     <TableCell sx={{ fontSize: '0.82rem', py: 0.5 }}>
                                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8, mb: 0.2 }}>

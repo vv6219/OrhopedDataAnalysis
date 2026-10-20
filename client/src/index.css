@@ -110,10 +110,52 @@ code {
   body {
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
+    background: #FFFFFF !important;
   }
-  .no-page-break {
+  .page-break {
+    page-break-after: always !important;
+    break-after: page !important;
+  }
+  /* 1. EXCLUDE PAGE BREAKS BETWEEN HEADINGS AND SECTION CONTENT / TABLES */
+  h1, h2, h3, h4, h5, h6,
+  .print-heading,
+  .MuiTypography-h1,
+  .MuiTypography-h2,
+  .MuiTypography-h3,
+  .MuiTypography-h4,
+  .MuiTypography-h5,
+  .MuiTypography-h6,
+  .MuiTypography-subtitle1,
+  .MuiTypography-subtitle2 {
+    page-break-after: avoid !important;
+    break-after: avoid !important;
+  }
+
+  /* 2. EXCLUDE BREAKS INSIDE SECTIONS AND CARDS */
+  .no-page-break,
+  .print-avoid-break,
+  .print-section {
     page-break-inside: avoid !important;
     break-inside: avoid !important;
+  }
+
+  /* 3. TABLES: REPEAT HEADER AND AVOID ROW SPLITTING */
+  table {
+    page-break-inside: auto;
+    break-inside: auto;
+  }
+  thead {
+    display: table-header-group !important;
+  }
+  tfoot {
+    display: table-footer-group !important;
+  }
+  tr, .MuiTableRow-root {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+  .MuiTableContainer-root {
+    overflow: visible !important;
   }
 }
 
