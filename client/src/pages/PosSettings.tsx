@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import {
   Box, Typography, Paper, Button, TextField, Switch, FormControlLabel,
   MenuItem, Select, FormControl, InputLabel, Chip,
@@ -27,6 +27,7 @@ import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
 import LanIcon from '@mui/icons-material/Lan';
 import RestartAltIcon from '@mui/icons-material/RestartAlt';
 import PlayCircleFilledWhiteIcon from '@mui/icons-material/PlayCircleFilledWhite';
+import MenuBookIcon from '@mui/icons-material/MenuBook';
 import { usePos, type PosSettingsProfile } from '../context/PosContext';
 
 export interface PosAuditRecord {
@@ -54,6 +55,7 @@ const CONNECTION_TYPES = [
 
 export default function PosSettings() {
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const { refreshPosStatus, activateProfile, setMockMode } = usePos();
   const [profiles, setProfiles] = useState<PosSettingsProfile[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -487,6 +489,26 @@ export default function PosSettings() {
                 }}
               >
                 Инструкция кассира (PDF)
+              </Button>
+            </Tooltip>
+
+            <Tooltip title="Открыть Том I: Раздел 1.6 (Фискализация 54-ФЗ и эквайринг: Arcus-2, АТОЛ, чеки коррекции)" arrow>
+              <Button
+                variant="outlined"
+                size="small"
+                onClick={() => navigate('/user-guide?volume=system&section=section-fiscal')}
+                startIcon={<MenuBookIcon />}
+                sx={{
+                  color: '#93C5FD',
+                  borderColor: 'rgba(147, 197, 253, 0.5)',
+                  bgcolor: 'rgba(15, 60, 100, 0.4)',
+                  fontWeight: 700,
+                  textTransform: 'none',
+                  borderRadius: 1.5,
+                  '&:hover': { borderColor: '#93C5FD', bgcolor: 'rgba(147, 197, 253, 0.18)' }
+                }}
+              >
+                Системное Руководство (Том I: 1.6)
               </Button>
             </Tooltip>
           </Box>

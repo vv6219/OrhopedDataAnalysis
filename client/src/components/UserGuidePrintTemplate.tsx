@@ -7,7 +7,7 @@ interface UserGuidePrintProps {
 }
 
 export const UserGuidePrintTemplate = React.forwardRef<HTMLDivElement, UserGuidePrintProps>(
-  ({ version = '1.4.4', date = new Date().toLocaleDateString('ru-RU') }, ref) => {
+  ({ version = '1.4.5', date = new Date().toLocaleDateString('ru-RU') }, ref) => {
     return (
       <Box 
         ref={ref} 
@@ -78,32 +78,52 @@ export const UserGuidePrintTemplate = React.forwardRef<HTMLDivElement, UserGuide
               <TableRow>
                 <TableCell sx={{ fontWeight: 700, fontSize: '8.5pt', py: 0.6 }}>Пациенты (ЭМК)</TableCell>
                 <TableCell sx={{ fontSize: '8.5pt', py: 0.6 }}><code>patients</code></TableCell>
-                <TableCell sx={{ fontSize: '8.5pt', py: 0.6 }}>Картотека из 61 000+ пациентов, номер карты (ЭМК), ДМС, история визитов</TableCell>
+                <TableCell sx={{ fontSize: '8.5pt', py: 0.6 }}>Картотека из 61 298 пациентов (32 882 протокола, 37 538 визитов, 63 010 услуг, 14 631 диагноз)</TableCell>
               </TableRow>
               <TableRow>
                 <TableCell sx={{ fontWeight: 700, fontSize: '8.5pt', py: 0.6 }}>Сотрудники клиники</TableCell>
                 <TableCell sx={{ fontSize: '8.5pt', py: 0.6 }}><code>staff</code></TableCell>
-                <TableCell sx={{ fontSize: '8.5pt', py: 0.6 }}>Реестр врачей-хирургов, консультантов и операционных сестер</TableCell>
+                <TableCell sx={{ fontSize: '8.5pt', py: 0.6 }}>Реестр врачей-хирургов, консультантов и операционных сестер (5 специалистов, 3 схемы выплат)</TableCell>
               </TableRow>
               <TableRow>
                 <TableCell sx={{ fontWeight: 700, fontSize: '8.5pt', py: 0.6 }}>Каталог сервисов</TableCell>
                 <TableCell sx={{ fontSize: '8.5pt', py: 0.6 }}><code>operations</code></TableCell>
-                <TableCell sx={{ fontSize: '8.5pt', py: 0.6 }}>Номенклатура сервисов, базовая цена для пациента и нормативная спецификация</TableCell>
+                <TableCell sx={{ fontSize: '8.5pt', py: 0.6 }}>Номенклатура 321 операции и 382 позиций прейскуранта с нормативной спецификацией</TableCell>
               </TableRow>
               <TableRow>
                 <TableCell sx={{ fontWeight: 700, fontSize: '8.5pt', py: 0.6 }}>Склад материалов</TableCell>
                 <TableCell sx={{ fontSize: '8.5pt', py: 0.6 }}><code>materials_catalog</code></TableCell>
-                <TableCell sx={{ fontSize: '8.5pt', py: 0.6 }}>Расходные материалы, препараты, учетная стоимость единицы и упаковки</TableCell>
+                <TableCell sx={{ fontSize: '8.5pt', py: 0.6 }}>427 расходных материалов и медикаментов, учетная стоимость единицы и упаковки</TableCell>
               </TableRow>
               <TableRow>
                 <TableCell sx={{ fontWeight: 700, fontSize: '8.5pt', py: 0.6 }}>Спецификация BOM</TableCell>
                 <TableCell sx={{ fontSize: '8.5pt', py: 0.6 }}><code>operation_materials</code></TableCell>
-                <TableCell sx={{ fontSize: '8.5pt', py: 0.6 }}>Нормы списания расходников на сервис (Bill of Materials)</TableCell>
+                <TableCell sx={{ fontSize: '8.5pt', py: 0.6 }}>862 технологические нормы списания расходников (Bill of Materials) для 321 вмешательства</TableCell>
+              </TableRow>
+              <TableRow>
+                <TableCell sx={{ fontWeight: 700, fontSize: '8.5pt', py: 0.6 }}>Шаблоны приемов</TableCell>
+                <TableCell sx={{ fontSize: '8.5pt', py: 0.6 }}><code>ortho_templates</code></TableCell>
+                <TableCell sx={{ fontSize: '8.5pt', py: 0.6 }}>180 клинических ортопедических протоколов в 11 кластерах патологий опорно-двигательного аппарата</TableCell>
+              </TableRow>
+              <TableRow>
+                <TableCell sx={{ fontWeight: 700, fontSize: '8.5pt', py: 0.6 }}>Реестр тестов</TableCell>
+                <TableCell sx={{ fontSize: '8.5pt', py: 0.6 }}><code>ortho_test_catalog</code></TableCell>
+                <TableCell sx={{ fontSize: '8.5pt', py: 0.6 }}>1 377 клинических тестов с биомеханикой SFTR, Se/Sp доказательностью и анатомическими ориентирами</TableCell>
+              </TableRow>
+              <TableRow>
+                <TableCell sx={{ fontWeight: 700, fontSize: '8.5pt', py: 0.6 }}>Методы диагностики</TableCell>
+                <TableCell sx={{ fontSize: '8.5pt', py: 0.6 }}><code>diagnostic_methods_catalog</code></TableCell>
+                <TableCell sx={{ fontSize: '8.5pt', py: 0.6 }}>381 метод лучевой, ультразвуковой, лабораторной и функциональной диагностики</TableCell>
+              </TableRow>
+              <TableRow>
+                <TableCell sx={{ fontWeight: 700, fontSize: '8.5pt', py: 0.6 }}>Восстановительное лечение</TableCell>
+                <TableCell sx={{ fontSize: '8.5pt', py: 0.6 }}><code>ortho_*_catalog</code></TableCell>
+                <TableCell sx={{ fontSize: '8.5pt', py: 0.6 }}>102 протокола реабилитации: 26 манипуляций, 21 физиотерапия, 26 ортезирование, 29 ЛФК</TableCell>
               </TableRow>
               <TableRow>
                 <TableCell sx={{ fontWeight: 700, fontSize: '8.5pt', py: 0.6 }}>Начисления выплат</TableCell>
                 <TableCell sx={{ fontSize: '8.5pt', py: 0.6 }}><code>staff_payout_accruals</code></TableCell>
-                <TableCell sx={{ fontSize: '8.5pt', py: 0.6 }}>Строки сдельного вознаграждения врачам с историей и аудитом сторно</TableCell>
+                <TableCell sx={{ fontSize: '8.5pt', py: 0.6 }}>Строки сдельного вознаграждения врачам с историей и аудитом сторно (4 118 операций)</TableCell>
               </TableRow>
               <TableRow>
                 <TableCell sx={{ fontWeight: 700, fontSize: '8.5pt', py: 0.6 }}>Ведомости периодов</TableCell>
@@ -188,7 +208,7 @@ export const UserGuidePrintTemplate = React.forwardRef<HTMLDivElement, UserGuide
             5. Мониторинг служб бэкенда и тестовый контур [TEST_DAEMON]
           </Typography>
           <Typography variant="body2" sx={{ fontSize: '9pt', color: '#2D3748', mb: 1 }}>
-            В версию 1.4.4 включены административные инструменты мониторинга инфраструктуры и валидации:
+            В версию 1.4.5 включены административные инструменты мониторинга инфраструктуры и валидации:
           </Typography>
           <Box component="ul" sx={{ pl: 2.5, m: 0, fontSize: '8.5pt', color: '#2D3748', '& li': { mb: 0.4 } }}>
             <li><strong>Службы бэкенда (`/admin/server-health`):</strong> Сквозной мониторинг 6 компонентов (Express порт 5000, SQLite integrity ok, Fiscal Daemon 5050, Firebird МИС 3050, Swagger /api-docs, Hot Backup). Запуск теста всех служб в 1 клик с терминальным логом.</li>

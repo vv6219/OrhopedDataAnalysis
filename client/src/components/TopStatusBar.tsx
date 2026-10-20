@@ -175,33 +175,91 @@ export default function TopStatusBar() {
 
       {/* Right side: System Status Indicators & Guide */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.2 }}>
-        {/* User Guide Link */}
-        <Tooltip title="Инструкция пользователя (регламенты, формулы, поиск, печать PDF)">
-          <Chip
-            icon={<MenuBookIcon sx={{ fontSize: '15px !important', color: location.pathname === '/user-guide' ? '#0F3C64 !important' : '#334155 !important' }} />}
-            label="Инструкция"
-            clickable
-            onClick={() => navigate('/user-guide')}
-            size="small"
-            sx={{
-              bgcolor: location.pathname === '/user-guide' ? '#EBF5FA' : '#FFFFFF',
-              border: '1px solid',
-              borderColor: location.pathname === '/user-guide' ? '#0F3C64' : '#CBD5E1',
-              fontWeight: 700,
-              color: '#0F3C64',
-              fontSize: '0.75rem',
-              height: 28,
-              cursor: 'pointer',
-              boxShadow: location.pathname === '/user-guide' ? '0 1px 3px rgba(15, 60, 100, 0.2)' : '0 1px 2px rgba(0,0,0,0.04)',
-              transition: 'all 0.2s ease',
-              '&:hover': {
-                bgcolor: '#EBF5FA',
-                borderColor: '#0F3C64',
-                boxShadow: '0 2px 4px rgba(15, 60, 100, 0.15)'
-              }
-            }}
-          />
-        </Tooltip>
+        {/* Redesigned Multi-Target User Guide Navigation Control */}
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            bgcolor: '#FFFFFF',
+            borderRadius: 2,
+            border: '1px solid',
+            borderColor: (location.pathname === '/user-guide' || location.pathname === '/guide') ? '#0F3C64' : '#CBD5E1',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+            overflow: 'hidden',
+            height: 28,
+            transition: 'all 0.2s ease'
+          }}
+        >
+          {/* Main Full Guide Button */}
+          <Tooltip title="Полное интерактивное руководство пользователя МИС «ОртоERP» (все 18 разделов: Том I + Том II)" arrow enterDelay={150}>
+            <Box
+              onClick={() => navigate('/user-guide?volume=all')}
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 0.6,
+                px: 1,
+                height: '100%',
+                cursor: 'pointer',
+                bgcolor: (location.pathname === '/user-guide' || location.pathname === '/guide') && (!location.search || location.search.includes('volume=all')) ? '#EBF5FA' : 'transparent',
+                color: (location.pathname === '/user-guide' || location.pathname === '/guide') && (!location.search || location.search.includes('volume=all')) ? '#0F3C64' : '#334155',
+                fontWeight: 700,
+                fontSize: '0.74rem',
+                borderRight: '1px solid #E2E8F0',
+                transition: 'all 0.15s ease',
+                '&:hover': { bgcolor: '#F0F9FF', color: '#0F3C64' }
+              }}
+            >
+              <MenuBookIcon sx={{ fontSize: '14px !important', color: '#0F3C64' }} />
+              <span>Полное Руководство</span>
+            </Box>
+          </Tooltip>
+
+          {/* Volume I (System) Button */}
+          <Tooltip title="Том I: Системное Руководство (п. 1.1–1.10) — архитектура БД, маржа, визиты, фискализация 54-ФЗ, службы бэкенда, FAQ" arrow enterDelay={150}>
+            <Box
+              onClick={() => navigate('/user-guide?volume=system')}
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                px: 0.9,
+                height: '100%',
+                cursor: 'pointer',
+                bgcolor: (location.pathname === '/user-guide' || location.pathname === '/guide') && location.search.includes('volume=system') ? '#E0F2FE' : 'transparent',
+                color: (location.pathname === '/user-guide' || location.pathname === '/guide') && location.search.includes('volume=system') ? '#0284C7' : '#64748B',
+                fontWeight: (location.pathname === '/user-guide' || location.pathname === '/guide') && location.search.includes('volume=system') ? 800 : 600,
+                fontSize: '0.72rem',
+                borderRight: '1px solid #E2E8F0',
+                transition: 'all 0.15s ease',
+                '&:hover': { bgcolor: '#F1F5F9', color: '#0F3C64' }
+              }}
+            >
+              Том I (Системный)
+            </Box>
+          </Tooltip>
+
+          {/* Volume II (Clinical) Button */}
+          <Tooltip title="Том II: Клиническое Руководство (п. 2.1–2.8) — 180 клинических протоколов 2.0, 1377 ортотестов, 37 методов УЗИ, манипуляции, физиотерапия, ортезы, ЛФК, ROM" arrow enterDelay={150}>
+            <Box
+              onClick={() => navigate('/user-guide?volume=clinical')}
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                px: 0.9,
+                height: '100%',
+                cursor: 'pointer',
+                bgcolor: (location.pathname === '/user-guide' || location.pathname === '/guide') && location.search.includes('volume=clinical') ? '#DCFCE7' : 'transparent',
+                color: (location.pathname === '/user-guide' || location.pathname === '/guide') && location.search.includes('volume=clinical') ? '#166534' : '#64748B',
+                fontWeight: (location.pathname === '/user-guide' || location.pathname === '/guide') && location.search.includes('volume=clinical') ? 800 : 600,
+                fontSize: '0.72rem',
+                transition: 'all 0.15s ease',
+                '&:hover': { bgcolor: '#F1F5F9', color: '#166534' }
+              }}
+            >
+              Том II (Клинический)
+            </Box>
+          </Tooltip>
+        </Box>
 
         {/* DB Connection Status Badge */}
         <Chip

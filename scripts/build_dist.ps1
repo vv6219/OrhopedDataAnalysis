@@ -24,7 +24,7 @@ $toolsDir = Join-Path $rootDir "tools"
 $publicDir = Join-Path $rootDir "public"
 
 Write-Host "======================================================================" -ForegroundColor Cyan
-Write-Host " Distributive Build: Orthopedic Clinic Dobrushkin (v1.4.4)" -ForegroundColor Cyan
+Write-Host " Distributive Build: Orthopedic Clinic Dobrushkin (v1.4.5)" -ForegroundColor Cyan
 Write-Host " Full Standalone Zero-Dependency Installation Package" -ForegroundColor Cyan
 Write-Host "======================================================================" -ForegroundColor Cyan
 Write-Host "Root Directory:   $rootDir" -ForegroundColor Gray
@@ -68,7 +68,12 @@ if (Test-Path $OutputDir) {
         $backupDbTemp = [System.IO.Path]::GetTempFileName()
         Copy-Item -Path $distDb -Destination $backupDbTemp -Force
     }
-    Remove-Item -Path $OutputDir -Recurse -Force
+    try {
+        Remove-Item -Path $OutputDir -Recurse -Force -ErrorAction Stop
+    } catch {
+        Write-Host "  [NOTICE] Partial lock on $OutputDir, cleaning sub-items..." -ForegroundColor Yellow
+        Get-ChildItem -Path $OutputDir -Recurse -Force | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+    }
 }
 
 New-Item -ItemType Directory -Path $OutputDir -Force | Out-Null
@@ -136,7 +141,7 @@ if ($backupDbTemp -and (Test-Path $backupDbTemp)) {
 } elseif (Test-Path $sourceDb) {
     Copy-Item -Path $sourceDb -Destination $destDb -Force
     $dbSizeMb = (Get-Item $destDb).Length / 1MB
-    Write-Host ("  -> Copied master SQLite database with data: " + [Math]::Round($dbSizeMb, 2) + " MB (61k+ records, v1.4.4 schemas, 100 clinical templates)") -ForegroundColor Green
+    Write-Host ("  -> Copied master SQLite database with data: " + [Math]::Round($dbSizeMb, 2) + " MB (61k+ records, v1.4.5 schemas, 180 clinical templates 2.0)") -ForegroundColor Green
 } else {
     Write-Host "  [WARNING] Master SQLite database not found!" -ForegroundColor Red
 }

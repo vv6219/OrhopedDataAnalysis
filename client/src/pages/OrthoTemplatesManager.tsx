@@ -303,7 +303,7 @@ export const MASTER_CLUSTERS: MasterCluster[] = [
   { id: 'cluster_pediatric', code: 'PEDIATRIC', name_ru: '8. Детская ортопедия', joint_affinity: 'general', badge_color: '#D97706', sort_order: 80 },
   { id: 'cluster_systemic', code: 'SYSTEMIC', name_ru: '9. Системные синдромы', joint_affinity: 'general', badge_color: '#4F46E5', sort_order: 90 },
   { id: 'cluster_postop', code: 'POSTOP', name_ru: '10. Постоперационный контроль', joint_affinity: 'general', badge_color: '#059669', sort_order: 100 },
-  { id: 'cluster_author', code: 'AUTHOR', name_ru: '11. Авторские протоколы', joint_affinity: 'general', badge_color: '#0D9488', sort_order: 110 }
+  { id: 'cluster_custom', code: 'CUSTOM', name_ru: '11. Авторские протоколы', joint_affinity: 'general', badge_color: '#0D9488', sort_order: 110 }
 ];
 
 const TEST_TYPE_LABELS: Record<string, { label: string; short: string; color: string; bg: string }> = {
@@ -1449,39 +1449,43 @@ export default function OrthoTemplatesManager() {
             Обновить
           </Button>
 
-          <Button
-            variant="outlined"
-            startIcon={<ManualIcon />}
-            onClick={() => openClinicalGuide(viewMode)}
-            sx={{
-              color: '#0F3C64',
-              borderColor: '#93C5FD',
-              bgcolor: '#F0F9FF',
-              '&:hover': { bgcolor: '#E0F2FE', borderColor: '#0F3C64' },
-              textTransform: 'none',
-              fontWeight: 700,
-              fontSize: '0.82rem',
-              whiteSpace: 'nowrap'
-            }}
-          >
-            Клинический гид
-          </Button>
+          <Tooltip title="Открыть быстрый справочник по клиническим протоколам и классификаторам (модальное окно)" arrow>
+            <Button
+              variant="outlined"
+              startIcon={<ManualIcon />}
+              onClick={() => openClinicalGuide(viewMode)}
+              sx={{
+                color: '#0F3C64',
+                borderColor: '#93C5FD',
+                bgcolor: '#F0F9FF',
+                '&:hover': { bgcolor: '#E0F2FE', borderColor: '#0F3C64' },
+                textTransform: 'none',
+                fontWeight: 700,
+                fontSize: '0.82rem',
+                whiteSpace: 'nowrap'
+              }}
+            >
+              Клинический гид
+            </Button>
+          </Tooltip>
 
-          <Button
-            variant="contained"
-            startIcon={<ManualIcon />}
-            onClick={() => navigate('/guide?section=section-ortho-templates')}
-            sx={{
-              bgcolor: '#0F3C64',
-              '&:hover': { bgcolor: '#156C9C' },
-              textTransform: 'none',
-              fontWeight: 700,
-              fontSize: '0.82rem',
-              whiteSpace: 'nowrap'
-            }}
-          >
-            Инструкция к справочнику
-          </Button>
+          <Tooltip title="Открыть Том II: Раздел 2.1 Клинического Руководства (Эталонный реестр 180 клинических протоколов 2.0)" arrow>
+            <Button
+              variant="contained"
+              startIcon={<ManualIcon />}
+              onClick={() => navigate('/user-guide?volume=clinical&section=section-ortho-templates')}
+              sx={{
+                bgcolor: '#0F3C64',
+                '&:hover': { bgcolor: '#156C9C' },
+                textTransform: 'none',
+                fontWeight: 700,
+                fontSize: '0.82rem',
+                whiteSpace: 'nowrap'
+              }}
+            >
+              Клиническое Руководство (Том II)
+            </Button>
+          </Tooltip>
         </Box>
       </Box>
 

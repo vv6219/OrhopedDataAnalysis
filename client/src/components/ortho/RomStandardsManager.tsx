@@ -30,6 +30,7 @@ import {
 import { ROM_CONFIGS, END_FEEL_OPTIONS } from './romStandardsData';
 import type { JointRomConfig } from './romStandardsData';
 import ClinicalGuidanceModal from './ClinicalGuidanceModal';
+import LatexText from './LatexText';
 
 export default function RomStandardsManager() {
   const [selectedJointKey, setSelectedJointKey] = useState<string>('knee');
@@ -266,7 +267,7 @@ export default function RomStandardsManager() {
                         />
                       </TableCell>
                       <TableCell sx={{ fontSize: '0.78rem', color: '#334155' }}>
-                        {axis.clinicalNote || 'Стандартная амплитуда сустава'}
+                        <LatexText text={axis.clinicalNote || 'Стандартная амплитуда сустава'} />
                       </TableCell>
                     </TableRow>
                   ))}
@@ -359,7 +360,7 @@ export default function RomStandardsManager() {
                       </Box>
                     </Box>
                     <Typography variant="caption" sx={{ color: '#475569', display: 'block', lineHeight: 1.4 }}>
-                      {ef.desc}
+                      <LatexText text={ef.desc} />
                     </Typography>
                   </Paper>
                 </Grid>

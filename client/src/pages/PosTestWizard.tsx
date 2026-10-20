@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Box, Typography, Paper, Button, CircularProgress, Alert, Chip,
   Tooltip, IconButton, Dialog, DialogTitle,
@@ -30,6 +31,7 @@ import CloseIcon from '@mui/icons-material/Close';
 import UndoIcon from '@mui/icons-material/Undo';
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
 import PointOfSaleIcon from '@mui/icons-material/PointOfSale';
+import MenuBookIcon from '@mui/icons-material/MenuBook';
 
 export interface PosTxRecord {
   id: number;
@@ -119,6 +121,7 @@ export const PosSlipPrintTemplate = React.forwardRef<HTMLDivElement, { tx: PosTx
 );
 
 export default function PosTestWizard() {
+  const navigate = useNavigate();
   const { posStatus, testHost } = usePos();
   const [transactions, setTransactions] = useState<PosTxRecord[]>([]);
   const [loading, setLoading] = useState(false);
@@ -571,6 +574,25 @@ export default function PosTestWizard() {
                 }}
               >
                 Инструкция (PDF)
+              </Button>
+            </Tooltip>
+
+            <Tooltip title="Открыть Том I: Раздел 1.6 Системного Руководства (Фискализация 54-ФЗ и эквайринг: Arcus-2, АТОЛ, чеки коррекции)" arrow>
+              <Button
+                size="small"
+                variant="outlined"
+                onClick={() => navigate('/user-guide?volume=system&section=section-fiscal')}
+                startIcon={<MenuBookIcon />}
+                sx={{
+                  color: '#0F3C64',
+                  borderColor: '#93C5FD',
+                  bgcolor: '#F0F9FF',
+                  fontWeight: 700,
+                  textTransform: 'none',
+                  '&:hover': { bgcolor: '#E0F2FE', borderColor: '#0F3C64' }
+                }}
+              >
+                Системное Руководство (Том I: 1.6)
               </Button>
             </Tooltip>
             <Button

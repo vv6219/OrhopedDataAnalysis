@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, startTransition } from 'react';
 import {
   Box,
   Typography,
@@ -10,7 +10,8 @@ import {
   Button,
   Accordion,
   AccordionSummary,
-  AccordionDetails
+  AccordionDetails,
+  CircularProgress
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
@@ -21,19 +22,28 @@ import PointOfSaleIcon from '@mui/icons-material/PointOfSale';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import UnfoldMoreIcon from '@mui/icons-material/UnfoldMore';
 import UnfoldLessIcon from '@mui/icons-material/UnfoldLess';
+import AssignmentIcon from '@mui/icons-material/Assignment';
+import LatexText from './LatexText';
 
 export interface DiagnosticMethodGuideDetail {
   code: string;
   name: string;
-  modality: 'xray' | 'mri' | 'ultrasound' | 'enmg' | 'plantography' | 'ct' | 'lab';
-  targetJoint: 'knee' | 'shoulder' | 'elbow' | 'hip' | 'ankle' | 'wrist' | 'spine' | 'general';
-  priorityLevel: 'primary' | 'secondary';
+  modality: string;
+  targetJoint: string;
+  priorityLevel: string;
   clinicalIndications: string;
   protocolPhrase: string;
   servdictId?: number | null;
   servdictName?: string | null;
+  servdictCode?: string | null;
   price?: number | null;
-  clinicalSignificance: string;
+  clinicalSignificance?: string;
+  description?: string;
+  diagnosticCriteria?: string;
+  techniqueDetails?: string;
+  patientPreparation?: string;
+  contraindications?: string;
+  templatesCount?: number;
 }
 
 export const DIAGNOSTIC_METHODS_REGISTRY: DiagnosticMethodGuideDetail[] = [
@@ -379,26 +389,98 @@ export const DIAGNOSTIC_METHODS_REGISTRY: DiagnosticMethodGuideDetail[] = [
   }
 ];
 
-const MODALITY_LABELS: Record<string, { label: string; color: string; bg: string }> = {
-  all: { label: 'Все методы (26)', color: '#0F3C64', bg: '#E2E8F0' },
-  xray: { label: 'Рентгенография (8)', color: '#0369A1', bg: '#E0F2FE' },
-  mri: { label: 'МРТ (6)', color: '#6D28D9', bg: '#EDE9FE' },
-  ultrasound: { label: 'УЗИ (6)', color: '#047857', bg: '#D1FAE5' },
-  enmg: { label: 'ЭНМГ (2)', color: '#B45309', bg: '#FEF3C7' },
-  plantography: { label: 'Плантография (1)', color: '#4338CA', bg: '#E0E7FF' },
-  ct: { label: 'КТ (1)', color: '#C2410C', bg: '#FFEDD5' },
-  lab: { label: 'Лаборатория (2)', color: '#BE123C', bg: '#FFE4E6' }
+export const MODALITY_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
+  all: { label: 'Все методы', color: '#0F3C64', bg: '#E2E8F0' },
+  xray: { label: 'Рентген', color: '#0369A1', bg: '#E0F2FE' },
+  mri: { label: 'МРТ', color: '#6D28D9', bg: '#EDE9FE' },
+  ct: { label: 'КТ', color: '#C2410C', bg: '#FFEDD5' },
+  ultrasound: { label: 'УЗИ', color: '#047857', bg: '#D1FAE5' },
+  lab: { label: 'Лаборатория', color: '#BE123C', bg: '#FFE4E6' },
+  enmg: { label: 'ЭНМГ', color: '#B45309', bg: '#FEF3C7' },
+  bone_scan: { label: 'Сцинтиграфия', color: '#0D9488', bg: '#CCFBF1' },
+  plantography: { label: 'Плантография', color: '#4338CA', bg: '#E0E7FF' },
+  arthroscopy: { label: 'Артроскопия', color: '#7C3AED', bg: '#F3E8FF' },
+  functional: { label: 'Функциональные', color: '#475569', bg: '#F1F5F9' }
+};
+
+export const JOINT_CONFIG: Record<string, string> = {
+  all: 'Все зоны',
+  knee: 'Коленный',
+  shoulder: 'Плечевой',
+  hip: 'Тазобедренный',
+  ankle: 'Стопа и голеностоп',
+  elbow: 'Локтевой',
+  wrist: 'Кисть и запястье',
+  spine: 'Позвоночник',
+  general: 'Общие / сосуды'
 };
 
 export const DiagnosticMethodsGuideRegistry: React.FC = () => {
+  const [methods, setMethods] = useState<DiagnosticMethodGuideDetail[]>(DIAGNOSTIC_METHODS_REGISTRY);
+  const [loading, setLoading] = useState(false);
   const [selectedModality, setSelectedModality] = useState<string>('all');
+  const [selectedJoint, setSelectedJoint] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [expandedCodes, setExpandedCodes] = useState<Record<string, boolean>>({});
 
+  useEffect(() => {
+    let isMounted = true;
+    setLoading(true);
+    fetch('/api/ortho/diagnostics/catalog')
+      .then((r) => r.json())
+      .then((d) => {
+        if (isMounted && d.success && Array.isArray(d.diagnostics) && d.diagnostics.length > 0) {
+          const mapped: DiagnosticMethodGuideDetail[] = d.diagnostics.map((row: any) => ({
+            code: row.code,
+            name: row.name,
+            modality: row.modality || 'xray',
+            targetJoint: row.target_joint || 'general',
+            priorityLevel: row.priority_level || 'primary',
+            clinicalIndications: row.clinical_indications || '',
+            protocolPhrase: row.protocol_phrase || '',
+            servdictId: row.servdict_id || null,
+            servdictName: row.servdict_name || null,
+            servdictCode: row.servdict_code || null,
+            price: row.servdict_price || null,
+            clinicalSignificance: row.description || 'Стандарт инструментальной и лабораторной диагностики ортопедического центра.',
+            description: row.description || '',
+            diagnosticCriteria: row.diagnostic_criteria || '',
+            techniqueDetails: row.technique_details || '',
+            patientPreparation: row.patient_preparation || '',
+            contraindications: row.contraindications || '',
+            templatesCount: row.templates_count || 0
+          }));
+          setMethods(mapped);
+        }
+      })
+      .catch((err) => console.error('Failed to fetch diagnostics catalog:', err))
+      .finally(() => {
+        if (isMounted) setLoading(false);
+      });
+    return () => { isMounted = false; };
+  }, []);
+
+  const modalityCounts = useMemo(() => {
+    const counts: Record<string, number> = { all: methods.length };
+    methods.forEach((m) => {
+      counts[m.modality] = (counts[m.modality] || 0) + 1;
+    });
+    return counts;
+  }, [methods]);
+
+  const jointCounts = useMemo(() => {
+    const counts: Record<string, number> = { all: methods.length };
+    methods.forEach((m) => {
+      counts[m.targetJoint] = (counts[m.targetJoint] || 0) + 1;
+    });
+    return counts;
+  }, [methods]);
+
   const filteredMethods = useMemo(() => {
-    return DIAGNOSTIC_METHODS_REGISTRY.filter((m) => {
+    return methods.filter((m) => {
       const matchMod = selectedModality === 'all' || m.modality === selectedModality;
-      if (!matchMod) return false;
+      const matchJoint = selectedJoint === 'all' || m.targetJoint === selectedJoint;
+      if (!matchMod || !matchJoint) return false;
 
       if (!searchQuery.trim()) return true;
       const q = searchQuery.toLowerCase();
@@ -408,13 +490,19 @@ export const DiagnosticMethodsGuideRegistry: React.FC = () => {
         m.clinicalIndications.toLowerCase().includes(q) ||
         m.protocolPhrase.toLowerCase().includes(q) ||
         m.targetJoint.toLowerCase().includes(q) ||
-        (m.servdictName && m.servdictName.toLowerCase().includes(q))
+        (m.diagnosticCriteria && m.diagnosticCriteria.toLowerCase().includes(q)) ||
+        (m.techniqueDetails && m.techniqueDetails.toLowerCase().includes(q)) ||
+        (m.servdictName && m.servdictName.toLowerCase().includes(q)) ||
+        (m.servdictCode && m.servdictCode.toLowerCase().includes(q))
       );
     });
-  }, [selectedModality, searchQuery]);
+  }, [methods, selectedModality, selectedJoint, searchQuery]);
 
-  const handleToggleExpand = (code: string) => {
-    setExpandedCodes((prev) => ({ ...prev, [code]: !prev[code] }));
+  const handleToggleExpand = (code: string, nextExpanded?: boolean) => {
+    setExpandedCodes((prev) => ({
+      ...prev,
+      [code]: nextExpanded !== undefined ? nextExpanded : !prev[code]
+    }));
   };
 
   const handleExpandAll = () => {
@@ -422,11 +510,15 @@ export const DiagnosticMethodsGuideRegistry: React.FC = () => {
     filteredMethods.forEach((m) => {
       map[m.code] = true;
     });
-    setExpandedCodes(map);
+    startTransition(() => {
+      setExpandedCodes(map);
+    });
   };
 
   const handleCollapseAll = () => {
-    setExpandedCodes({});
+    startTransition(() => {
+      setExpandedCodes({});
+    });
   };
 
   return (
@@ -447,18 +539,18 @@ export const DiagnosticMethodsGuideRegistry: React.FC = () => {
           gap: 2
         }}
       >
-        <Box sx={{ maxWidth: 820 }}>
+        <Box sx={{ maxWidth: 880 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
             <DescriptionIcon sx={{ color: '#38BDF8', fontSize: 24 }} />
             <Typography variant="overline" sx={{ color: '#BAE6FD', fontWeight: 800, letterSpacing: 1.2 }}>
-              СТАНДАРТЫ ИНСТРУМЕНТАЛЬНОГО И АППАРАТНОГО ОБСЛЕДОВАНИЯ
+              ЭТАЛОННЫЙ КАТАЛОГ ИНСТРУМЕНТАЛЬНОГО И ЛАБОРАТОРНОГО ОБСЛЕДОВАНИЯ
             </Typography>
           </Box>
           <Typography variant="h6" sx={{ fontWeight: 800, color: '#FFFFFF' }}>
-            Каталог методов диагностики и инструментальных исследований
+            Каталог методов диагностики и инструментальных исследований ({methods.length} методов)
           </Typography>
           <Typography variant="body2" sx={{ color: '#E0F2FE', mt: 0.5, lineHeight: 1.5 }}>
-            Клинические показания, эталонные формулировки протоколов для рентгенографии, МРТ, УЗИ с функциональными пробами, стимуляционной ЭНМГ, оптической подометрии и лабораторных панелей со сквозной привязкой к номенклатуре услуг клиники (servdict) и кассе.
+            Полная синхронизация со стандартизированной базой данных клиники: клинические показания, эталонные формулировки протоколов для рентгенографии, МРТ, КТ, УЗИ с функциональными пробами, стимуляционной ЭНМГ, оптической подометрии и лабораторных панелей со сквозной привязкой к номенклатуре услуг клиники (servdict) и кассе 54-ФЗ.
           </Typography>
         </Box>
 
@@ -493,13 +585,13 @@ export const DiagnosticMethodsGuideRegistry: React.FC = () => {
               '&:hover': { borderColor: '#CBD5E1', bgcolor: 'rgba(255,255,255,0.05)' }
             }}
           >
-            Свернуть
+            Свернуть все
           </Button>
         </Box>
       </Paper>
 
       {/* Filter and Search Bar */}
-      <Paper elevation={0} sx={{ p: 2, border: '1px solid #CBD5E1', borderRadius: 2, bgcolor: '#FFFFFF' }}>
+      <Paper elevation={0} sx={{ p: 2, border: '1px solid #CBD5E1', borderRadius: 2, bgcolor: '#FFFFFF', display: 'flex', flexDirection: 'column', gap: 1.8 }}>
         <Grid container spacing={2} sx={{ alignItems: 'center' }}>
           <Grid size={{ xs: 12, md: 5 }}>
             <TextField
@@ -507,7 +599,7 @@ export const DiagnosticMethodsGuideRegistry: React.FC = () => {
               fullWidth
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Поиск по названию метода, МРТ, УЗИ, рентген, коду..."
+              placeholder="Поиск по названию метода, МРТ, УЗИ, рентген, коду, критериям..."
               slotProps={{
                 input: {
                   startAdornment: (
@@ -521,18 +613,23 @@ export const DiagnosticMethodsGuideRegistry: React.FC = () => {
           </Grid>
 
           <Grid size={{ xs: 12, md: 7 }}>
-            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.8 }}>
-              {Object.entries(MODALITY_LABELS).map(([key, data]) => {
+            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.8, alignItems: 'center' }}>
+              <Typography variant="caption" sx={{ fontWeight: 800, color: '#0F3C64', mr: 0.5, textTransform: 'uppercase' }}>
+                Модальность:
+              </Typography>
+              {Object.entries(MODALITY_CONFIG).map(([key, data]) => {
                 const isSelected = selectedModality === key;
+                const count = modalityCounts[key] || 0;
                 return (
                   <Chip
                     key={key}
-                    label={data.label}
+                    label={`${data.label} (${count})`}
                     onClick={() => setSelectedModality(key)}
                     variant={isSelected ? 'filled' : 'outlined'}
+                    size="small"
                     sx={{
                       fontWeight: 700,
-                      fontSize: '0.78rem',
+                      fontSize: '0.74rem',
                       bgcolor: isSelected ? data.color : 'transparent',
                       color: isSelected ? '#FFFFFF' : '#334155',
                       borderColor: data.color,
@@ -546,12 +643,40 @@ export const DiagnosticMethodsGuideRegistry: React.FC = () => {
             </Box>
           </Grid>
         </Grid>
+
+        {/* Joint Filter Row */}
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.8, alignItems: 'center', pt: 1, borderTop: '1px solid #F1F5F9' }}>
+          <Typography variant="caption" sx={{ fontWeight: 800, color: '#64748B', mr: 0.5, textTransform: 'uppercase' }}>
+            Анатомическая зона:
+          </Typography>
+          {Object.entries(JOINT_CONFIG).map(([key, label]) => {
+            const isSelected = selectedJoint === key;
+            const count = jointCounts[key] || 0;
+            return (
+              <Chip
+                key={key}
+                label={`${label} (${count})`}
+                onClick={() => setSelectedJoint(key)}
+                size="small"
+                variant={isSelected ? 'filled' : 'outlined'}
+                sx={{
+                  fontWeight: isSelected ? 800 : 500,
+                  fontSize: '0.74rem',
+                  bgcolor: isSelected ? '#0F3C64' : '#F8FAFC',
+                  color: isSelected ? '#FFFFFF' : '#475569',
+                  borderColor: isSelected ? '#0F3C64' : '#CBD5E1',
+                  '&:hover': { bgcolor: isSelected ? '#0F3C64' : '#E2E8F0' }
+                }}
+              />
+            );
+          })}
+        </Box>
       </Paper>
 
       {/* Count Info */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', px: 0.5 }}>
         <Typography variant="caption" sx={{ fontWeight: 700, color: '#64748B' }}>
-          Отображено методов: <strong>{filteredMethods.length}</strong> из {DIAGNOSTIC_METHODS_REGISTRY.length}
+          Отображено методов: <strong>{filteredMethods.length}</strong> из {methods.length}
         </Typography>
         <Typography variant="caption" sx={{ color: '#0284C7', fontWeight: 600 }}>
           Все методы интегрированы в АРМ врача (DiagnosticRecommendationsCard) с 1-клик добавлением в чек
@@ -560,203 +685,312 @@ export const DiagnosticMethodsGuideRegistry: React.FC = () => {
 
       {/* Method Accordions */}
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-        {filteredMethods.map((method, index) => {
-          const isExpanded = Boolean(expandedCodes[method.code]);
-          const modCfg = MODALITY_LABELS[method.modality] || { label: method.modality, color: '#0F3C64', bg: '#F1F5F9' };
+        {loading ? (
+          <Box sx={{ display: 'flex', justifyContent: 'center', p: 6 }}>
+            <CircularProgress size={36} />
+          </Box>
+        ) : filteredMethods.length === 0 ? (
+          <Paper sx={{ p: 4, textAlign: 'center', borderRadius: 2 }}>
+            <Typography variant="body1" color="text.secondary">
+              Методы диагностики не найдены по заданным критериям фильтрации
+            </Typography>
+            {(selectedModality !== 'all' || selectedJoint !== 'all' || searchQuery) && (
+              <Button
+                variant="outlined"
+                size="small"
+                onClick={() => {
+                  setSelectedModality('all');
+                  setSelectedJoint('all');
+                  setSearchQuery('');
+                }}
+                sx={{ mt: 1.5, textTransform: 'none' }}
+              >
+                Сбросить фильтры
+              </Button>
+            )}
+          </Paper>
+        ) : (
+          filteredMethods.map((method, index) => {
+            const isExpanded = Boolean(expandedCodes[method.code]);
+            const modCfg = MODALITY_CONFIG[method.modality] || { label: method.modality, color: '#0F3C64', bg: '#F1F5F9' };
 
-          return (
-            <Accordion
-              key={method.code}
-              expanded={isExpanded}
-              onChange={() => handleToggleExpand(method.code)}
-              elevation={0}
-              sx={{
-                border: '1px solid #CBD5E1',
-                borderRadius: '8px !important',
-                '&:before': { display: 'none' },
-                overflow: 'hidden',
-                transition: 'border-color 0.2s',
-                '&:hover': { borderColor: '#94A3B8' }
-              }}
-            >
-              <AccordionSummary
-                expandIcon={<ExpandMoreIcon />}
+            return (
+              <Accordion
+                key={method.code}
+                expanded={isExpanded}
+                onChange={(_, nextExpanded) => handleToggleExpand(method.code, nextExpanded)}
+                slotProps={{ transition: { unmountOnExit: true } }}
+                elevation={0}
                 sx={{
-                  bgcolor: isExpanded ? '#F1F5F9' : '#FFFFFF',
-                  px: 2,
-                  py: 1,
-                  borderBottom: isExpanded ? '1px solid #E2E8F0' : 'none'
+                  border: '1px solid #CBD5E1',
+                  borderRadius: '8px !important',
+                  '&:before': { display: 'none' },
+                  overflow: 'hidden',
+                  transition: 'border-color 0.2s',
+                  '&:hover': { borderColor: '#94A3B8' }
                 }}
               >
-                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', pr: 2, flexWrap: 'wrap', gap: 1 }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                    <Chip
-                      label={`#${index + 1}`}
-                      size="small"
-                      sx={{ bgcolor: '#E2E8F0', color: '#0F3C64', fontWeight: 800, height: 22, fontSize: '0.72rem' }}
-                    />
-                    <Box>
-                      <Typography sx={{ fontWeight: 800, color: '#0F3C64', fontSize: '0.96rem', lineHeight: 1.2 }}>
-                        {method.name}
-                      </Typography>
-                      <Typography variant="caption" sx={{ color: '#64748B', fontFamily: 'monospace' }}>
-                        код: {method.code} • сустав: {method.targetJoint}
-                      </Typography>
+                <AccordionSummary
+                  expandIcon={<ExpandMoreIcon />}
+                  sx={{
+                    bgcolor: isExpanded ? '#F1F5F9' : '#FFFFFF',
+                    px: 2,
+                    py: 1,
+                    borderBottom: isExpanded ? '1px solid #E2E8F0' : 'none'
+                  }}
+                >
+                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', pr: 2, flexWrap: 'wrap', gap: 1 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                      <Chip
+                        label={`#${index + 1}`}
+                        size="small"
+                        sx={{ bgcolor: '#E2E8F0', color: '#0F3C64', fontWeight: 800, height: 22, fontSize: '0.72rem' }}
+                      />
+                      <Box>
+                        <Typography sx={{ fontWeight: 800, color: '#0F3C64', fontSize: '0.96rem', lineHeight: 1.2 }}>
+                          <LatexText text={method.name} />
+                        </Typography>
+                        <Typography variant="caption" sx={{ color: '#64748B', fontFamily: 'monospace' }}>
+                          код: {method.code} • сустав: {JOINT_CONFIG[method.targetJoint] || method.targetJoint}
+                        </Typography>
+                      </Box>
+                    </Box>
+
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                      <Chip
+                        label={modCfg.label}
+                        size="small"
+                        sx={{ bgcolor: modCfg.bg, color: modCfg.color, fontWeight: 800, fontSize: '0.72rem' }}
+                      />
+                      <Chip
+                        label={method.priorityLevel === 'primary' ? 'Первичное (Золотой стандарт)' : method.priorityLevel === 'high' ? 'Высокий приоритет' : 'Уточняющее / по показаниям'}
+                        size="small"
+                        sx={{
+                          bgcolor: method.priorityLevel === 'primary' || method.priorityLevel === 'high' ? '#DCFCE7' : '#F1F5F9',
+                          color: method.priorityLevel === 'primary' || method.priorityLevel === 'high' ? '#166534' : '#475569',
+                          fontWeight: 700,
+                          fontSize: '0.72rem'
+                        }}
+                      />
+                      {method.templatesCount !== undefined && method.templatesCount > 0 && (
+                        <Chip
+                          icon={<AssignmentIcon sx={{ fontSize: '13px !important' }} />}
+                          label={`В ${method.templatesCount} протоколах`}
+                          size="small"
+                          sx={{ bgcolor: '#E0F2FE', color: '#0369A1', fontWeight: 700, fontSize: '0.72rem' }}
+                        />
+                      )}
+                      {method.price ? (
+                        <Chip
+                          icon={<PointOfSaleIcon sx={{ fontSize: '13px !important' }} />}
+                          label={`${method.price.toLocaleString('ru-RU')} ₽`}
+                          size="small"
+                          sx={{ bgcolor: '#FEF3C7', color: '#92400E', fontWeight: 800, fontSize: '0.72rem' }}
+                        />
+                      ) : (
+                        <Chip
+                          label="Внешнее / Направление"
+                          size="small"
+                          sx={{ bgcolor: '#F1F5F9', color: '#64748B', fontSize: '0.7rem' }}
+                        />
+                      )}
                     </Box>
                   </Box>
+                </AccordionSummary>
 
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-                    <Chip
-                      label={modCfg.label.split(' ')[0]}
-                      size="small"
-                      sx={{ bgcolor: modCfg.bg, color: modCfg.color, fontWeight: 800, fontSize: '0.72rem' }}
-                    />
-                    <Chip
-                      label={method.priorityLevel === 'primary' ? 'Первичное (Золотой стандарт)' : 'Вторичное (Уточняющее)'}
-                      size="small"
-                      sx={{
-                        bgcolor: method.priorityLevel === 'primary' ? '#DCFCE7' : '#F1F5F9',
-                        color: method.priorityLevel === 'primary' ? '#166534' : '#475569',
-                        fontWeight: 700,
-                        fontSize: '0.72rem'
-                      }}
-                    />
-                    {method.price ? (
-                      <Chip
-                        icon={<PointOfSaleIcon sx={{ fontSize: '13px !important' }} />}
-                        label={`${method.price.toLocaleString('ru-RU')} ₽`}
-                        size="small"
-                        sx={{ bgcolor: '#FEF3C7', color: '#92400E', fontWeight: 800, fontSize: '0.72rem' }}
-                      />
-                    ) : (
-                      <Chip
-                        label="Внешнее / Направление"
-                        size="small"
-                        sx={{ bgcolor: '#F1F5F9', color: '#64748B', fontSize: '0.7rem' }}
-                      />
-                    )}
-                  </Box>
-                </Box>
-              </AccordionSummary>
-
-              <AccordionDetails sx={{ p: 2.5, bgcolor: '#FAFAFA' }}>
-                <Grid container spacing={2}>
-                  {/* Indications */}
-                  <Grid size={{ xs: 12 }}>
-                    <Paper
-                      elevation={0}
-                      sx={{
-                        p: 1.5,
-                        bgcolor: '#FFFFFF',
-                        border: '1px solid #BAE6FD',
-                        borderLeft: '4px solid #0284C7',
-                        borderRadius: 1.5
-                      }}
-                    >
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
-                        <LocalHospitalIcon sx={{ color: '#0284C7', fontSize: 18 }} />
-                        <Typography variant="caption" sx={{ fontWeight: 800, color: '#0369A1', textTransform: 'uppercase' }}>
-                          Клинические показания к назначению
-                        </Typography>
-                      </Box>
-                      <Typography variant="body2" sx={{ color: '#1E293B', pl: 3.2, fontSize: '0.88rem', lineHeight: 1.5 }}>
-                        {method.clinicalIndications}
-                      </Typography>
-                    </Paper>
-                  </Grid>
-
-                  {/* Standard Protocol Phrasing */}
-                  <Grid size={{ xs: 12, md: 7 }}>
-                    <Paper
-                      elevation={0}
-                      sx={{
-                        p: 1.5,
-                        bgcolor: '#F0FDF4',
-                        border: '1px solid #BBF7D0',
-                        borderLeft: '4px solid #16A34A',
-                        borderRadius: 1.5,
-                        height: '100%'
-                      }}
-                    >
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
-                        <CheckCircleIcon sx={{ color: '#16A34A', fontSize: 18 }} />
-                        <Typography variant="caption" sx={{ fontWeight: 800, color: '#15803D', textTransform: 'uppercase' }}>
-                          Эталонная формулировка направления для протокола осмотра
-                        </Typography>
-                      </Box>
-                      <Typography variant="body2" sx={{ color: '#14532D', fontWeight: 600, pl: 3.2, fontSize: '0.86rem', lineHeight: 1.5 }}>
-                        «{method.protocolPhrase}»
-                      </Typography>
-                    </Paper>
-                  </Grid>
-
-                  {/* Checkout & Servdict Integration */}
-                  <Grid size={{ xs: 12, md: 5 }}>
-                    <Paper
-                      elevation={0}
-                      sx={{
-                        p: 1.5,
-                        bgcolor: '#FFFBEB',
-                        border: '1px solid #FDE68A',
-                        borderLeft: '4px solid #D97706',
-                        borderRadius: 1.5,
-                        height: '100%'
-                      }}
-                    >
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
-                        <PointOfSaleIcon sx={{ color: '#D97706', fontSize: 18 }} />
-                        <Typography variant="caption" sx={{ fontWeight: 800, color: '#92400E', textTransform: 'uppercase' }}>
-                          Связь с прайсом клиники (servdict)
-                        </Typography>
-                      </Box>
-                      <Box sx={{ pl: 3.2 }}>
-                        {method.servdictId ? (
-                          <>
-                            <Typography variant="body2" sx={{ color: '#78350F', fontWeight: 700, fontSize: '0.85rem' }}>
-                              Услуга #{method.servdictId}: {method.servdictName}
-                            </Typography>
-                            <Typography variant="caption" sx={{ color: '#B45309', display: 'block', mt: 0.3 }}>
-                              Стоимость в кассе: <strong>{method.price?.toLocaleString('ru-RU')} ₽</strong> • Автодобавление в счет
-                            </Typography>
-                          </>
-                        ) : (
-                          <Typography variant="body2" sx={{ color: '#92400E', fontSize: '0.85rem' }}>
-                            Внешнее исследование (партнерский диагностический центр / направление по ОМС)
+                <AccordionDetails sx={{ p: 2.5, bgcolor: '#FAFAFA' }}>
+                  <Grid container spacing={2}>
+                    {/* Indications */}
+                    <Grid size={{ xs: 12 }}>
+                      <Paper
+                        elevation={0}
+                        sx={{
+                          p: 1.5,
+                          bgcolor: '#FFFFFF',
+                          border: '1px solid #BAE6FD',
+                          borderLeft: '4px solid #0284C7',
+                          borderRadius: 1.5
+                        }}
+                      >
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+                          <LocalHospitalIcon sx={{ color: '#0284C7', fontSize: 18 }} />
+                          <Typography variant="caption" sx={{ fontWeight: 800, color: '#0369A1', textTransform: 'uppercase' }}>
+                            Клинические показания к назначению
                           </Typography>
-                        )}
-                      </Box>
-                    </Paper>
-                  </Grid>
+                        </Box>
+                        <Typography variant="body2" sx={{ color: '#1E293B', pl: 3.2, fontSize: '0.88rem', lineHeight: 1.5 }}>
+                          <LatexText text={method.clinicalIndications || 'Назначается врачом-ортопедом по клиническим стандартам доказательной медицины.'} />
+                        </Typography>
+                      </Paper>
+                    </Grid>
 
-                  {/* Clinical Significance */}
-                  <Grid size={{ xs: 12 }}>
-                    <Paper
-                      elevation={0}
-                      sx={{
-                        p: 1.5,
-                        bgcolor: '#EEF2FF',
-                        border: '1px solid #C7D2FE',
-                        borderRadius: 1.5,
-                        display: 'flex',
-                        gap: 1.5
-                      }}
-                    >
-                      <BiotechIcon sx={{ color: '#4F46E5', fontSize: 20, mt: 0.2 }} />
-                      <Box>
-                        <Typography variant="caption" sx={{ fontWeight: 800, color: '#3730A3', textTransform: 'uppercase' }}>
-                          Клиническая значимость и экспертные нюансы:
+                    {/* Standard Protocol Phrasing */}
+                    <Grid size={{ xs: 12, md: 7 }}>
+                      <Paper
+                        elevation={0}
+                        sx={{
+                          p: 1.5,
+                          bgcolor: '#F0FDF4',
+                          border: '1px solid #BBF7D0',
+                          borderLeft: '4px solid #16A34A',
+                          borderRadius: 1.5,
+                          height: '100%'
+                        }}
+                      >
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+                          <CheckCircleIcon sx={{ color: '#16A34A', fontSize: 18 }} />
+                          <Typography variant="caption" sx={{ fontWeight: 800, color: '#15803D', textTransform: 'uppercase' }}>
+                            Эталонная формулировка направления для протокола осмотра
+                          </Typography>
+                        </Box>
+                        <Typography variant="body2" sx={{ color: '#14532D', fontWeight: 600, pl: 3.2, fontSize: '0.86rem', lineHeight: 1.5 }}>
+                          «<LatexText text={method.protocolPhrase || method.name} />»
                         </Typography>
-                        <Typography variant="body2" sx={{ color: '#312E81', mt: 0.2, fontSize: '0.85rem', lineHeight: 1.5 }}>
-                          {method.clinicalSignificance}
-                        </Typography>
-                      </Box>
-                    </Paper>
+                      </Paper>
+                    </Grid>
+
+                    {/* Checkout & Servdict Integration */}
+                    <Grid size={{ xs: 12, md: 5 }}>
+                      <Paper
+                        elevation={0}
+                        sx={{
+                          p: 1.5,
+                          bgcolor: '#FFFBEB',
+                          border: '1px solid #FDE68A',
+                          borderLeft: '4px solid #D97706',
+                          borderRadius: 1.5,
+                          height: '100%'
+                        }}
+                      >
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+                          <PointOfSaleIcon sx={{ color: '#D97706', fontSize: 18 }} />
+                          <Typography variant="caption" sx={{ fontWeight: 800, color: '#92400E', textTransform: 'uppercase' }}>
+                            Связь с прайсом клиники (servdict)
+                          </Typography>
+                        </Box>
+                        <Box sx={{ pl: 3.2 }}>
+                          {method.servdictId ? (
+                            <>
+                              <Typography variant="body2" sx={{ color: '#78350F', fontWeight: 700, fontSize: '0.85rem' }}>
+                                Услуга #{method.servdictId}: {method.servdictName || method.name}
+                              </Typography>
+                              {method.servdictCode && (
+                                <Typography variant="caption" sx={{ color: '#92400E', display: 'block', fontFamily: 'monospace' }}>
+                                  Код номенклатуры: {method.servdictCode}
+                                </Typography>
+                              )}
+                              <Typography variant="caption" sx={{ color: '#B45309', display: 'block', mt: 0.3 }}>
+                                Стоимость в кассе: <strong>{method.price?.toLocaleString('ru-RU')} ₽</strong> • Автодобавление в чек 54-ФЗ
+                              </Typography>
+                            </>
+                          ) : (
+                            <Typography variant="body2" sx={{ color: '#92400E', fontSize: '0.85rem' }}>
+                              Внешнее исследование (партнерский диагностический центр / направление по ОМС)
+                            </Typography>
+                          )}
+                        </Box>
+                      </Paper>
+                    </Grid>
+
+                    {/* Diagnostic Criteria & Technique Details if present */}
+                    {(method.diagnosticCriteria || method.techniqueDetails) && (
+                      <Grid size={{ xs: 12 }}>
+                        <Paper
+                          elevation={0}
+                          sx={{
+                            p: 1.5,
+                            bgcolor: '#F8FAFC',
+                            border: '1px solid #E2E8F0',
+                            borderRadius: 1.5,
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: 1
+                          }}
+                        >
+                          {method.diagnosticCriteria && (
+                            <Box>
+                              <Typography variant="caption" sx={{ fontWeight: 800, color: '#0F3C64', textTransform: 'uppercase', display: 'block' }}>
+                                Диагностические критерии и оценочные шкалы:
+                              </Typography>
+                              <Typography variant="body2" sx={{ color: '#334155', mt: 0.2, fontSize: '0.85rem', lineHeight: 1.5 }}>
+                                <LatexText text={method.diagnosticCriteria} />
+                              </Typography>
+                            </Box>
+                          )}
+                          {method.techniqueDetails && (
+                            <Box sx={{ pt: method.diagnosticCriteria ? 1 : 0, borderTop: method.diagnosticCriteria ? '1px dashed #CBD5E1' : 'none' }}>
+                              <Typography variant="caption" sx={{ fontWeight: 800, color: '#0369A1', textTransform: 'uppercase', display: 'block' }}>
+                                Методика выполнения, проекции и укладки:
+                              </Typography>
+                              <Typography variant="body2" sx={{ color: '#334155', mt: 0.2, fontSize: '0.85rem', lineHeight: 1.5 }}>
+                                <LatexText text={method.techniqueDetails} />
+                              </Typography>
+                            </Box>
+                          )}
+                        </Paper>
+                      </Grid>
+                    )}
+
+                    {/* Patient Preparation & Contraindications if present */}
+                    {(method.patientPreparation || method.contraindications) && (
+                      <Grid size={{ xs: 12 }}>
+                        <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+                          {method.patientPreparation && (
+                            <Box sx={{ flex: 1, minWidth: 260, p: 1.25, bgcolor: '#F0F9FF', border: '1px solid #BAE6FD', borderRadius: 1.5 }}>
+                              <Typography variant="caption" sx={{ fontWeight: 800, color: '#0369A1', textTransform: 'uppercase', display: 'block', mb: 0.3 }}>
+                                Подготовка пациента:
+                              </Typography>
+                              <Typography variant="caption" sx={{ color: '#0C4A6E', lineHeight: 1.4, display: 'block' }}>
+                                {method.patientPreparation}
+                              </Typography>
+                            </Box>
+                          )}
+                          {method.contraindications && (
+                            <Box sx={{ flex: 1, minWidth: 260, p: 1.25, bgcolor: '#FFF1F2', border: '1px solid #FECDD3', borderRadius: 1.5 }}>
+                              <Typography variant="caption" sx={{ fontWeight: 800, color: '#BE123C', textTransform: 'uppercase', display: 'block', mb: 0.3 }}>
+                                Противопоказания (Red Flags):
+                              </Typography>
+                              <Typography variant="caption" sx={{ color: '#881337', lineHeight: 1.4, display: 'block' }}>
+                                {method.contraindications}
+                              </Typography>
+                            </Box>
+                          )}
+                        </Box>
+                      </Grid>
+                    )}
+
+                    {/* Clinical Significance & Description */}
+                    {method.clinicalSignificance && (
+                      <Grid size={{ xs: 12 }}>
+                        <Paper
+                          elevation={0}
+                          sx={{
+                            p: 1.5,
+                            bgcolor: '#EEF2FF',
+                            border: '1px solid #C7D2FE',
+                            borderRadius: 1.5,
+                            display: 'flex',
+                            gap: 1.5
+                          }}
+                        >
+                          <BiotechIcon sx={{ color: '#4F46E5', fontSize: 20, mt: 0.2 }} />
+                          <Box>
+                            <Typography variant="caption" sx={{ fontWeight: 800, color: '#3730A3', textTransform: 'uppercase' }}>
+                              Клиническая значимость и экспертные нюансы:
+                            </Typography>
+                            <Typography variant="body2" sx={{ color: '#312E81', mt: 0.2, fontSize: '0.85rem', lineHeight: 1.5 }}>
+                              <LatexText text={method.clinicalSignificance} />
+                            </Typography>
+                          </Box>
+                        </Paper>
+                      </Grid>
+                    )}
                   </Grid>
-                </Grid>
-              </AccordionDetails>
-            </Accordion>
-          );
-        })}
+                </AccordionDetails>
+              </Accordion>
+            );
+          })
+        )}
       </Box>
     </Box>
   );

@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
 import katex from 'katex';
+import 'katex/dist/katex.min.css';
 import { Box, Typography } from '@mui/material';
 import type { SxProps, Theme } from '@mui/material';
 
@@ -24,6 +25,10 @@ export function cleanLatexText(text?: string | null): string {
     .replace(/\\cdot\b/g, '·')
     .replace(/\\ne\b/g, '≠')
     .replace(/\\neq\b/g, '≠')
+    .replace(/\\to\b/g, '→')
+    .replace(/\\in\b/g, '∈')
+    .replace(/\\infty\b/g, '∞')
+    .replace(/\\sum\b/g, '∑')
     .replace(/\^\\circ\b/g, '°')
     .replace(/\\circ\b/g, '°')
     // Greek letters
@@ -33,6 +38,7 @@ export function cleanLatexText(text?: string | null): string {
     .replace(/\\Delta\b/g, 'Δ')
     .replace(/\\theta\b/g, 'θ')
     .replace(/\\lambda\b/g, 'λ')
+    .replace(/\\mu\b/g, 'μ')
     // LaTeX text commands
     .replace(/\\text\{([^}]+)\}/g, '$1')
     .replace(/\\textbf\{([^}]+)\}/g, '$1')
@@ -65,7 +71,7 @@ export function renderLatexToHtml(text?: string | null): string {
       if (part.startsWith('$$') && part.endsWith('$$')) {
         const formula = part.slice(2, -2).trim();
         try {
-          return katex.renderToString(formula, { displayMode: true, throwOnError: false });
+          return katex.renderToString(formula, { displayMode: true, throwOnError: false, strict: false });
         } catch {
           return `<span class="katex-error">${cleanLatexText(formula)}</span>`;
         }
@@ -75,7 +81,7 @@ export function renderLatexToHtml(text?: string | null): string {
       if (part.startsWith('$') && part.endsWith('$')) {
         const formula = part.slice(1, -1).trim();
         try {
-          return katex.renderToString(formula, { displayMode: false, throwOnError: false });
+          return katex.renderToString(formula, { displayMode: false, throwOnError: false, strict: false });
         } catch {
           return `<span class="katex-error">${cleanLatexText(formula)}</span>`;
         }
@@ -84,7 +90,7 @@ export function renderLatexToHtml(text?: string | null): string {
       // Standard text with loose LaTeX commands (e.g. \ge 1.5–3.0\text{ Тл} or \alpha \ge 60^\circ)
       let formatted = part;
 
-      if (/\\(ge|le|pm|times|approx|alpha|beta|Delta|circ|text|ne)\b/.test(formatted)) {
+      if (/\\(ge|le|pm|times|approx|alpha|beta|gamma|Delta|theta|lambda|mu|circ|text|ne|cdot|to|in)\b/.test(formatted)) {
         formatted = formatted
           .replace(/\\ge\b/g, '≥')
           .replace(/\\geq\b/g, '≥')
@@ -93,11 +99,18 @@ export function renderLatexToHtml(text?: string | null): string {
           .replace(/\\approx\b/g, '≈')
           .replace(/\\pm\b/g, '±')
           .replace(/\\times\b/g, '×')
+          .replace(/\\cdot\b/g, '·')
+          .replace(/\\to\b/g, '→')
+          .replace(/\\in\b/g, '∈')
           .replace(/\^\\circ\b/g, '°')
           .replace(/\\circ\b/g, '°')
           .replace(/\\alpha\b/g, 'α')
           .replace(/\\beta\b/g, 'β')
+          .replace(/\\gamma\b/g, 'γ')
           .replace(/\\Delta\b/g, 'Δ')
+          .replace(/\\theta\b/g, 'θ')
+          .replace(/\\lambda\b/g, 'λ')
+          .replace(/\\mu\b/g, 'μ')
           .replace(/\\text\{([^}]+)\}/g, '$1');
       }
 

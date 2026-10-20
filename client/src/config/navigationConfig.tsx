@@ -82,7 +82,7 @@ export const navigationGroups: NavGroup[] = [
         text: 'Справочник шаблонов 2.0',
         path: '/ortho-templates-manager',
         icon: <ScienceIcon sx={{ fontSize: 20, color: '#0F3C64' }} />,
-        tooltip: 'Справочник клинических шаблонов, 39 ортопедических тестов, 26 методов аппаратной диагностики и Neutral-0 ROM пресетов'
+        tooltip: 'Справочник 180 клинических шаблонов, 1 377 ортопедических тестов, 381 метод аппаратной диагностики и Neutral-0 ROM пресетов'
       },
       {
         text: 'Оформление визита (Wizard)',
@@ -121,7 +121,7 @@ export const navigationGroups: NavGroup[] = [
         tooltip: 'Генератор документов и отчетов: формирование сводных справок, протоколов лечения, реестров услуг и экспорт документов в PDF и Excel'
       },
       {
-        text: 'Инструкция пользователя',
+        text: 'Полное Руководство',
         path: '/user-guide',
         icon: <MenuBookIcon sx={{ fontSize: 20, color: '#0F3C64' }} />,
         tooltip: 'Интерактивное руководство пользователя: описание функционала МИС, справочников, архитектуры данных и пошаговых регламентов расчетов'
@@ -362,7 +362,7 @@ export const routeMetaMap: Record<string, RouteMeta> = {
     parentPath: '/'
   },
   '/user-guide': {
-    title: 'Инструкция пользователя МИС',
+    title: 'Полное Руководство пользователя МИС',
     groupTitle: 'Сервисы',
     groupId: 'operations_and_wizards',
     parentPath: '/'

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, startTransition } from 'react';
 import {
   Box,
   Typography,
@@ -10,7 +10,10 @@ import {
   Button,
   Accordion,
   AccordionSummary,
-  AccordionDetails
+  AccordionDetails,
+  TablePagination,
+  CircularProgress,
+  IconButton
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
@@ -23,22 +26,30 @@ import LocalHospitalIcon from '@mui/icons-material/LocalHospital';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutlineOutlined';
 import UnfoldMoreIcon from '@mui/icons-material/UnfoldMore';
 import UnfoldLessIcon from '@mui/icons-material/UnfoldLess';
+import FilterAltOffIcon from '@mui/icons-material/FilterAltOff';
+import AssignmentIcon from '@mui/icons-material/Assignment';
+import LatexText from './LatexText';
 
 export interface OrthoTestGuideDetail {
   code: string;
   nameRu: string;
   nameLat: string;
-  jointCategory: 'knee' | 'shoulder' | 'elbow' | 'hip' | 'ankle' | 'wrist' | 'spine';
+  jointCategory: string;
   targetStructure: string;
-  sensitivityPct: number;
-  specificityPct: number;
-  evidenceLevel: 'A' | 'B' | 'C';
+  sensitivityPct: number | null;
+  specificityPct: number | null;
+  evidenceLevel: string;
   patientPosition: string;
   doctorHandPlacement: string;
   appliedForceDirection: string;
   positiveCriteria: string;
   clinicalInterpretation: string;
   falsePositiveFactors: string;
+  methodology?: string;
+  sensitivitySpecificityText?: string;
+  testType?: string;
+  templatesCount?: number;
+  priorityLevel?: string;
 }
 
 export const ORTHO_TESTS_REGISTRY: OrthoTestGuideDetail[] = [
@@ -681,26 +692,112 @@ export const ORTHO_TESTS_REGISTRY: OrthoTestGuideDetail[] = [
   }
 ];
 
-const JOINT_NAMES: Record<string, { label: string; count: number; color: string }> = {
-  all: { label: 'Все суставы (39)', count: 39, color: '#0F3C64' },
-  knee: { label: 'Коленный (9)', count: 9, color: '#156C9C' },
-  shoulder: { label: 'Плечевой (6)', count: 6, color: '#6A1B9A' },
-  elbow: { label: 'Локтевой (6)', count: 6, color: '#E65100' },
-  hip: { label: 'Тазобедренный (5)', count: 5, color: '#2E7D32' },
-  ankle: { label: 'Стопа и голеностоп (4)', count: 4, color: '#00838F' },
-  wrist: { label: 'Кисть и запястье (5)', count: 5, color: '#AD1457' },
-  spine: { label: 'Позвоночник (4)', count: 4, color: '#455A64' }
+const JOINT_LABELS: Record<string, { label: string; color: string }> = {
+  all: { label: 'Все суставы', color: '#0F3C64' },
+  knee: { label: 'Коленный', color: '#156C9C' },
+  shoulder: { label: 'Плечевой', color: '#6A1B9A' },
+  elbow: { label: 'Локтевой', color: '#E65100' },
+  hip: { label: 'Тазобедренный', color: '#2E7D32' },
+  ankle: { label: 'Стопа и голеностоп', color: '#00838F' },
+  wrist: { label: 'Кисть и запястье', color: '#AD1457' },
+  spine: { label: 'Позвоночник', color: '#455A64' },
+  general: { label: 'Общие / биомеханика', color: '#475569' }
+};
+
+const TEST_TYPE_LABELS: Record<string, { label: string; color: string }> = {
+  provocative: { label: 'Провокационный', color: '#B45309' },
+  multifactor_cluster: { label: 'Кластерный', color: '#1E40AF' },
+  neurodynamic: { label: 'Нейродинамика', color: '#6B21A8' },
+  relocation: { label: 'Релокация / Стабильность', color: '#047857' }
 };
 
 export const OrthoTestsGuideRegistry: React.FC = () => {
+  const [tests, setTests] = useState<OrthoTestGuideDetail[]>(ORTHO_TESTS_REGISTRY);
+  const [loading, setLoading] = useState<boolean>(true);
   const [selectedJoint, setSelectedJoint] = useState<string>('all');
+  const [selectedEvidence, setSelectedEvidence] = useState<string>('all');
+  const [selectedType, setSelectedType] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [expandedTestCodes, setExpandedTestCodes] = useState<Record<string, boolean>>({});
+  const [page, setPage] = useState<number>(0);
+  const [rowsPerPage, setRowsPerPage] = useState<number>(50);
+
+  useEffect(() => {
+    let isMounted = true;
+    fetch('/api/ortho/tests/catalog')
+      .then((res) => res.json())
+      .then((data) => {
+        if (isMounted && data.success && Array.isArray(data.tests)) {
+          const mapped: OrthoTestGuideDetail[] = data.tests.map((row: any) => ({
+            code: row.code,
+            nameRu: row.name_ru || row.name || row.code,
+            nameLat: row.name_lat || '',
+            jointCategory: row.joint_category || row.target_joint || 'general',
+            targetStructure: row.target_structure || 'Опорно-двигательный аппарат',
+            sensitivityPct: row.sensitivity_pct !== null && row.sensitivity_pct !== undefined ? Number(row.sensitivity_pct) : null,
+            specificityPct: row.specificity_pct !== null && row.specificity_pct !== undefined ? Number(row.specificity_pct) : null,
+            evidenceLevel: row.evidence_level || 'B',
+            patientPosition: row.patient_position || 'Стандартное ортопедическое положение пациента (лежа / сидя / стоя) с фиксацией смежного сегмента.',
+            doctorHandPlacement: row.doctor_hand_placement || 'Анатомический двуручный захват сустава с точной пальпацией анатомических ориентиров.',
+            appliedForceDirection: row.applied_force_direction || row.technique_description || row.methodology || 'Дозированная мануальная тракция, компрессия, ротация или угловое стресс-тестирование.',
+            positiveCriteria: row.positive_criteria || row.positive_criterion || 'Воспроизведение характерного болевого синдрома, патологический люфт или щелчок.',
+            clinicalInterpretation: row.clinical_interpretation || `Верификация нозологии: ${row.target_structure || row.name_ru}`,
+            falsePositiveFactors: row.false_positive_factors || 'Мышечный спазм, острый выраженный синовит, сопутствующая контрактура или гипермобильность.',
+            methodology: row.methodology || row.technique_description || '',
+            sensitivitySpecificityText: row.sensitivity_specificity || '',
+            testType: row.test_type || 'provocative',
+            templatesCount: row.templates_count || 0,
+            priorityLevel: row.priority_level || 'medium'
+          }));
+          setTests(mapped);
+        }
+      })
+      .catch((err) => console.error('Failed to fetch tests catalog:', err))
+      .finally(() => {
+        if (isMounted) setLoading(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const jointCounts = useMemo(() => {
+    const counts: Record<string, number> = { all: tests.length };
+    tests.forEach((t) => {
+      counts[t.jointCategory] = (counts[t.jointCategory] || 0) + 1;
+    });
+    return counts;
+  }, [tests]);
+
+  const evidenceCounts = useMemo(() => {
+    const counts: Record<string, number> = { all: tests.length };
+    tests.forEach((t) => {
+      counts[t.evidenceLevel] = (counts[t.evidenceLevel] || 0) + 1;
+    });
+    return counts;
+  }, [tests]);
+
+  const typeCounts = useMemo(() => {
+    const counts: Record<string, number> = { all: tests.length };
+    tests.forEach((t) => {
+      if (t.testType) {
+        counts[t.testType] = (counts[t.testType] || 0) + 1;
+      }
+    });
+    return counts;
+  }, [tests]);
 
   const filteredTests = useMemo(() => {
-    return ORTHO_TESTS_REGISTRY.filter((t) => {
+    return tests.filter((t) => {
       const matchJoint = selectedJoint === 'all' || t.jointCategory === selectedJoint;
       if (!matchJoint) return false;
+
+      const matchEvidence = selectedEvidence === 'all' || t.evidenceLevel === selectedEvidence;
+      if (!matchEvidence) return false;
+
+      const matchType = selectedType === 'all' || t.testType === selectedType;
+      if (!matchType) return false;
 
       if (!searchQuery.trim()) return true;
       const q = searchQuery.toLowerCase();
@@ -710,25 +807,58 @@ export const OrthoTestsGuideRegistry: React.FC = () => {
         t.code.toLowerCase().includes(q) ||
         t.targetStructure.toLowerCase().includes(q) ||
         t.clinicalInterpretation.toLowerCase().includes(q) ||
-        t.positiveCriteria.toLowerCase().includes(q)
+        t.positiveCriteria.toLowerCase().includes(q) ||
+        (t.methodology && t.methodology.toLowerCase().includes(q)) ||
+        t.patientPosition.toLowerCase().includes(q) ||
+        t.doctorHandPlacement.toLowerCase().includes(q) ||
+        t.appliedForceDirection.toLowerCase().includes(q) ||
+        t.falsePositiveFactors.toLowerCase().includes(q)
       );
     });
-  }, [selectedJoint, searchQuery]);
+  }, [tests, selectedJoint, selectedEvidence, selectedType, searchQuery]);
 
-  const handleToggleExpand = (code: string) => {
-    setExpandedTestCodes((prev) => ({ ...prev, [code]: !prev[code] }));
+  // Reset page when filters change
+  useEffect(() => {
+    setPage(0);
+  }, [selectedJoint, selectedEvidence, selectedType, searchQuery]);
+
+  const visibleTests = useMemo(() => {
+    if (rowsPerPage === -1) {
+      return filteredTests;
+    }
+    const start = page * rowsPerPage;
+    return filteredTests.slice(start, start + rowsPerPage);
+  }, [filteredTests, page, rowsPerPage]);
+
+  const handleToggleExpand = (code: string, nextExpanded?: boolean) => {
+    setExpandedTestCodes((prev) => ({
+      ...prev,
+      [code]: nextExpanded !== undefined ? nextExpanded : !prev[code]
+    }));
   };
 
-  const handleExpandAll = () => {
-    const map: Record<string, boolean> = {};
-    filteredTests.forEach((t) => {
+  const handleExpandVisible = () => {
+    const map: Record<string, boolean> = { ...expandedTestCodes };
+    visibleTests.forEach((t) => {
       map[t.code] = true;
     });
-    setExpandedTestCodes(map);
+    startTransition(() => {
+      setExpandedTestCodes(map);
+    });
   };
 
   const handleCollapseAll = () => {
-    setExpandedTestCodes({});
+    startTransition(() => {
+      setExpandedTestCodes({});
+    });
+  };
+
+  const handleResetFilters = () => {
+    setSelectedJoint('all');
+    setSelectedEvidence('all');
+    setSelectedType('all');
+    setSearchQuery('');
+    setPage(0);
   };
 
   return (
@@ -749,26 +879,27 @@ export const OrthoTestsGuideRegistry: React.FC = () => {
           gap: 2
         }}
       >
-        <Box sx={{ maxWidth: 780 }}>
+        <Box sx={{ maxWidth: 880 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
             <BiotechIcon sx={{ color: '#38BDF8', fontSize: 24 }} />
             <Typography variant="overline" sx={{ color: '#BAE6FD', fontWeight: 800, letterSpacing: 1.2 }}>
               КЛИНИЧЕСКИЙ СТАНДАРТ • ДОКАЗАТЕЛЬНАЯ БИОМЕХАНИКА
             </Typography>
+            {loading && <CircularProgress size={16} sx={{ color: '#38BDF8', ml: 1 }} />}
           </Box>
           <Typography variant="h6" sx={{ fontWeight: 800, color: '#FFFFFF' }}>
-            Полный реестр 39 валидированных ортопедических тестов
+            Полный реестр {tests.length} валидированных ортопедических тестов
           </Typography>
           <Typography variant="body2" sx={{ color: '#E0F2FE', mt: 0.5, lineHeight: 1.5 }}>
-            Стандартизированные пошаговые протоколы для врача на приёме: исходное положение пациента, точки фиксации и захвата руками врача, вектор нагрузки, критерии положительного отклика (+), клиническая интерпретация и типичные диагностические ошибки.
+            Стандартизированные пошаговые протоколы для врача на приёме: исходное положение пациента, точки фиксации и захвата руками врача, вектор нагрузки, критерии положительного отклика (+), клиническая интерпретация, чувствительность (Se), специфичность (Sp) и верификация патологии.
           </Typography>
         </Box>
 
-        <Box sx={{ display: 'flex', gap: 1 }}>
+        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
           <Button
             size="small"
             variant="outlined"
-            onClick={handleExpandAll}
+            onClick={handleExpandVisible}
             startIcon={<UnfoldMoreIcon />}
             sx={{
               color: '#FFFFFF',
@@ -779,7 +910,7 @@ export const OrthoTestsGuideRegistry: React.FC = () => {
               '&:hover': { borderColor: '#FFFFFF', bgcolor: 'rgba(255,255,255,0.08)' }
             }}
           >
-            Развернуть все
+            Развернуть видимые ({visibleTests.length})
           </Button>
           <Button
             size="small"
@@ -795,41 +926,50 @@ export const OrthoTestsGuideRegistry: React.FC = () => {
               '&:hover': { borderColor: '#CBD5E1', bgcolor: 'rgba(255,255,255,0.05)' }
             }}
           >
-            Свернуть
+            Свернуть все
           </Button>
         </Box>
       </Paper>
 
       {/* Filter Chips & Search Bar */}
-      <Paper elevation={0} sx={{ p: 2, border: '1px solid #CBD5E1', borderRadius: 2, bgcolor: '#FFFFFF' }}>
+      <Paper elevation={0} sx={{ p: 2, border: '1px solid #CBD5E1', borderRadius: 2, bgcolor: '#FFFFFF', display: 'flex', flexDirection: 'column', gap: 2 }}>
+        {/* Row 1: Search and Joint Chips */}
         <Grid container spacing={2} sx={{ alignItems: 'center' }}>
-          <Grid size={{ xs: 12, md: 5 }}>
+          <Grid size={{ xs: 12, md: 4 }}>
             <TextField
               size="small"
               fullWidth
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Поиск по названию, симптому, ПКС, мениску, автору..."
+              placeholder="Поиск по тесту, симптому, ПКС, мениску, автору..."
               slotProps={{
                 input: {
                   startAdornment: (
                     <InputAdornment position="start">
                       <SearchIcon sx={{ color: '#64748B' }} />
                     </InputAdornment>
-                  )
+                  ),
+                  endAdornment: searchQuery ? (
+                    <InputAdornment position="end">
+                      <IconButton size="small" onClick={() => setSearchQuery('')}>
+                        <FilterAltOffIcon sx={{ fontSize: 16 }} />
+                      </IconButton>
+                    </InputAdornment>
+                  ) : undefined
                 }
               }}
             />
           </Grid>
 
-          <Grid size={{ xs: 12, md: 7 }}>
+          <Grid size={{ xs: 12, md: 8 }}>
             <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.8 }}>
-              {Object.entries(JOINT_NAMES).map(([key, data]) => {
+              {Object.entries(JOINT_LABELS).map(([key, data]) => {
                 const isSelected = selectedJoint === key;
+                const count = jointCounts[key] || 0;
                 return (
                   <Chip
                     key={key}
-                    label={data.label}
+                    label={`${data.label} (${count})`}
                     onClick={() => setSelectedJoint(key)}
                     variant={isSelected ? 'filled' : 'outlined'}
                     sx={{
@@ -848,242 +988,455 @@ export const OrthoTestsGuideRegistry: React.FC = () => {
             </Box>
           </Grid>
         </Grid>
+
+        {/* Row 2: Secondary Filters - Evidence Level and Test Types */}
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 1.5, pt: 1, borderTop: '1px solid #F1F5F9' }}>
+          {/* Evidence filters */}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8, flexWrap: 'wrap' }}>
+            <Typography variant="caption" sx={{ fontWeight: 800, color: '#475569', mr: 0.5 }}>
+              Класс доказательности:
+            </Typography>
+            <Chip
+              label={`Все уровни (${tests.length})`}
+              size="small"
+              onClick={() => setSelectedEvidence('all')}
+              variant={selectedEvidence === 'all' ? 'filled' : 'outlined'}
+              sx={{ fontWeight: 700, fontSize: '0.74rem', bgcolor: selectedEvidence === 'all' ? '#0F3C64' : 'transparent', color: selectedEvidence === 'all' ? '#FFF' : '#475569' }}
+            />
+            <Chip
+              label={`Класс A (${evidenceCounts['A'] || 0})`}
+              size="small"
+              onClick={() => setSelectedEvidence('A')}
+              variant={selectedEvidence === 'A' ? 'filled' : 'outlined'}
+              sx={{ fontWeight: 700, fontSize: '0.74rem', bgcolor: selectedEvidence === 'A' ? '#166534' : 'transparent', color: selectedEvidence === 'A' ? '#FFF' : '#166534', borderColor: '#166534' }}
+            />
+            <Chip
+              label={`Класс B (${evidenceCounts['B'] || 0})`}
+              size="small"
+              onClick={() => setSelectedEvidence('B')}
+              variant={selectedEvidence === 'B' ? 'filled' : 'outlined'}
+              sx={{ fontWeight: 700, fontSize: '0.74rem', bgcolor: selectedEvidence === 'B' ? '#6B21A8' : 'transparent', color: selectedEvidence === 'B' ? '#FFF' : '#6B21A8', borderColor: '#6B21A8' }}
+            />
+          </Box>
+
+          {/* Test types filters */}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8, flexWrap: 'wrap' }}>
+            <Typography variant="caption" sx={{ fontWeight: 800, color: '#475569', mr: 0.5 }}>
+              Тип теста:
+            </Typography>
+            <Chip
+              label={`Все (${tests.length})`}
+              size="small"
+              onClick={() => setSelectedType('all')}
+              variant={selectedType === 'all' ? 'filled' : 'outlined'}
+              sx={{ fontWeight: 700, fontSize: '0.74rem', bgcolor: selectedType === 'all' ? '#0F3C64' : 'transparent', color: selectedType === 'all' ? '#FFF' : '#475569' }}
+            />
+            {Object.entries(TEST_TYPE_LABELS).map(([k, meta]) => {
+              const isSelected = selectedType === k;
+              const c = typeCounts[k] || 0;
+              return (
+                <Chip
+                  key={k}
+                  label={`${meta.label} (${c})`}
+                  size="small"
+                  onClick={() => setSelectedType(k)}
+                  variant={isSelected ? 'filled' : 'outlined'}
+                  sx={{
+                    fontWeight: 700,
+                    fontSize: '0.74rem',
+                    bgcolor: isSelected ? meta.color : 'transparent',
+                    color: isSelected ? '#FFFFFF' : meta.color,
+                    borderColor: meta.color
+                  }}
+                />
+              );
+            })}
+            {(selectedJoint !== 'all' || selectedEvidence !== 'all' || selectedType !== 'all' || searchQuery) && (
+              <Button
+                size="small"
+                variant="text"
+                onClick={handleResetFilters}
+                startIcon={<FilterAltOffIcon sx={{ fontSize: 16 }} />}
+                sx={{ textTransform: 'none', color: '#DC2626', fontWeight: 700, fontSize: '0.75rem', ml: 1 }}
+              >
+                Сбросить
+              </Button>
+            )}
+          </Box>
+        </Box>
       </Paper>
 
-      {/* Counter summary */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', px: 0.5 }}>
+      {/* Top Pagination & Counter summary */}
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', px: 0.5, flexWrap: 'wrap', gap: 1 }}>
         <Typography variant="caption" sx={{ fontWeight: 700, color: '#64748B' }}>
-          Отображено тестов: <strong>{filteredTests.length}</strong> из {ORTHO_TESTS_REGISTRY.length}
+          Отображено тестов: <strong>{filteredTests.length}</strong> из {tests.length}
+          {filteredTests.length > 0 && rowsPerPage !== -1 && (
+            <span> (показаны <strong>{page * rowsPerPage + 1}–{Math.min((page + 1) * rowsPerPage, filteredTests.length)}</strong>)</span>
+          )}
         </Typography>
-        <Typography variant="caption" sx={{ color: '#0284C7', fontWeight: 600 }}>
-          Все 39 тестов доступны в АРМ врача (JointExamCard) и Справочнике 2.0
-        </Typography>
+        <TablePagination
+          component="div"
+          count={filteredTests.length}
+          page={page}
+          onPageChange={(_, newPage) => setPage(newPage)}
+          rowsPerPage={rowsPerPage}
+          onRowsPerPageChange={(e) => {
+            setRowsPerPage(parseInt(e.target.value, 10));
+            setPage(0);
+          }}
+          rowsPerPageOptions={[25, 50, 100, 250, { label: 'Все', value: -1 }]}
+          labelRowsPerPage="На странице:"
+          labelDisplayedRows={({ from, to, count }) => `${from}–${to} из ${count !== -1 ? count : `более чем ${to}`}`}
+          sx={{
+            '.MuiTablePagination-toolbar': { minHeight: 36, px: 1 },
+            '.MuiTablePagination-selectLabel, .MuiTablePagination-displayedRows': { fontSize: '0.75rem', fontWeight: 600, color: '#64748B' },
+            '.MuiTablePagination-select': { fontSize: '0.75rem' }
+          }}
+        />
       </Box>
 
       {/* Test Accordion List */}
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-        {filteredTests.map((test, index) => {
-          const isExpanded = Boolean(expandedTestCodes[test.code]);
-          return (
-            <Accordion
-              key={test.code}
-              expanded={isExpanded}
-              onChange={() => handleToggleExpand(test.code)}
-              elevation={0}
-              sx={{
-                border: '1px solid #CBD5E1',
-                borderRadius: '8px !important',
-                '&:before': { display: 'none' },
-                overflow: 'hidden',
-                transition: 'border-color 0.2s',
-                '&:hover': { borderColor: '#94A3B8' }
-              }}
-            >
-              <AccordionSummary
-                expandIcon={<ExpandMoreIcon />}
+        {visibleTests.length === 0 ? (
+          <Paper elevation={0} sx={{ p: 4, textAlign: 'center', border: '1px dashed #CBD5E1', borderRadius: 2 }}>
+            <Typography variant="body1" sx={{ color: '#64748B', fontWeight: 600 }}>
+              По заданным критериям тестов не найдено
+            </Typography>
+            <Button size="small" onClick={handleResetFilters} sx={{ mt: 1, textTransform: 'none' }}>
+              Сбросить все фильтры
+            </Button>
+          </Paper>
+        ) : (
+          visibleTests.map((test, index) => {
+            const isExpanded = Boolean(expandedTestCodes[test.code]);
+            const globalIndex = (rowsPerPage === -1 ? 0 : page * rowsPerPage) + index + 1;
+            const jointMeta = JOINT_LABELS[test.jointCategory] || JOINT_LABELS.general;
+            const typeMeta = test.testType ? TEST_TYPE_LABELS[test.testType] : undefined;
+
+            return (
+              <Accordion
+                key={test.code}
+                expanded={isExpanded}
+                onChange={(_, nextExpanded) => handleToggleExpand(test.code, nextExpanded)}
+                slotProps={{ transition: { unmountOnExit: true } }}
+                elevation={0}
                 sx={{
-                  bgcolor: isExpanded ? '#F1F5F9' : '#FFFFFF',
-                  px: 2,
-                  py: 1,
-                  borderBottom: isExpanded ? '1px solid #E2E8F0' : 'none'
+                  border: '1px solid #CBD5E1',
+                  borderRadius: '8px !important',
+                  '&:before': { display: 'none' },
+                  overflow: 'hidden',
+                  transition: 'border-color 0.2s',
+                  '&:hover': { borderColor: '#94A3B8' }
                 }}
               >
-                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', pr: 2, flexWrap: 'wrap', gap: 1 }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                    <Chip
-                      label={`#${index + 1}`}
-                      size="small"
-                      sx={{ bgcolor: '#E2E8F0', color: '#0F3C64', fontWeight: 800, height: 22, fontSize: '0.72rem' }}
-                    />
-                    <Box>
-                      <Typography sx={{ fontWeight: 800, color: '#0F3C64', fontSize: '0.96rem', lineHeight: 1.2 }}>
-                        {test.nameRu}
-                      </Typography>
-                      <Typography variant="caption" sx={{ color: '#64748B', fontStyle: 'italic' }}>
-                        {test.nameLat}
-                      </Typography>
+                <AccordionSummary
+                  expandIcon={<ExpandMoreIcon />}
+                  sx={{
+                    bgcolor: isExpanded ? '#F1F5F9' : '#FFFFFF',
+                    px: 2,
+                    py: 1,
+                    borderBottom: isExpanded ? '1px solid #E2E8F0' : 'none'
+                  }}
+                >
+                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', pr: 2, flexWrap: 'wrap', gap: 1 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flex: 1, minWidth: 280 }}>
+                      <Chip
+                        label={`#${globalIndex}`}
+                        size="small"
+                        sx={{ bgcolor: '#E2E8F0', color: '#0F3C64', fontWeight: 800, height: 22, fontSize: '0.72rem' }}
+                      />
+                      <Box>
+                        <Typography sx={{ fontWeight: 800, color: '#0F3C64', fontSize: '0.96rem', lineHeight: 1.25 }}>
+                          <LatexText text={test.nameRu} />
+                        </Typography>
+                        {test.nameLat && (
+                          <Typography variant="caption" sx={{ color: '#64748B', fontStyle: 'italic', display: 'block' }}>
+                            <LatexText text={test.nameLat} />
+                          </Typography>
+                        )}
+                      </Box>
+                    </Box>
+
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                      <Chip
+                        label={<LatexText text={test.targetStructure} />}
+                        size="small"
+                        variant="outlined"
+                        sx={{ fontWeight: 600, fontSize: '0.75rem', borderColor: jointMeta.color, color: jointMeta.color }}
+                      />
+                      {typeMeta && (
+                        <Chip
+                          label={typeMeta.label}
+                          size="small"
+                          sx={{ bgcolor: `${typeMeta.color}15`, color: typeMeta.color, fontWeight: 700, fontSize: '0.72rem' }}
+                        />
+                      )}
+                      {test.sensitivityPct !== null ? (
+                        <Chip
+                          label={`Se: ${test.sensitivityPct}%`}
+                          size="small"
+                          sx={{ bgcolor: '#DCFCE7', color: '#166534', fontWeight: 800, fontSize: '0.72rem' }}
+                        />
+                      ) : test.sensitivitySpecificityText ? (
+                        <Chip
+                          label={test.sensitivitySpecificityText}
+                          size="small"
+                          sx={{ bgcolor: '#F1F5F9', color: '#475569', fontWeight: 700, fontSize: '0.72rem' }}
+                        />
+                      ) : null}
+                      {test.specificityPct !== null && (
+                        <Chip
+                          label={`Sp: ${test.specificityPct}%`}
+                          size="small"
+                          sx={{ bgcolor: '#E0F2FE', color: '#0369A1', fontWeight: 800, fontSize: '0.72rem' }}
+                        />
+                      )}
+                      <Chip
+                        label={`Класс ${test.evidenceLevel}`}
+                        size="small"
+                        sx={{ bgcolor: test.evidenceLevel === 'A' ? '#DCFCE7' : '#F3E8FF', color: test.evidenceLevel === 'A' ? '#15803D' : '#6B21A8', fontWeight: 800, fontSize: '0.72rem' }}
+                      />
+                      {test.templatesCount !== undefined && test.templatesCount > 0 && (
+                        <Chip
+                          icon={<AssignmentIcon sx={{ fontSize: '13px !important' }} />}
+                          label={`В ${test.templatesCount} протоколах`}
+                          size="small"
+                          sx={{ bgcolor: '#EEF2FF', color: '#4338CA', fontWeight: 700, fontSize: '0.72rem' }}
+                        />
+                      )}
                     </Box>
                   </Box>
+                </AccordionSummary>
 
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-                    <Chip
-                      label={test.targetStructure}
-                      size="small"
-                      variant="outlined"
-                      sx={{ fontWeight: 600, fontSize: '0.75rem', borderColor: '#94A3B8' }}
-                    />
-                    <Chip
-                      label={`Se: ${test.sensitivityPct}%`}
-                      size="small"
-                      sx={{ bgcolor: '#DCFCE7', color: '#166534', fontWeight: 800, fontSize: '0.72rem' }}
-                    />
-                    <Chip
-                      label={`Sp: ${test.specificityPct}%`}
-                      size="small"
-                      sx={{ bgcolor: '#E0F2FE', color: '#0369A1', fontWeight: 800, fontSize: '0.72rem' }}
-                    />
-                    <Chip
-                      label={`Класс ${test.evidenceLevel}`}
-                      size="small"
-                      sx={{ bgcolor: '#F3E8FF', color: '#6B21A8', fontWeight: 800, fontSize: '0.72rem' }}
-                    />
-                  </Box>
-                </Box>
-              </AccordionSummary>
+                <AccordionDetails sx={{ p: 2.5, bgcolor: '#FAFAFA' }}>
+                  <Grid container spacing={2}>
+                    {/* Step 1: Patient Position */}
+                    <Grid size={{ xs: 12 }}>
+                      <Paper
+                        elevation={0}
+                        sx={{
+                          p: 1.5,
+                          bgcolor: '#FFFFFF',
+                          border: '1px solid #BAE6FD',
+                          borderLeft: '4px solid #0284C7',
+                          borderRadius: 1.5
+                        }}
+                      >
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+                          <AccessibilityNewIcon sx={{ color: '#0284C7', fontSize: 18 }} />
+                          <Typography variant="caption" sx={{ fontWeight: 800, color: '#0369A1', textTransform: 'uppercase' }}>
+                            1. Исходное положение пациента и сустава
+                          </Typography>
+                        </Box>
+                        <Typography variant="body2" sx={{ color: '#1E293B', pl: 3.2, fontSize: '0.88rem', lineHeight: 1.5 }}>
+                          <LatexText text={test.patientPosition} />
+                        </Typography>
+                      </Paper>
+                    </Grid>
 
-              <AccordionDetails sx={{ p: 2.5, bgcolor: '#FAFAFA' }}>
-                <Grid container spacing={2}>
-                  {/* Step 1: Patient Position */}
-                  <Grid size={{ xs: 12 }}>
-                    <Paper
-                      elevation={0}
-                      sx={{
-                        p: 1.5,
-                        bgcolor: '#FFFFFF',
-                        border: '1px solid #BAE6FD',
-                        borderLeft: '4px solid #0284C7',
-                        borderRadius: 1.5
-                      }}
-                    >
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
-                        <AccessibilityNewIcon sx={{ color: '#0284C7', fontSize: 18 }} />
-                        <Typography variant="caption" sx={{ fontWeight: 800, color: '#0369A1', textTransform: 'uppercase' }}>
-                          1. Исходное положение пациента и сустава
+                    {/* Step 2: Hand Placement */}
+                    <Grid size={{ xs: 12 }}>
+                      <Paper
+                        elevation={0}
+                        sx={{
+                          p: 1.5,
+                          bgcolor: '#FFFFFF',
+                          border: '1px solid #BFDBFE',
+                          borderLeft: '4px solid #2563EB',
+                          borderRadius: 1.5
+                        }}
+                      >
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+                          <PanToolIcon sx={{ color: '#2563EB', fontSize: 18 }} />
+                          <Typography variant="caption" sx={{ fontWeight: 800, color: '#1D4ED8', textTransform: 'uppercase' }}>
+                            2. Расположение рук врача и стабилизация
+                          </Typography>
+                        </Box>
+                        <Typography variant="body2" sx={{ color: '#1E293B', pl: 3.2, fontSize: '0.88rem', lineHeight: 1.5 }}>
+                          <LatexText text={test.doctorHandPlacement} />
+                        </Typography>
+                      </Paper>
+                    </Grid>
+
+                    {/* Step 3: Applied Force */}
+                    <Grid size={{ xs: 12 }}>
+                      <Paper
+                        elevation={0}
+                        sx={{
+                          p: 1.5,
+                          bgcolor: '#FFFFFF',
+                          border: '1px solid #FED7AA',
+                          borderLeft: '4px solid #F59E0B',
+                          borderRadius: 1.5
+                        }}
+                      >
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+                          <TrendingFlatIcon sx={{ color: '#D97706', fontSize: 18 }} />
+                          <Typography variant="caption" sx={{ fontWeight: 800, color: '#B45309', textTransform: 'uppercase' }}>
+                            3. Вектор нагрузки и динамика теста
+                          </Typography>
+                        </Box>
+                        <Typography variant="body2" sx={{ color: '#1E293B', pl: 3.2, fontSize: '0.88rem', lineHeight: 1.5 }}>
+                          <LatexText text={test.appliedForceDirection} />
+                        </Typography>
+                      </Paper>
+                    </Grid>
+
+                    {/* Step 4: Step-by-step methodology if present */}
+                    {test.methodology && test.methodology !== test.appliedForceDirection && (
+                      <Grid size={{ xs: 12 }}>
+                        <Paper
+                          elevation={0}
+                          sx={{
+                            p: 1.5,
+                            bgcolor: '#FFFFFF',
+                            border: '1px solid #E2E8F0',
+                            borderLeft: '4px solid #0F3C64',
+                            borderRadius: 1.5
+                          }}
+                        >
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+                            <BiotechIcon sx={{ color: '#0F3C64', fontSize: 18 }} />
+                            <Typography variant="caption" sx={{ fontWeight: 800, color: '#0F3C64', textTransform: 'uppercase' }}>
+                              Пошаговая клиническая методика проведения
+                            </Typography>
+                          </Box>
+                          <Typography variant="body2" sx={{ color: '#1E293B', pl: 3.2, fontSize: '0.88rem', lineHeight: 1.5 }}>
+                            <LatexText text={test.methodology} />
+                          </Typography>
+                        </Paper>
+                      </Grid>
+                    )}
+
+                    {/* Diagnostic Outcome: Positive & Clinical Interpretation */}
+                    <Grid size={{ xs: 12, md: 6 }}>
+                      <Paper
+                        elevation={0}
+                        sx={{
+                          p: 1.5,
+                          bgcolor: '#FEF2F2',
+                          border: '1px solid #FCA5A5',
+                          borderLeft: '4px solid #DC2626',
+                          borderRadius: 1.5,
+                          height: '100%'
+                        }}
+                      >
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+                          <WarningAmberIcon sx={{ color: '#DC2626', fontSize: 18 }} />
+                          <Typography variant="caption" sx={{ fontWeight: 800, color: '#991B1B', textTransform: 'uppercase' }}>
+                            Критерий положительного отклика (+)
+                          </Typography>
+                        </Box>
+                        <Typography variant="body2" sx={{ color: '#7F1D1D', fontWeight: 600, pl: 3.2, fontSize: '0.86rem', lineHeight: 1.5 }}>
+                          <LatexText text={test.positiveCriteria} />
+                        </Typography>
+                      </Paper>
+                    </Grid>
+
+                    <Grid size={{ xs: 12, md: 6 }}>
+                      <Paper
+                        elevation={0}
+                        sx={{
+                          p: 1.5,
+                          bgcolor: '#EEF2FF',
+                          border: '1px solid #C7D2FE',
+                          borderLeft: '4px solid #4F46E5',
+                          borderRadius: 1.5,
+                          height: '100%'
+                        }}
+                      >
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+                          <LocalHospitalIcon sx={{ color: '#4F46E5', fontSize: 18 }} />
+                          <Typography variant="caption" sx={{ fontWeight: 800, color: '#3730A3', textTransform: 'uppercase' }}>
+                            Клиническая интерпретация и нозологии
+                          </Typography>
+                        </Box>
+                        <Typography variant="body2" sx={{ color: '#312E81', pl: 3.2, fontSize: '0.86rem', lineHeight: 1.5 }}>
+                          <LatexText text={test.clinicalInterpretation} />
+                        </Typography>
+                      </Paper>
+                    </Grid>
+
+                    {/* False Positive Pitfalls */}
+                    <Grid size={{ xs: 12 }}>
+                      <Paper
+                        elevation={0}
+                        sx={{
+                          p: 1.5,
+                          bgcolor: '#FFFBEB',
+                          border: '1px solid #FDE68A',
+                          borderRadius: 1.5,
+                          display: 'flex',
+                          gap: 1.5
+                        }}
+                      >
+                        <HelpOutlineIcon sx={{ color: '#D97706', fontSize: 20, mt: 0.2 }} />
+                        <Box>
+                          <Typography variant="caption" sx={{ fontWeight: 800, color: '#92400E', textTransform: 'uppercase' }}>
+                            Факторы ложных результатов и дифференциальный диагноз:
+                          </Typography>
+                          <Typography variant="body2" sx={{ color: '#78350F', mt: 0.2, fontSize: '0.85rem', lineHeight: 1.5 }}>
+                            <LatexText text={test.falsePositiveFactors} />
+                          </Typography>
+                        </Box>
+                      </Paper>
+                    </Grid>
+
+                    {/* Meta Bar */}
+                    <Grid size={{ xs: 12 }}>
+                      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, pt: 1, borderTop: '1px solid #E2E8F0', alignItems: 'center' }}>
+                        <Typography variant="caption" sx={{ color: '#64748B', fontWeight: 600 }}>
+                          Код в базе: <code>{test.code}</code>
+                        </Typography>
+                        <Typography variant="caption" sx={{ color: '#94A3B8' }}>•</Typography>
+                        <Typography variant="caption" sx={{ color: '#64748B', fontWeight: 600 }}>
+                          Зона: <strong>{jointMeta.label}</strong>
+                        </Typography>
+                        {test.priorityLevel && (
+                          <>
+                            <Typography variant="caption" sx={{ color: '#94A3B8' }}>•</Typography>
+                            <Typography variant="caption" sx={{ color: '#64748B', fontWeight: 600 }}>
+                              Приоритет: <strong>{test.priorityLevel === 'high' ? 'Высокий (Tier 1)' : test.priorityLevel === 'medium' ? 'Средний (Tier 2)' : 'Уточняющий (Tier 3)'}</strong>
+                            </Typography>
+                          </>
+                        )}
+                        <Typography variant="caption" sx={{ color: '#94A3B8' }}>•</Typography>
+                        <Typography variant="caption" sx={{ color: '#64748B', fontWeight: 600 }}>
+                          Доказательный регламент: <strong>Класс {test.evidenceLevel}</strong>
                         </Typography>
                       </Box>
-                      <Typography variant="body2" sx={{ color: '#1E293B', pl: 3.2, fontSize: '0.88rem', lineHeight: 1.5 }}>
-                        {test.patientPosition}
-                      </Typography>
-                    </Paper>
+                    </Grid>
                   </Grid>
-
-                  {/* Step 2: Hand Placement */}
-                  <Grid size={{ xs: 12 }}>
-                    <Paper
-                      elevation={0}
-                      sx={{
-                        p: 1.5,
-                        bgcolor: '#FFFFFF',
-                        border: '1px solid #BFDBFE',
-                        borderLeft: '4px solid #2563EB',
-                        borderRadius: 1.5
-                      }}
-                    >
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
-                        <PanToolIcon sx={{ color: '#2563EB', fontSize: 18 }} />
-                        <Typography variant="caption" sx={{ fontWeight: 800, color: '#1D4ED8', textTransform: 'uppercase' }}>
-                          2. Расположение рук врача и стабилизация
-                        </Typography>
-                      </Box>
-                      <Typography variant="body2" sx={{ color: '#1E293B', pl: 3.2, fontSize: '0.88rem', lineHeight: 1.5 }}>
-                        {test.doctorHandPlacement}
-                      </Typography>
-                    </Paper>
-                  </Grid>
-
-                  {/* Step 3: Applied Force */}
-                  <Grid size={{ xs: 12 }}>
-                    <Paper
-                      elevation={0}
-                      sx={{
-                        p: 1.5,
-                        bgcolor: '#FFFFFF',
-                        border: '1px solid #FED7AA',
-                        borderLeft: '4px solid #F59E0B',
-                        borderRadius: 1.5
-                      }}
-                    >
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
-                        <TrendingFlatIcon sx={{ color: '#D97706', fontSize: 18 }} />
-                        <Typography variant="caption" sx={{ fontWeight: 800, color: '#B45309', textTransform: 'uppercase' }}>
-                          3. Вектор нагрузки и динамика теста
-                        </Typography>
-                      </Box>
-                      <Typography variant="body2" sx={{ color: '#1E293B', pl: 3.2, fontSize: '0.88rem', lineHeight: 1.5 }}>
-                        {test.appliedForceDirection}
-                      </Typography>
-                    </Paper>
-                  </Grid>
-
-                  {/* Diagnostic Outcome: Positive & Clinical Interpretation */}
-                  <Grid size={{ xs: 12, md: 6 }}>
-                    <Paper
-                      elevation={0}
-                      sx={{
-                        p: 1.5,
-                        bgcolor: '#FEF2F2',
-                        border: '1px solid #FCA5A5',
-                        borderLeft: '4px solid #DC2626',
-                        borderRadius: 1.5,
-                        height: '100%'
-                      }}
-                    >
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
-                        <WarningAmberIcon sx={{ color: '#DC2626', fontSize: 18 }} />
-                        <Typography variant="caption" sx={{ fontWeight: 800, color: '#991B1B', textTransform: 'uppercase' }}>
-                          Критерий положительного отклика (+)
-                        </Typography>
-                      </Box>
-                      <Typography variant="body2" sx={{ color: '#7F1D1D', fontWeight: 600, pl: 3.2, fontSize: '0.86rem', lineHeight: 1.5 }}>
-                        {test.positiveCriteria}
-                      </Typography>
-                    </Paper>
-                  </Grid>
-
-                  <Grid size={{ xs: 12, md: 6 }}>
-                    <Paper
-                      elevation={0}
-                      sx={{
-                        p: 1.5,
-                        bgcolor: '#EEF2FF',
-                        border: '1px solid #C7D2FE',
-                        borderLeft: '4px solid #4F46E5',
-                        borderRadius: 1.5,
-                        height: '100%'
-                      }}
-                    >
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
-                        <LocalHospitalIcon sx={{ color: '#4F46E5', fontSize: 18 }} />
-                        <Typography variant="caption" sx={{ fontWeight: 800, color: '#3730A3', textTransform: 'uppercase' }}>
-                          Клиническая интерпретация и нозологии
-                        </Typography>
-                      </Box>
-                      <Typography variant="body2" sx={{ color: '#312E81', pl: 3.2, fontSize: '0.86rem', lineHeight: 1.5 }}>
-                        {test.clinicalInterpretation}
-                      </Typography>
-                    </Paper>
-                  </Grid>
-
-                  {/* False Positive Pitfalls */}
-                  <Grid size={{ xs: 12 }}>
-                    <Paper
-                      elevation={0}
-                      sx={{
-                        p: 1.5,
-                        bgcolor: '#FFFBEB',
-                        border: '1px solid #FDE68A',
-                        borderRadius: 1.5,
-                        display: 'flex',
-                        gap: 1.5
-                      }}
-                    >
-                      <HelpOutlineIcon sx={{ color: '#D97706', fontSize: 20, mt: 0.2 }} />
-                      <Box>
-                        <Typography variant="caption" sx={{ fontWeight: 800, color: '#92400E', textTransform: 'uppercase' }}>
-                          Факторы ложных результатов и дифференциальный диагноз:
-                        </Typography>
-                        <Typography variant="body2" sx={{ color: '#78350F', mt: 0.2, fontSize: '0.85rem', lineHeight: 1.5 }}>
-                          {test.falsePositiveFactors}
-                        </Typography>
-                      </Box>
-                    </Paper>
-                  </Grid>
-                </Grid>
-              </AccordionDetails>
-            </Accordion>
-          );
-        })}
+                </AccordionDetails>
+              </Accordion>
+            );
+          })
+        )}
       </Box>
+
+      {/* Bottom Pagination */}
+      {filteredTests.length > 25 && (
+        <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1, bgcolor: '#FFFFFF', p: 1, borderRadius: 2, border: '1px solid #E2E8F0' }}>
+          <TablePagination
+            component="div"
+            count={filteredTests.length}
+            page={page}
+            onPageChange={(_, newPage) => setPage(newPage)}
+            rowsPerPage={rowsPerPage}
+            onRowsPerPageChange={(e) => {
+              setRowsPerPage(parseInt(e.target.value, 10));
+              setPage(0);
+            }}
+            rowsPerPageOptions={[25, 50, 100, 250, { label: 'Все', value: -1 }]}
+            labelRowsPerPage="На странице:"
+            labelDisplayedRows={({ from, to, count }) => `${from}–${to} из ${count !== -1 ? count : `более чем ${to}`}`}
+            sx={{
+              '.MuiTablePagination-toolbar': { minHeight: 40, px: 1 },
+              '.MuiTablePagination-selectLabel, .MuiTablePagination-displayedRows': { fontSize: '0.8rem', fontWeight: 600, color: '#475569' }
+            }}
+          />
+        </Box>
+      )}
     </Box>
   );
 };
