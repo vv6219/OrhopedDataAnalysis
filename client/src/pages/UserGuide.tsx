@@ -107,7 +107,7 @@ export default function UserGuide() {
 
   const handlePrintTrigger = useReactToPrint({
     contentRef: printRef,
-    documentTitle: `Руководство_пользователя_ОртоERP_v1.4.3_${new Date().toISOString().slice(0, 10)}`,
+    documentTitle: `Руководство_пользователя_ОртоERP_v1.4.4_${new Date().toISOString().slice(0, 10)}`,
     pageStyle: `
       @page {
         size: A4 portrait;
@@ -1533,7 +1533,7 @@ export default function UserGuide() {
               Инструкция пользователя МИС «ОртоERP»
             </Typography>
             <Chip
-              label="v1.4.3"
+              label="v1.4.4"
               size="small"
               sx={{ bgcolor: '#EBF8FF', color: '#0F3C64', fontWeight: 800, border: '1px solid #BEE3F8' }}
             />

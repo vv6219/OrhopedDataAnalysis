@@ -1021,10 +1021,10 @@ export default function Sidebar() {
         </Box>
         {!isCollapsed ? (
           <Typography variant="caption" sx={{ color: '#A0AEC0', fontSize: '0.68rem', fontWeight: 600 }}>
-            v1.4.3
+            v1.4.4
           </Typography>
         ) : (
-          <Tooltip title="Версия ERP: v1.4.3" placement="right" arrow>
+          <Tooltip title="Версия ERP: v1.4.4" placement="right" arrow>
             <Typography variant="caption" sx={{ color: '#A0AEC0', fontSize: '0.65rem', fontWeight: 700, cursor: 'default' }}>
               v1.4
             </Typography>

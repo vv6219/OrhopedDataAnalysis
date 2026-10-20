@@ -7,7 +7,7 @@ interface UserGuidePrintProps {
 }
 
 export const UserGuidePrintTemplate = React.forwardRef<HTMLDivElement, UserGuidePrintProps>(
-  ({ version = '1.4.3', date = new Date().toLocaleDateString('ru-RU') }, ref) => {
+  ({ version = '1.4.4', date = new Date().toLocaleDateString('ru-RU') }, ref) => {
     return (
       <Box 
         ref={ref} 
@@ -188,7 +188,7 @@ export const UserGuidePrintTemplate = React.forwardRef<HTMLDivElement, UserGuide
             5. Мониторинг служб бэкенда и тестовый контур [TEST_DAEMON]
           </Typography>
           <Typography variant="body2" sx={{ fontSize: '9pt', color: '#2D3748', mb: 1 }}>
-            В версию 1.4.3 включены административные инструменты мониторинга инфраструктуры и валидации:
+            В версию 1.4.4 включены административные инструменты мониторинга инфраструктуры и валидации:
           </Typography>
           <Box component="ul" sx={{ pl: 2.5, m: 0, fontSize: '8.5pt', color: '#2D3748', '& li': { mb: 0.4 } }}>
             <li><strong>Службы бэкенда (`/admin/server-health`):</strong> Сквозной мониторинг 6 компонентов (Express порт 5000, SQLite integrity ok, Fiscal Daemon 5050, Firebird МИС 3050, Swagger /api-docs, Hot Backup). Запуск теста всех служб в 1 клик с терминальным логом.</li>
