@@ -41,6 +41,16 @@ app.use('/api/admin/services', servicesHealthRoutes);
 const { requireAuth, swaggerBasicAuth } = require('./auth');
 const authRoutes = require('./authRoutes');
 app.use('/api/auth', authRoutes);
+
+const userRoutes = require('./userRoutes');
+app.use('/api/users', userRoutes);
+
+const permissionRoutes = require('./permissionRoutes');
+app.use('/api/permissions', permissionRoutes);
+
+const menuConfigRoutes = require('./menuConfigRoutes');
+app.use('/api/menu-permissions', menuConfigRoutes);
+
 app.use('/api/db', requireAuth);
 
 // ============================================================================

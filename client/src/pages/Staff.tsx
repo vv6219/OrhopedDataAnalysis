@@ -47,6 +47,8 @@ import RefreshIcon from '@mui/icons-material/Refresh';
 import PhoneIcon from '@mui/icons-material/Phone';
 import EmailIcon from '@mui/icons-material/Email';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import BeachAccessIcon from '@mui/icons-material/BeachAccess';
+import ArchiveIcon from '@mui/icons-material/Archive';
 import MedicalServicesIcon from '@mui/icons-material/MedicalServices';
 import PeopleIcon from '@mui/icons-material/People';
 import BarChartIcon from '@mui/icons-material/BarChart';
@@ -379,22 +381,32 @@ export default function Staff() {
   };
 
   const columns: GridColDef[] = [
-    { field: 'id', headerName: '№', width: 50, minWidth: 45, align: 'center', headerAlign: 'center' },
+    {
+      field: 'id',
+      headerName: '№',
+      description: 'Порядковый номер записи в кадровом реестре',
+      width: 55,
+      minWidth: 50,
+      align: 'center',
+      headerAlign: 'center'
+    },
     {
       field: 'full_name',
       headerName: 'ФИО Сотрудника',
+      description: 'Фамилия, Имя и Отчество сотрудника клиники',
       flex: 2,
-      minWidth: 200,
+      minWidth: 220,
       filterOperators: customStringOperators,
       renderCell: (params) => {
         const name = String(params.value || '');
         const isInformal = name.trim().split(' ').length < 2;
+        const isArchived = params.row.status === 'archive';
 
         return (
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.2, width: '100%', py: 0.5 }}>
             <Avatar
               sx={{
-                bgcolor: '#0F3C64',
+                bgcolor: isArchived ? '#64748B' : '#0F3C64',
                 width: 32,
                 height: 32,
                 fontSize: '0.8rem',
@@ -409,7 +421,7 @@ export default function Staff() {
                 variant="body2"
                 sx={{
                   fontWeight: 700,
-                  color: '#0F3C64',
+                  color: isArchived ? '#475569' : '#0F3C64',
                   fontSize: '0.86rem',
                   lineHeight: 1.25,
                   whiteSpace: 'normal',
@@ -442,6 +454,7 @@ export default function Staff() {
     {
       field: 'role',
       headerName: 'Должность / Роль',
+      description: 'Штатная должность сотрудника в структуре клиники',
       flex: 1.3,
       minWidth: 160,
       filterOperators: customStringOperators,
@@ -454,6 +467,7 @@ export default function Staff() {
     {
       field: 'specialization',
       headerName: 'Специализация / Направление',
+      description: 'Клинические направления работы, манипуляции и профессиональные компетенции',
       flex: 1.5,
       minWidth: 175,
       filterOperators: customStringOperators,
@@ -461,12 +475,13 @@ export default function Staff() {
         <Typography
           variant="body2"
           sx={{
-            color: '#4A5568',
+            color: params.value ? '#334155' : '#94A3B8',
             fontSize: '0.82rem',
             whiteSpace: 'normal',
             wordBreak: 'break-word',
             lineHeight: 1.3,
-            py: 0.5
+            py: 0.5,
+            fontStyle: params.value ? 'normal' : 'italic'
           }}
         >
           {params.value || 'Общая практика'}
@@ -476,26 +491,30 @@ export default function Staff() {
     {
       field: 'contact_phone',
       headerName: 'Контактный телефон',
-      width: 150,
-      minWidth: 140,
+      description: 'Рабочий или мобильный телефон для экстренной связи и SMS-оповещений',
+      width: 165,
+      minWidth: 150,
       filterOperators: customStringOperators,
-      renderCell: (params) => params.value ? (
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, color: '#2D3748' }}>
+      renderCell: (params) => (params.value && String(params.value).trim()) ? (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6, color: '#1E293B' }}>
           <PhoneIcon sx={{ fontSize: 15, color: '#0F3C64', flexShrink: 0 }} />
-          <Typography variant="body2" sx={{ fontSize: '0.82rem', whiteSpace: 'nowrap' }}>{params.value}</Typography>
+          <Typography variant="body2" sx={{ fontSize: '0.82rem', fontWeight: 600, whiteSpace: 'nowrap' }}>
+            {params.value}
+          </Typography>
         </Box>
       ) : (
-        <Chip label="Не указан" size="small" sx={{ height: 20, fontSize: '0.7rem', bgcolor: '#FEF2F2', color: '#DC2626', fontWeight: 600 }} />
+        <Chip label="Не указан" size="small" sx={{ height: 20, fontSize: '0.7rem', bgcolor: '#FEF2F2', color: '#DC2626', fontWeight: 600, border: '1px solid #FECACA' }} />
       )
     },
     {
       field: 'email',
       headerName: 'Корпоративный Email',
+      description: 'Корпоративная электронная почта для доступа в МИС и отчетов',
       flex: 1.2,
       minWidth: 165,
       filterOperators: customStringOperators,
-      renderCell: (params) => params.value ? (
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, color: '#2D3748', width: '100%' }}>
+      renderCell: (params) => (params.value && String(params.value).trim()) ? (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6, color: '#1E293B', width: '100%' }}>
           <EmailIcon sx={{ fontSize: 15, color: '#0284C7', flexShrink: 0 }} />
           <Typography
             variant="body2"
@@ -503,38 +522,88 @@ export default function Staff() {
               fontSize: '0.82rem',
               whiteSpace: 'normal',
               wordBreak: 'break-all',
-              lineHeight: 1.25
+              lineHeight: 1.25,
+              color: '#0369A1'
             }}
           >
             {params.value}
           </Typography>
         </Box>
       ) : (
-        <Chip label="Не указан" size="small" sx={{ height: 20, fontSize: '0.7rem', bgcolor: '#FEF2F2', color: '#DC2626', fontWeight: 600 }} />
+        <Chip label="Не указан" size="small" sx={{ height: 20, fontSize: '0.7rem', bgcolor: '#FEF2F2', color: '#DC2626', fontWeight: 600, border: '1px solid #FECACA' }} />
       )
     },
     {
       field: 'status',
-      headerName: 'Статус',
-      width: 110,
-      minWidth: 105,
+      headerName: 'Статус занятости',
+      description: 'Текущий статус сотрудника: Работает в клинике, В отпуске, Архивный сотрудник',
+      width: 155,
+      minWidth: 140,
       align: 'center',
       headerAlign: 'center',
+      filterOperators: customStringOperators,
+      valueGetter: (_value, row) => {
+        const val = String(row.status || 'active').toLowerCase();
+        if (val === 'archive') return 'Архивный сотрудник';
+        if (val === 'vacation') return 'В отпуске';
+        return 'Работает в клинике';
+      },
       renderCell: (params) => {
-        const isActive = params.value === 'active' || !params.value;
+        const val = String(params.row.status || 'active').toLowerCase();
+        if (val === 'archive') {
+          return (
+            <Tooltip title="Архивный сотрудник: трудовые отношения прекращены, карточка в архиве, приём пациентов закрыт" arrow enterDelay={150}>
+              <Chip
+                size="small"
+                icon={<ArchiveIcon style={{ color: '#475569', fontSize: 14 }} />}
+                label="Архивный"
+                sx={{
+                  height: 24,
+                  fontSize: '0.73rem',
+                  fontWeight: 700,
+                  bgcolor: '#F1F5F9',
+                  color: '#475569',
+                  border: '1px solid #CBD5E1'
+                }}
+              />
+            </Tooltip>
+          );
+        }
+        if (val === 'vacation') {
+          return (
+            <Tooltip title="В отпуске: сотрудник временно находится в отпуске, запись приостановлена" arrow enterDelay={150}>
+              <Chip
+                size="small"
+                icon={<BeachAccessIcon style={{ color: '#B45309', fontSize: 14 }} />}
+                label="В отпуске"
+                sx={{
+                  height: 24,
+                  fontSize: '0.73rem',
+                  fontWeight: 700,
+                  bgcolor: '#FEF3C7',
+                  color: '#B45309',
+                  border: '1px solid #FCD34D'
+                }}
+              />
+            </Tooltip>
+          );
+        }
         return (
-          <Chip
-            size="small"
-            icon={<CheckCircleIcon style={{ color: isActive ? '#16A34A' : '#94A3B8', fontSize: 13 }} />}
-            label={isActive ? 'Работает' : 'В отпуске'}
-            sx={{
-              height: 22,
-              fontSize: '0.72rem',
-              fontWeight: 600,
-              bgcolor: isActive ? '#DCFCE7' : '#F1F5F9',
-              color: isActive ? '#166534' : '#64748B'
-            }}
-          />
+          <Tooltip title="Работает в клинике: сотрудник активен в штате, открыт для расписания и приемов" arrow enterDelay={150}>
+            <Chip
+              size="small"
+              icon={<CheckCircleIcon style={{ color: '#16A34A', fontSize: 14 }} />}
+              label="Работает"
+              sx={{
+                height: 24,
+                fontSize: '0.73rem',
+                fontWeight: 700,
+                bgcolor: '#DCFCE7',
+                color: '#166534',
+                border: '1px solid #86EFAC'
+              }}
+            />
+          </Tooltip>
         );
       }
     },
@@ -542,13 +611,14 @@ export default function Staff() {
       field: 'actions',
       type: 'actions',
       headerName: 'Действия',
-      width: 80,
+      description: 'Управление карточкой сотрудника (редактирование, удаление)',
+      width: 85,
       minWidth: 75,
       getActions: (params) => [
         <GridActionsCellItem
           key="edit"
           icon={
-            <Tooltip title="Редактировать данные сотрудника" arrow enterDelay={200}>
+            <Tooltip title="Редактировать данные сотрудника" arrow enterDelay={150}>
               <EditIcon sx={{ color: '#0F3C64', fontSize: 18 }} />
             </Tooltip>
           }
@@ -558,7 +628,7 @@ export default function Staff() {
         <GridActionsCellItem
           key="delete"
           icon={
-            <Tooltip title="Удалить сотрудника из штатного реестра" arrow enterDelay={200}>
+            <Tooltip title="Удалить сотрудника из штатного реестра" arrow enterDelay={150}>
               <DeleteIcon sx={{ color: '#DC2626', fontSize: 18 }} />
             </Tooltip>
           }
@@ -732,17 +802,44 @@ export default function Staff() {
               }}
               slots={{ 
                 toolbar: CustomStaffToolbar,
-                footer: () => (
-                  <GridFooterContainer sx={{ p: 1 }}>
-                    <Box sx={{ px: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <Typography variant="body2" sx={{ fontWeight: 700, color: '#0F3C64' }}>
-                        Всего сотрудников в текущем списке: {staffList.length}
-                      </Typography>
-                    </Box>
-                    <Box sx={{ flexGrow: 1 }} />
-                    <GridPagination />
-                  </GridFooterContainer>
-                )
+                footer: () => {
+                  const activeCount = staffList.filter((s) => s.status === 'active' || !s.status).length;
+                  const vacationCount = staffList.filter((s) => s.status === 'vacation').length;
+                  const archiveCount = staffList.filter((s) => s.status === 'archive').length;
+
+                  return (
+                    <GridFooterContainer sx={{ p: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1 }}>
+                      <Box sx={{ px: 2, display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
+                        <Typography variant="body2" sx={{ fontWeight: 700, color: '#0F3C64' }}>
+                          Всего сотрудников: {staffList.length}
+                        </Typography>
+                        <Chip
+                          size="small"
+                          icon={<CheckCircleIcon style={{ color: '#16A34A', fontSize: 13 }} />}
+                          label={`Работают: ${activeCount}`}
+                          sx={{ height: 20, fontSize: '0.7rem', fontWeight: 700, bgcolor: '#DCFCE7', color: '#166534' }}
+                        />
+                        {vacationCount > 0 && (
+                          <Chip
+                            size="small"
+                            icon={<BeachAccessIcon style={{ color: '#D97706', fontSize: 13 }} />}
+                            label={`В отпуске: ${vacationCount}`}
+                            sx={{ height: 20, fontSize: '0.7rem', fontWeight: 700, bgcolor: '#FEF3C7', color: '#B45309' }}
+                          />
+                        )}
+                        {archiveCount > 0 && (
+                          <Chip
+                            size="small"
+                            icon={<ArchiveIcon style={{ color: '#64748B', fontSize: 13 }} />}
+                            label={`В архиве: ${archiveCount}`}
+                            sx={{ height: 20, fontSize: '0.7rem', fontWeight: 700, bgcolor: '#F1F5F9', color: '#475569' }}
+                          />
+                        )}
+                      </Box>
+                      <GridPagination />
+                    </GridFooterContainer>
+                  );
+                }
               }}
               slotProps={{
                 toolbar: {
@@ -772,10 +869,10 @@ export default function Staff() {
                         <Typography variant="body2" sx={{ fontWeight: 600, color: '#64748B' }}>Штатный состав</Typography>
                       </Box>
                       <Typography variant="h5" sx={{ fontWeight: 800, color: '#0F3C64', my: 0.5 }}>
-                        {analytics?.totals?.totalStaff || 5} специалистов
+                        {analytics?.totals?.totalStaff || staffList.length || 5} специалистов
                       </Typography>
                       <Typography variant="caption" sx={{ color: '#16A34A', fontWeight: 600 }}>
-                        100% активны в штате
+                        {analytics?.totals?.activeStaff || staffList.filter(s => s.status === 'active' || !s.status).length} активны в клинике
                       </Typography>
                     </Paper>
                   </Tooltip>
@@ -1158,17 +1255,23 @@ export default function Staff() {
                       <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
                         <Typography variant="body2" sx={{ fontWeight: 600 }}>Активный статус в штате</Typography>
                         <Typography variant="body2" sx={{ fontWeight: 700, color: '#16A34A' }}>
-                          {analytics?.dataQuality?.completeness?.activeStatus?.pct || 100.0}%
+                          {analytics?.dataQuality?.completeness?.activeStatus?.pct || 60.0}%
                         </Typography>
                       </Box>
                       <LinearProgress
                         variant="determinate"
-                        value={analytics?.dataQuality?.completeness?.activeStatus?.pct || 100.0}
+                        value={analytics?.dataQuality?.completeness?.activeStatus?.pct || 60.0}
                         sx={{ height: 8, borderRadius: 4, bgcolor: '#F1F5F9', '& .MuiLinearProgress-bar': { bgcolor: '#16A34A' } }}
                       />
                       <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.5 }}>
-                        <Typography variant="caption" color="text.secondary">5 из 5 сотрудников</Typography>
-                        <Chip label="Отлично" size="small" sx={{ height: 18, fontSize: '0.65rem', bgcolor: '#DCFCE7', color: '#166534', fontWeight: 700 }} />
+                        <Typography variant="caption" color="text.secondary">
+                          {analytics?.dataQuality?.completeness?.activeStatus?.count || 3} из {analytics?.totals?.totalStaff || 5} сотрудников
+                        </Typography>
+                        <Chip
+                          label={analytics?.dataQuality?.completeness?.activeStatus?.pct === 100 ? 'Отлично' : 'Штат'}
+                          size="small"
+                          sx={{ height: 18, fontSize: '0.65rem', bgcolor: '#DCFCE7', color: '#166534', fontWeight: 700 }}
+                        />
                       </Box>
                     </Paper>
                   </Tooltip>
@@ -1326,9 +1429,24 @@ export default function Staff() {
               label="Статус занятости"
               onChange={(e) => setCurrentStaff({ ...currentStaff, status: e.target.value })}
             >
-              <MenuItem value="active">Работает в клинике</MenuItem>
-              <MenuItem value="vacation">В отпуске</MenuItem>
-              <MenuItem value="archive">Архивный сотрудник</MenuItem>
+              <MenuItem value="active">
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <CheckCircleIcon sx={{ color: '#16A34A', fontSize: 18 }} />
+                  <Typography variant="body2" sx={{ fontWeight: 600 }}>Работает в клинике (активный приём)</Typography>
+                </Box>
+              </MenuItem>
+              <MenuItem value="vacation">
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <BeachAccessIcon sx={{ color: '#D97706', fontSize: 18 }} />
+                  <Typography variant="body2" sx={{ fontWeight: 600 }}>В отпуске (временный перерыв)</Typography>
+                </Box>
+              </MenuItem>
+              <MenuItem value="archive">
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <ArchiveIcon sx={{ color: '#64748B', fontSize: 18 }} />
+                  <Typography variant="body2" sx={{ fontWeight: 600 }}>Архивный сотрудник (уволен / не ведет приём)</Typography>
+                </Box>
+              </MenuItem>
             </Select>
           </FormControl>
         </DialogContent>

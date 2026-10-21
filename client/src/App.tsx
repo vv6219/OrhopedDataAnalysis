@@ -1,6 +1,8 @@
+import { useEffect, useRef } from 'react';
 import type {} from '@mui/x-data-grid/themeAugmentation';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, useLocation, useNavigate } from 'react-router-dom';
 import { Box, CssBaseline, ThemeProvider, createTheme, CircularProgress } from '@mui/material';
+import { getDefaultEnterScreen } from './utils/permissionUtils';
 import Sidebar from './components/Sidebar';
 import TopStatusBar from './components/TopStatusBar';
 import Dashboard from './pages/Dashboard';
@@ -29,10 +31,14 @@ import OrthoWorkstation from './pages/OrthoWorkstation';
 import ProtocolsRegistry from './pages/ProtocolsRegistry';
 import OrthoTemplatesManager from './pages/OrthoTemplatesManager';
 import PatientReferralsManager from './pages/PatientReferralsManager';
+import UsersManager from './pages/UsersManager';
+import MenuPermissionsEditor from './pages/MenuPermissionsEditor';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { FiscalProvider } from './context/FiscalContext';
 import { PosProvider } from './context/PosContext';
 import LoginModal from './components/LoginModal';
+import LockScreenModal from './components/LockScreenModal';
+import InactivityWarningDialog from './components/InactivityWarningDialog';
 
 const theme = createTheme({
   palette: {
@@ -176,7 +182,48 @@ const theme = createTheme({
 });
 
 function AppContent() {
-  const { isAuthenticated, loading } = useAuth();
+  const { isAuthenticated, isLocked, loading, currentUser } = useAuth();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const hasRedirectedRef = useRef(false);
+
+  // If user lands on '/' and their configured mainScreen is different from '/', redirect to mainScreen
+  useEffect(() => {
+    if (isAuthenticated && currentUser && !hasRedirectedRef.current) {
+      if (location.pathname === '/' && currentUser.mainScreen && currentUser.mainScreen !== '/') {
+        const enterScreen = getDefaultEnterScreen(currentUser.permissionCodes || [], currentUser.mainScreen);
+        if (enterScreen && enterScreen !== '/') {
+          hasRedirectedRef.current = true;
+          navigate(enterScreen, { replace: true });
+        }
+      }
+    }
+  }, [isAuthenticated, currentUser, location.pathname, navigate]);
+
+  // Multi-tab synchronization: reload on menu config update
+  useEffect(() => {
+    let bc: BroadcastChannel | null = null;
+    try {
+      bc = new BroadcastChannel('ortho_menu_sync');
+      bc.onmessage = (event) => {
+        if (event.data?.type === 'CONFIG_UPDATED') {
+          window.location.reload();
+        }
+      };
+    } catch {}
+
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === 'ortho_menu_permissions_last_updated') {
+        window.location.reload();
+      }
+    };
+    window.addEventListener('storage', handleStorage);
+
+    return () => {
+      if (bc) bc.close();
+      window.removeEventListener('storage', handleStorage);
+    };
+  }, []);
 
   if (loading) {
     return (
@@ -199,7 +246,7 @@ function AppContent() {
   }
 
   return (
-    <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: '#F4F7FA' }}>
+    <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: '#F4F7FA', position: 'relative' }}>
       <Sidebar />
       <Box
         component="main"
@@ -239,6 +286,10 @@ function AppContent() {
             <Route path="/guide" element={<UserGuide />} />
             <Route path="/patients" element={<Patients />} />
             <Route path="/staff" element={<Staff />} />
+            <Route path="/admin/users" element={<UsersManager />} />
+            <Route path="/users" element={<UsersManager />} />
+            <Route path="/admin/menu-permissions" element={<MenuPermissionsEditor />} />
+            <Route path="/menu-permissions" element={<MenuPermissionsEditor />} />
             <Route path="/operations" element={<Operations />} />
             <Route path="/reports" element={<Operations />} />
             <Route path="/inventory" element={<Inventory />} />
@@ -265,6 +316,12 @@ function AppContent() {
           </Routes>
         </Box>
       </Box>
+
+      {/* Lock screen overlay when session is locked */}
+      {isLocked && <LockScreenModal />}
+
+      {/* Inactivity warning countdown dialog */}
+      <InactivityWarningDialog />
     </Box>
   );
 }

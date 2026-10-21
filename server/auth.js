@@ -18,7 +18,41 @@ function getSecurityConfig() {
 }
 
 /**
- * Verifies candidate password against stored PBKDF2 hash using timingSafeEqual
+ * Generates a cryptographically secure random salt (32 bytes hex)
+ */
+function generateSalt() {
+  return crypto.randomBytes(32).toString('hex');
+}
+
+/**
+ * Hashes a user password using PBKDF2-SHA512 with per-user salt
+ */
+function hashUserPassword(password, salt) {
+  if (!password || !salt) throw new Error('Password and salt are required for hashing');
+  const cfg = getSecurityConfig();
+  const iterations = cfg.Iterations || 100000;
+  return crypto.pbkdf2Sync(password, salt, iterations, 64, 'sha512').toString('hex');
+}
+
+/**
+ * Verifies a user password against stored hash and salt
+ */
+function verifyUserPassword(candidatePassword, storedHash, storedSalt) {
+  if (!candidatePassword || !storedHash || !storedSalt) return false;
+  try {
+    const computedHash = hashUserPassword(candidatePassword, storedSalt);
+    const computedBuf = Buffer.from(computedHash, 'hex');
+    const storedBuf = Buffer.from(storedHash, 'hex');
+    if (computedBuf.length !== storedBuf.length) return false;
+    return crypto.timingSafeEqual(computedBuf, storedBuf);
+  } catch (err) {
+    console.error('[Auth] Error in verifyUserPassword:', err.message);
+    return false;
+  }
+}
+
+/**
+ * Verifies candidate password against stored PBKDF2 hash using timingSafeEqual (system fallback)
  */
 function verifyPassword(candidatePassword) {
   if (!candidatePassword || typeof candidatePassword !== 'string') return false;
@@ -222,6 +256,9 @@ function swaggerBasicAuth(req, res, next) {
 
 module.exports = {
   getSecurityConfig,
+  generateSalt,
+  hashUserPassword,
+  verifyUserPassword,
   verifyPassword,
   createToken,
   verifyToken,

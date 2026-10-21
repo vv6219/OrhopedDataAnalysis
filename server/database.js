@@ -419,6 +419,14 @@ const db = new sqlite3.Database(dbPath, (err) => {
       } catch (err) {
         console.error('Error initializing Orthopedic schema:', err.message);
       }
+
+      // Initialize Users and Authentication schema and default seed data
+      try {
+        const initUsersSchema = require('./initUsersSchema');
+        initUsersSchema(db);
+      } catch (err) {
+        console.error('Error initializing Users schema:', err.message);
+      }
     });
   }
 });

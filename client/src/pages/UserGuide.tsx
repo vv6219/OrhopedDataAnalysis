@@ -124,7 +124,7 @@ export default function UserGuide() {
 
   const handlePrintTrigger = useReactToPrint({
     contentRef: printRef,
-    documentTitle: `Руководство_пользователя_ОртоERP_v1.4.5_${new Date().toISOString().slice(0, 10)}`,
+    documentTitle: `Руководство_пользователя_ОртоERP_v2.0.1_${new Date().toISOString().slice(0, 10)}`,
     pageStyle: `
       @page {
         size: A4 portrait;
@@ -941,7 +941,7 @@ export default function UserGuide() {
                 <TableRow>
                   <TableCell sx={{ fontWeight: 600 }}>Express REST API Gateway</TableCell>
                   <TableCell><code>http://localhost:5000</code></TableCell>
-                  <TableCell>Node.js процесс, PID, Uptime, потребление RAM (RSS, Heap), версия 1.4.5</TableCell>
+                  <TableCell>Node.js процесс, PID, Uptime, потребление RAM (RSS, Heap), версия 2.0.1</TableCell>
                   <TableCell>HTTP 200 на <code>/health</code></TableCell>
                 </TableRow>
                 <TableRow>
@@ -1755,7 +1755,7 @@ export default function UserGuide() {
     <Box sx={{ display: 'flex', flexDirection: 'column', width: '100%', maxWidth: '1600px', margin: '0 auto', gap: 2, pb: 6 }}>
       {/* Hidden A4 Printable Template for react-to-print */}
       <Box sx={{ display: 'none' }}>
-        <UserGuidePrintTemplate ref={printRef} version="1.4.5" />
+        <UserGuidePrintTemplate ref={printRef} version="2.0.1" />
         <PosFiscalManualPrintTemplate ref={posFiscalPrintRef} />
       </Box>
 
@@ -1767,7 +1767,7 @@ export default function UserGuide() {
               Полное Руководство пользователя МИС «ОртоERP»
             </Typography>
             <Chip
-              label="v1.4.5"
+              label="v2.0.1"
               size="small"
               sx={{ bgcolor: '#EBF8FF', color: '#0F3C64', fontWeight: 800, border: '1px solid #BEE3F8' }}
             />

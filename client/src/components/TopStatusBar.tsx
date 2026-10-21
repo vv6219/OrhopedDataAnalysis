@@ -7,33 +7,45 @@ import {
   Link,
   IconButton,
   Tooltip,
-  Chip
+  Chip,
+  Avatar,
+  Divider
 } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import NavigateNextIcon from '@mui/icons-material/NavigateNext';
-import CircleIcon from '@mui/icons-material/Circle';
-import StorageIcon from '@mui/icons-material/Storage';
 import LocalHospitalIcon from '@mui/icons-material/LocalHospital';
 import MenuBookIcon from '@mui/icons-material/MenuBook';
 import LogoutIcon from '@mui/icons-material/Logout';
 import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
+import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import PointOfSaleIcon from '@mui/icons-material/PointOfSale';
 import CreditCardIcon from '@mui/icons-material/CreditCard';
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
+import SecurityIcon from '@mui/icons-material/Security';
 import { routeMetaMap } from '../config/navigationConfig';
 import { useAuth } from '../context/AuthContext';
 import { usePos } from '../context/PosContext';
 import { useFiscal } from '../context/FiscalContext';
+import { isElementPermitted } from '../utils/permissionUtils';
 import FiscalShiftCloseModal from './FiscalShiftCloseModal';
 
 export default function TopStatusBar() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, logout, isAuthenticated } = useAuth();
+  const { user, currentUser, lock, logout, isAuthenticated } = useAuth();
   const { posStatus, refreshPosStatus } = usePos();
   const { fiscalStatus, refreshFiscalStatus } = useFiscal();
   const [shiftStatus, setShiftStatus] = useState<any>(null);
   const [closeShiftModalOpen, setCloseShiftModalOpen] = useState(false);
+
+  // Read permissions from menuPermissionsConfig.json
+  const userPerms = currentUser?.permissionCodes?.length
+    ? currentUser.permissionCodes
+    : (currentUser?.role ? [currentUser.role] : []);
+
+  const canClickShift = isElementPermitted('top_status_bar', 'kkt_shift_modal', userPerms);
+  const canClickAtol = isElementPermitted('top_status_bar', 'atol_wizard_chip', userPerms);
+  const canClickPos = isElementPermitted('top_status_bar', 'alfa_pos_chip', userPerms);
 
   const fetchShiftStatus = async () => {
     try {
@@ -79,105 +91,54 @@ export default function TopStatusBar() {
         position: 'sticky',
         top: 0,
         zIndex: 1050,
-        bgcolor: 'rgba(255, 255, 255, 0.92)',
+        bgcolor: 'rgba(255, 255, 255, 0.96)',
         backdropFilter: 'blur(12px)',
         borderBottom: '1px solid #E2E8F0',
-        px: { xs: 2, md: 3 },
-        py: 1.25,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        flexWrap: 'nowrap',
-        overflowX: 'auto',
-        gap: 1.5,
-        scrollbarWidth: 'none',
-        '&::-webkit-scrollbar': { display: 'none' },
-        boxShadow: '0 2px 10px rgba(0, 0, 0, 0.02)'
+        boxShadow: '0 2px 8px rgba(0, 0, 0, 0.03)'
       }}
     >
-      {/* Left side: Back Navigation & Breadcrumbs */}
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexShrink: 0 }}>
-        <Tooltip
-          title={isHome ? 'Вы находитесь на главном экране' : 'Вернуться назад'}
-          placement="bottom"
-          arrow
-        >
-          <span>
-            <IconButton
-              size="small"
-              onClick={handleBack}
-              disabled={isHome}
-              sx={{
-                border: '1px solid',
-                borderColor: isHome ? '#EDF2F7' : '#CBD5E0',
-                bgcolor: isHome ? '#F7FAFC' : '#FFFFFF',
-                color: isHome ? '#A0AEC0' : '#0F3C64',
-                p: 0.75,
-                borderRadius: 2,
-                transition: 'all 0.2s ease',
-                '&:hover': {
-                  bgcolor: isHome ? '#F7FAFC' : '#F0F6FA',
-                  borderColor: '#0F3C64',
-                  transform: isHome ? 'none' : 'translateX(-2px)'
-                }
-              }}
-            >
-              <ArrowBackIcon sx={{ fontSize: 18 }} />
-            </IconButton>
-          </span>
-        </Tooltip>
-
-        <Breadcrumbs
-          separator={<NavigateNextIcon sx={{ fontSize: 16, color: '#A0AEC0' }} />}
-          aria-label="breadcrumb"
-          sx={{ fontSize: '0.85rem' }}
-        >
-          {/* Level 1: Главная (Always leads to Dashboard) */}
-          <Link
-            underline="hover"
+      {/* LINE 1: System Status & Clinic Controls */}
+      <Box
+        sx={{
+          px: { xs: 2, md: 3 },
+          py: 0.85,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'nowrap',
+          overflowX: 'auto',
+          gap: 1.5,
+          borderBottom: '1px solid #EDF2F7',
+          scrollbarWidth: 'none',
+          '&::-webkit-scrollbar': { display: 'none' }
+        }}
+      >
+        {/* Left side of Line 1: Clinic Brand Badge */}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0 }}>
+          <Box
             sx={{
               display: 'flex',
               alignItems: 'center',
+              gap: 0.8,
               cursor: 'pointer',
-              color: isHome ? '#0F3C64' : '#718096',
-              fontWeight: isHome ? 700 : 500,
-              fontSize: '0.84rem'
+              userSelect: 'none',
+              px: 0.6,
+              py: 0.3,
+              borderRadius: 1.5,
+              transition: 'background-color 0.15s ease',
+              '&:hover': { bgcolor: 'rgba(15, 60, 100, 0.05)' }
             }}
             onClick={() => navigate('/')}
           >
-            Главная
-          </Link>
-
-          {/* Level 2: Group Name (if not home) */}
-          {!isHome && (
-            <Typography
-              sx={{
-                color: '#718096',
-                fontWeight: 500,
-                fontSize: '0.84rem'
-              }}
-            >
-              {currentMeta.groupTitle}
+            <LocalHospitalIcon sx={{ color: '#0F3C64', fontSize: 18 }} />
+            <Typography variant="subtitle2" sx={{ fontWeight: 800, color: '#0F3C64', fontSize: '0.82rem', letterSpacing: '-0.2px' }}>
+              МИС «ОртоERP»
             </Typography>
-          )}
+          </Box>
+        </Box>
 
-          {/* Level 3: Current Active Page Title (if not home) */}
-          {!isHome && (
-            <Typography
-              sx={{
-                color: '#0F3C64',
-                fontWeight: 700,
-                fontSize: '0.86rem'
-              }}
-            >
-              {currentMeta.title}
-            </Typography>
-          )}
-        </Breadcrumbs>
-      </Box>
-
-      {/* Right side: System Status Indicators & Guide */}
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0, whiteSpace: 'nowrap' }}>
+        {/* Right side of Line 1: System Status Indicators & Guide */}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0, whiteSpace: 'nowrap' }}>
         {/* Redesigned Multi-Target User Guide Navigation Control */}
         <Box
           sx={{
@@ -202,8 +163,8 @@ export default function TopStatusBar() {
               sx={{
                 display: 'inline-flex',
                 alignItems: 'center',
-                gap: 0.6,
-                px: 1.2,
+                justifyContent: 'center',
+                px: 1,
                 height: '100%',
                 cursor: 'pointer',
                 whiteSpace: 'nowrap',
@@ -218,9 +179,7 @@ export default function TopStatusBar() {
                 '&:hover': { bgcolor: '#F0F9FF', color: '#0F3C64' }
               }}
             >
-              <MenuBookIcon sx={{ fontSize: '15px !important', color: '#0F3C64', flexShrink: 0 }} />
-              <Box component="span" sx={{ display: { xs: 'none', xl: 'inline' }, whiteSpace: 'nowrap' }}>Полное Руководство</Box>
-              <Box component="span" sx={{ display: { xs: 'inline', xl: 'none' }, whiteSpace: 'nowrap' }}>Руководство</Box>
+              <MenuBookIcon sx={{ fontSize: '16px !important', color: '#0F3C64', flexShrink: 0 }} />
             </Box>
           </Tooltip>
 
@@ -278,49 +237,17 @@ export default function TopStatusBar() {
           </Tooltip>
         </Box>
 
-        {/* DB Connection Status Badge */}
-        <Chip
-          icon={<StorageIcon sx={{ fontSize: '15px !important', color: '#2B6CB0 !important' }} />}
-          label={
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6 }}>
-              <CircleIcon sx={{ fontSize: 7, color: '#38A169' }} />
-              <Typography variant="caption" sx={{ fontWeight: 600, color: '#2D3748', fontSize: '0.75rem' }}>
-                БД SQLite: 15 табл.
-              </Typography>
-            </Box>
-          }
-          size="small"
-          sx={{
-            bgcolor: '#F0F6FA',
-            border: '1px solid #D6E4F0',
-            borderRadius: 2,
-            px: 0.5,
-            height: 28
-          }}
-        />
-
-        {/* Clinic Doctor Badge */}
-        <Chip
-          icon={<LocalHospitalIcon sx={{ fontSize: '15px !important', color: '#156C9C !important' }} />}
-          label="Клиника Добрушкина (г. Сочи)"
-          size="small"
-          sx={{
-            bgcolor: '#F7FAFC',
-            border: '1px solid #E2E8F0',
-            fontWeight: 600,
-            color: '#4A5568',
-            fontSize: '0.75rem',
-            height: 28,
-            display: { xs: 'none', sm: 'inline-flex' }
-          }}
-        />
 
         {/* KKT Shift Badge */}
         <Tooltip
           title={
             shiftStatus?.isOpen
-              ? `Кассовая смена ККТ «${shiftStatus.currentShift?.mnemonic_code}» открыта (${shiftStatus.currentShift?.hours_running || 0} ч). Нажмите для управления, сверки или снятия Z-отчета.`
-              : 'Кассовая смена ККТ закрыта. При первой оплате откроется автоматически. Нажмите для управления.'
+              ? (canClickShift
+                  ? `Кассовая смена ККТ «${shiftStatus.currentShift?.mnemonic_code}» открыта (${shiftStatus.currentShift?.hours_running || 0} ч). Нажмите для управления, сверки или снятия Z-отчета.`
+                  : `Кассовая смена ККТ «${shiftStatus.currentShift?.mnemonic_code}» открыта (${shiftStatus.currentShift?.hours_running || 0} ч).`)
+              : (canClickShift
+                  ? 'Кассовая смена ККТ закрыта. При первой оплате откроется автоматически. Нажмите для управления.'
+                  : 'Кассовая смена ККТ закрыта.')
           }
         >
           <Chip
@@ -331,8 +258,8 @@ export default function TopStatusBar() {
                 : 'Касса: Смена закрыта'
             }
             size="small"
-            onClick={() => setCloseShiftModalOpen(true)}
-            clickable
+            onClick={canClickShift ? () => setCloseShiftModalOpen(true) : undefined}
+            clickable={canClickShift}
             sx={{
               bgcolor: shiftStatus?.isOpen
                 ? (shiftStatus.currentShift?.is_expired ? '#FEE2E2' : '#F0FDF4')
@@ -348,14 +275,28 @@ export default function TopStatusBar() {
               fontWeight: 700,
               fontSize: '0.75rem',
               height: 28,
-              cursor: 'pointer'
+              cursor: canClickShift ? 'pointer' : 'default',
+              userSelect: canClickShift ? 'none' : 'text',
+              ...(!canClickShift
+                ? {
+                    '&:hover': {
+                      bgcolor: shiftStatus?.isOpen
+                        ? (shiftStatus.currentShift?.is_expired ? '#FEE2E2' : '#F0FDF4')
+                        : '#F1F5F9'
+                    }
+                  }
+                : {})
             }}
           />
         </Tooltip>
 
         {/* ATOL 91F KKT Device Status Badge */}
         <Tooltip
-          title={`Онлайн-касса «${fiscalStatus?.deviceModel || 'АТОЛ 91Ф'}» (ФФД 1.2, 54-ФЗ). Порт: ${fiscalStatus?.port || 'COM3'}. Режим: ${fiscalStatus?.isMockMode ? 'Эмуляция (Mock)' : 'Физический ККТ'}. Связь: ${fiscalStatus?.online !== false ? 'Готова к фискализации' : 'Ошибка связи'}. Нажмите для перехода в мастер тестов ККТ.`}
+          title={
+            canClickAtol
+              ? `Онлайн-касса «${fiscalStatus?.deviceModel || 'АТОЛ 91Ф'}» (ФФД 1.2, 54-ФЗ). Порт: ${fiscalStatus?.port || 'COM3'}. Режим: ${fiscalStatus?.isMockMode ? 'Эмуляция (Mock)' : 'Физический ККТ'}. Связь: ${fiscalStatus?.online !== false ? 'Готова к фискализации' : 'Ошибка связи'}. Нажмите для перехода в мастер тестов ККТ.`
+              : `Онлайн-касса «${fiscalStatus?.deviceModel || 'АТОЛ 91Ф'}» (ФФД 1.2, 54-ФЗ). Порт: ${fiscalStatus?.port || 'COM3'}. Режим: ${fiscalStatus?.isMockMode ? 'Эмуляция (Mock)' : 'Физический ККТ'}. Связь: ${fiscalStatus?.online !== false ? 'Готова к фискализации' : 'Ошибка связи'}.`
+          }
         >
           <Chip
             icon={
@@ -378,8 +319,8 @@ export default function TopStatusBar() {
                 : 'АТОЛ 91Ф: Ок'
             }
             size="small"
-            onClick={() => navigate('/admin/fiscal-test-wizard')}
-            clickable
+            onClick={canClickAtol ? () => navigate('/admin/fiscal-test-wizard') : undefined}
+            clickable={canClickAtol}
             sx={{
               bgcolor: fiscalStatus?.isMockMode
                 ? '#FFFBEB'
@@ -401,21 +342,37 @@ export default function TopStatusBar() {
               fontWeight: 700,
               fontSize: '0.75rem',
               height: 28,
-              cursor: 'pointer'
+              cursor: canClickAtol ? 'pointer' : 'default',
+              userSelect: canClickAtol ? 'none' : 'text',
+              ...(!canClickAtol
+                ? {
+                    '&:hover': {
+                      bgcolor: fiscalStatus?.isMockMode
+                        ? '#FFFBEB'
+                        : fiscalStatus?.online === false
+                        ? '#FEF2F2'
+                        : '#F0FDF4'
+                    }
+                  }
+                : {})
             }}
           />
         </Tooltip>
 
         {/* Alfa-Bank POS Terminal Badge */}
         <Tooltip
-          title={`Банковский терминал Альфа-Банка (TID: ${posStatus?.terminalId || 'ALFA_770192'}). Режим: ${posStatus?.isMockMode ? 'Эмуляция (Mock)' : 'Физический POS'}. Нажмите для перехода в мастер тестов эквайринга.`}
+          title={
+            canClickPos
+              ? `Банковский терминал Альфа-Банка (TID: ${posStatus?.terminalId || 'ALFA_770192'}). Режим: ${posStatus?.isMockMode ? 'Эмуляция (Mock)' : 'Физический POS'}. Нажмите для перехода в мастер тестов эквайринга.`
+              : `Банковский терминал Альфа-Банка (TID: ${posStatus?.terminalId || 'ALFA_770192'}). Режим: ${posStatus?.isMockMode ? 'Эмуляция (Mock)' : 'Физический POS'}. Связь: Подключен.`
+          }
         >
           <Chip
             icon={<CreditCardIcon sx={{ fontSize: '15px !important', color: posStatus?.isMockMode ? '#D97706 !important' : '#2563EB !important' }} />}
             label={posStatus?.isMockMode ? 'Альфа-Банк: Mock' : 'Альфа-Банк POS: Ок'}
             size="small"
-            onClick={() => navigate('/admin/pos-test-wizard')}
-            clickable
+            onClick={canClickPos ? () => navigate('/admin/pos-test-wizard') : undefined}
+            clickable={canClickPos}
             sx={{
               bgcolor: posStatus?.isMockMode ? '#FFFBEB' : '#EFF6FF',
               color: posStatus?.isMockMode ? '#B45309' : '#1D4ED8',
@@ -423,28 +380,229 @@ export default function TopStatusBar() {
               fontWeight: 700,
               fontSize: '0.75rem',
               height: 28,
-              cursor: 'pointer'
+              cursor: canClickPos ? 'pointer' : 'default',
+              userSelect: canClickPos ? 'none' : 'text',
+              ...(!canClickPos
+                ? {
+                    '&:hover': {
+                      bgcolor: posStatus?.isMockMode ? '#FFFBEB' : '#EFF6FF'
+                    }
+                  }
+                : {})
             }}
           />
         </Tooltip>
 
-        {/* User & Logout Controls */}
+        {/* User, Lock Screen & Logout Controls */}
         {isAuthenticated && (
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8, ml: 0.5 }}>
-            <Chip
-              icon={<AdminPanelSettingsIcon sx={{ fontSize: '15px !important', color: '#0F3C64 !important' }} />}
-              label={user || 'Администратор'}
-              size="small"
-              sx={{
-                bgcolor: '#EBF8FF',
-                border: '1px solid #BEE3F8',
-                fontWeight: 700,
-                color: '#0F3C64',
-                fontSize: '0.75rem',
-                height: 28
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6, ml: 0.5 }}>
+            <Tooltip
+              arrow
+              placement="bottom-end"
+              slotProps={{
+                tooltip: {
+                  sx: {
+                    bgcolor: '#FFFFFF',
+                    color: '#1E293B',
+                    boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.15), 0 8px 10px -6px rgba(0, 0, 0, 0.1)',
+                    border: '1px solid #E2E8F0',
+                    borderRadius: 2.5,
+                    p: 2,
+                    maxWidth: 380,
+                    '& .MuiTooltip-arrow': {
+                      color: '#FFFFFF',
+                      '&::before': {
+                        border: '1px solid #CBD5E1'
+                      }
+                    }
+                  }
+                }
               }}
-            />
-            <Tooltip title="Выйти из системы (Завершить сессию)">
+              title={
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, minWidth: 280, textAlign: 'left' }}>
+                  {/* User Profile Header */}
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.2 }}>
+                    <Avatar
+                      sx={{
+                        width: 36,
+                        height: 36,
+                        bgcolor: '#0F3C64',
+                        color: '#FFFFFF',
+                        fontSize: '0.9rem',
+                        fontWeight: 700
+                      }}
+                    >
+                      {(currentUser?.fullName || user || 'A').charAt(0).toUpperCase()}
+                    </Avatar>
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                      <Typography sx={{ fontWeight: 800, fontSize: '0.88rem', color: '#0F172A', lineHeight: 1.2 }}>
+                        {currentUser?.fullName || user || 'Администратор'}
+                      </Typography>
+                      <Typography sx={{ fontSize: '0.72rem', color: '#64748B' }}>
+                        @{currentUser?.username || 'admin'} {currentUser?.staffName ? `• ${currentUser.staffName}` : ''}
+                      </Typography>
+                    </Box>
+                  </Box>
+
+                  <Divider sx={{ borderColor: '#F1F5F9' }} />
+
+                  {/* Permissions Title */}
+                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <Typography sx={{ fontSize: '0.75rem', fontWeight: 700, color: '#334155', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                      <SecurityIcon sx={{ fontSize: 15, color: '#0F3C64' }} /> Права доступа:
+                    </Typography>
+                    <Chip
+                      label={`${currentUser?.permissions && currentUser.permissions.length > 0 ? currentUser.permissions.length : 1} активных`}
+                      size="small"
+                      sx={{ height: 18, fontSize: '0.65rem', fontWeight: 700, bgcolor: '#F1F5F9', color: '#475569' }}
+                    />
+                  </Box>
+
+                  {/* Permissions Chips & Details */}
+                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.8 }}>
+                    {currentUser?.permissions && currentUser.permissions.length > 0 ? (
+                      currentUser.permissions.map(perm => (
+                        <Box
+                          key={perm.id || perm.code}
+                          sx={{
+                            display: 'flex',
+                            alignItems: 'flex-start',
+                            gap: 1,
+                            p: 0.8,
+                            borderRadius: 1.5,
+                            bgcolor: '#F8FAFC',
+                            border: '1px solid #EDF2F7'
+                          }}
+                        >
+                          <Chip
+                            size="small"
+                            label={perm.code}
+                            sx={{
+                              height: 20,
+                              fontSize: '0.68rem',
+                              fontWeight: 800,
+                              bgcolor: perm.badge_color || '#0F3C64',
+                              color: '#FFFFFF',
+                              flexShrink: 0
+                            }}
+                          />
+                          <Box sx={{ minWidth: 0, flex: 1 }}>
+                            <Typography sx={{ fontSize: '0.75rem', fontWeight: 700, color: '#1E293B', lineHeight: 1.2 }}>
+                              {perm.name}
+                            </Typography>
+                            {perm.description && (
+                              <Typography sx={{ fontSize: '0.68rem', color: '#64748B', lineHeight: 1.2, mt: 0.2 }}>
+                                {perm.description}
+                              </Typography>
+                            )}
+                          </Box>
+                        </Box>
+                      ))
+                    ) : (
+                      // Fallback when permissions not yet populated
+                      <Box
+                        sx={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 1,
+                          p: 0.8,
+                          borderRadius: 1.5,
+                          bgcolor: '#F8FAFC',
+                          border: '1px solid #EDF2F7'
+                        }}
+                      >
+                        <Chip
+                          size="small"
+                          label={currentUser?.role === 'admin' ? 'sysadmin' : 'default'}
+                          sx={{
+                            height: 20,
+                            fontSize: '0.68rem',
+                            fontWeight: 800,
+                            bgcolor: currentUser?.role === 'admin' ? '#7C3AED' : '#64748B',
+                            color: '#FFFFFF',
+                            flexShrink: 0
+                          }}
+                        />
+                        <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, color: '#334155' }}>
+                          {currentUser?.role === 'admin' ? 'Системный администратор' : 'Базовый доступ (default)'}
+                        </Typography>
+                      </Box>
+                    )}
+                  </Box>
+
+                  {/* Quick Action Link */}
+                  <Box
+                    onClick={() => navigate('/admin/users')}
+                    sx={{
+                      cursor: 'pointer',
+                      fontSize: '0.72rem',
+                      fontWeight: 700,
+                      color: '#0284C7',
+                      textAlign: 'center',
+                      pt: 0.6,
+                      borderTop: '1px dashed #E2E8F0',
+                      '&:hover': { color: '#0369A1', textDecoration: 'underline' }
+                    }}
+                  >
+                    Управление пользователями и правами →
+                  </Box>
+                </Box>
+              }
+            >
+              <Chip
+                icon={<AdminPanelSettingsIcon sx={{ fontSize: '15px !important', color: '#0F3C64 !important' }} />}
+                label={currentUser?.fullName || user || 'Администратор'}
+                size="small"
+                onClick={() => navigate('/admin/users')}
+                clickable
+                sx={{
+                  bgcolor: '#EBF8FF',
+                  border: '1px solid #BEE3F8',
+                  fontWeight: 700,
+                  color: '#0F3C64',
+                  fontSize: '0.75rem',
+                  height: 30,
+                  cursor: 'pointer',
+                  maxWidth: { xs: 140, sm: 220 },
+                  transition: 'all 0.15s ease',
+                  '&:hover': {
+                    bgcolor: '#DDF0FF',
+                    borderColor: '#90CDF4'
+                  },
+                  '& .MuiChip-label': {
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap'
+                  }
+                }}
+              />
+            </Tooltip>
+
+            {/* Quick Lock Button */}
+            <Tooltip title="Заблокировать экран (Ctrl+L) — защита персональных данных (152-ФЗ)">
+              <IconButton
+                size="small"
+                onClick={lock}
+                sx={{
+                  border: '1px solid #CBD5E1',
+                  bgcolor: '#FFFFFF',
+                  color: '#0F3C64',
+                  p: 0.7,
+                  borderRadius: 2,
+                  height: 30,
+                  width: 30,
+                  '&:hover': {
+                    bgcolor: '#F0F9FF',
+                    borderColor: '#0F3C64'
+                  }
+                }}
+              >
+                <LockOutlinedIcon sx={{ fontSize: 16 }} />
+              </IconButton>
+            </Tooltip>
+
+            {/* Logout Button */}
+            <Tooltip title="Выйти из системы (Завершить сеанс)">
               <IconButton
                 size="small"
                 onClick={logout}
@@ -452,8 +610,10 @@ export default function TopStatusBar() {
                   border: '1px solid #CBD5E1',
                   bgcolor: '#FFFFFF',
                   color: '#DC2626',
-                  p: 0.6,
+                  p: 0.7,
                   borderRadius: 2,
+                  height: 30,
+                  width: 30,
                   '&:hover': {
                     bgcolor: '#FEF2F2',
                     borderColor: '#DC2626'
@@ -466,6 +626,121 @@ export default function TopStatusBar() {
           </Box>
         )}
       </Box>
+    </Box>
+
+    {/* LINE 2: Breadcrumbs Navigation Bar (Second Separate Line) */}
+    <Box
+      sx={{
+        px: { xs: 2, md: 3 },
+        py: 0.65,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        bgcolor: '#FAFBFD',
+        borderBottom: '1px solid #E2E8F0',
+        gap: 1.5,
+        overflowX: 'auto',
+        scrollbarWidth: 'none',
+        '&::-webkit-scrollbar': { display: 'none' }
+      }}
+    >
+      {/* Left side of Line 2: Back Button + Breadcrumbs */}
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.2, minWidth: 0, flexShrink: 0 }}>
+        <Tooltip
+          title={isHome ? 'Вы находитесь на главном экране' : 'Вернуться назад'}
+          placement="bottom"
+          arrow
+        >
+          <span>
+            <IconButton
+              size="small"
+              onClick={handleBack}
+              disabled={isHome}
+              sx={{
+                border: '1px solid',
+                borderColor: isHome ? '#EDF2F7' : '#CBD5E0',
+                bgcolor: isHome ? '#F7FAFC' : '#FFFFFF',
+                color: isHome ? '#A0AEC0' : '#0F3C64',
+                p: 0.45,
+                borderRadius: 1.5,
+                transition: 'all 0.2s ease',
+                '&:hover': {
+                  bgcolor: isHome ? '#F7FAFC' : '#F0F6FA',
+                  borderColor: '#0F3C64',
+                  transform: isHome ? 'none' : 'translateX(-2px)'
+                }
+              }}
+            >
+              <ArrowBackIcon sx={{ fontSize: 16 }} />
+            </IconButton>
+          </span>
+        </Tooltip>
+
+        <Breadcrumbs
+          separator={<NavigateNextIcon sx={{ fontSize: 15, color: '#94A3B8' }} />}
+          aria-label="breadcrumb"
+          sx={{ fontSize: '0.84rem' }}
+        >
+          {/* Level 1: Главная (Always leads to Dashboard) */}
+          <Link
+            underline="hover"
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              cursor: 'pointer',
+              color: isHome ? '#0F3C64' : '#64748B',
+              fontWeight: isHome ? 700 : 500,
+              fontSize: '0.82rem'
+            }}
+            onClick={() => navigate('/')}
+          >
+            Главная
+          </Link>
+
+          {/* Level 2: Group Name (if not home) */}
+          {!isHome && (
+            <Typography
+              sx={{
+                color: '#64748B',
+                fontWeight: 500,
+                fontSize: '0.82rem'
+              }}
+            >
+              {currentMeta.groupTitle}
+            </Typography>
+          )}
+
+          {/* Level 3: Current Active Page Title (if not home) */}
+          {!isHome && (
+            <Typography
+              sx={{
+                color: '#0F3C64',
+                fontWeight: 700,
+                fontSize: '0.84rem'
+              }}
+            >
+              {currentMeta.title}
+            </Typography>
+          )}
+        </Breadcrumbs>
+      </Box>
+
+      {/* Right side of Line 2: Active Module Chip */}
+      <Box sx={{ display: { xs: 'none', sm: 'flex' }, alignItems: 'center', gap: 1, flexShrink: 0 }}>
+        <Chip
+          size="small"
+          label={currentMeta.groupTitle || 'Раздел'}
+          sx={{
+            height: 20,
+            fontSize: '0.68rem',
+            fontWeight: 700,
+            bgcolor: 'rgba(15, 60, 100, 0.06)',
+            color: '#0F3C64',
+            border: '1px solid rgba(15, 60, 100, 0.12)'
+          }}
+        />
+      </Box>
+    </Box>
 
       {/* Modal for closing shift */}
       <FiscalShiftCloseModal

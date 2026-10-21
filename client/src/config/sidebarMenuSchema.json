@@ -1,0 +1,59 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Sidebar Menu and Screen Permissions Configuration",
+  "description": "Схема валидации древовидного меню и прав доступа МИС «ОртоERP» (синоним menuPermissionsSchema.json)",
+  "type": "object",
+  "required": ["version", "menuGroups"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "version": { "type": "string" },
+    "description": { "type": "string" },
+    "rolesAndPermissions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["code", "name"],
+        "properties": {
+          "code": { "type": "string" },
+          "name": { "type": "string" },
+          "description": { "type": "string" }
+        }
+      }
+    },
+    "menuGroups": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "title", "items"],
+        "properties": {
+          "id": { "type": "string" },
+          "title": { "type": "string" },
+          "permissions": { "type": "array", "items": { "type": "string" } },
+          "icon": { "type": "string" },
+          "iconColor": { "type": "string" },
+          "defaultOpen": { "type": "boolean" },
+          "tooltip": { "type": "string" },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["id", "text", "path", "permissions"],
+              "properties": {
+                "id": { "type": "string" },
+                "text": { "type": "string" },
+                "path": { "type": "string" },
+                "icon": { "type": "string" },
+                "iconColor": { "type": "string" },
+                "tooltip": { "type": "string" },
+                "permissions": { "type": "array", "items": { "type": "string" } },
+                "isExternal": { "type": "boolean" },
+                "defaultOpen": { "type": "boolean" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "screenElements": { "type": "object" }
+  }
+}

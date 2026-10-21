@@ -13,11 +13,18 @@ import {
 import Visibility from '@mui/icons-material/Visibility';
 import VisibilityOff from '@mui/icons-material/VisibilityOff';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
+import PersonIcon from '@mui/icons-material/Person';
 import SecurityIcon from '@mui/icons-material/Security';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { getDefaultEnterScreen } from '../utils/permissionUtils';
 
 export default function LoginModal() {
   const { login } = useAuth();
+  const navigate = useNavigate();
+  const [username, setUsername] = useState(() => {
+    return localStorage.getItem('ortho_last_login_username') || 'admin';
+  });
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -25,6 +32,10 @@ export default function LoginModal() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!username.trim()) {
+      setError('Пожалуйста, введите имя пользователя (логин)');
+      return;
+    }
     if (!password.trim()) {
       setError('Пожалуйста, введите пароль для входа');
       return;
@@ -33,9 +44,17 @@ export default function LoginModal() {
     setLoading(true);
     setError(null);
     try {
-      const res = await login(password.trim());
-      if (!res.success) {
-        setError(res.error || 'Неверный пароль доступа');
+      const res = await login(username.trim(), password.trim());
+      if (res.success) {
+        const enterScreen = getDefaultEnterScreen(
+          (res as any).user?.permissionCodes || [],
+          (res as any).mainScreen
+        );
+        if (enterScreen && enterScreen !== '/') {
+          navigate(enterScreen);
+        }
+      } else {
+        setError(res.error || 'Неверный логин или пароль');
       }
     } catch (err: any) {
       setError(err.message || 'Ошибка авторизации');
@@ -53,8 +72,8 @@ export default function LoginModal() {
         right: 0,
         bottom: 0,
         zIndex: 9999,
-        bgcolor: 'rgba(15, 23, 42, 0.75)',
-        backdropFilter: 'blur(8px)',
+        bgcolor: 'rgba(15, 23, 42, 0.78)',
+        backdropFilter: 'blur(10px)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -70,7 +89,7 @@ export default function LoginModal() {
           overflow: 'hidden',
           border: '1px solid #CBD5E1',
           bgcolor: '#FFFFFF',
-          boxShadow: '0 20px 40px rgba(15, 60, 100, 0.25)'
+          boxShadow: '0 20px 45px rgba(15, 60, 100, 0.3)'
         }}
       >
         {/* Top Header Card */}
@@ -110,7 +129,7 @@ export default function LoginModal() {
             Центр Ортопедии и Травматологии
           </Typography>
           <Typography variant="caption" sx={{ color: '#93C5FD', fontWeight: 600, display: 'block', mt: 0.3 }}>
-            доктора Добрушкина в Сочи • МИС «ОртоERP» v1.4.5
+            доктора Добрушкина в Сочи • МИС «ОртоERP» v2.0.1
           </Typography>
         </Box>
 
@@ -119,12 +138,12 @@ export default function LoginModal() {
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
             <LockOutlinedIcon sx={{ color: '#0F3C64', fontSize: 20 }} />
             <Typography variant="subtitle2" sx={{ fontWeight: 700, color: '#0F3C64' }}>
-              Авторизация в системе
+              Авторизация сотрудника
             </Typography>
           </Box>
 
           <Typography variant="body2" sx={{ color: '#64748B', mb: 2.5, fontSize: '0.86rem', lineHeight: 1.5 }}>
-            Для доступа к базе данных клиники, веб-интерфейсу, SQLite Studio и Swagger UI введите единый пароль доступа.
+            Введите учетные данные для доступа к АРМ врача, расписанию приемов, кассе ККТ 54-ФЗ и базе данных клиники.
           </Typography>
 
           {error && (
@@ -133,6 +152,28 @@ export default function LoginModal() {
             </Alert>
           )}
 
+          {/* Username Input */}
+          <TextField
+            fullWidth
+            label="Имя пользователя (Логин)"
+            placeholder="admin, dobrushkin, petrov..."
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            disabled={loading}
+            autoFocus={!username}
+            slotProps={{
+              input: {
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <PersonIcon sx={{ color: '#64748B', fontSize: 20 }} />
+                  </InputAdornment>
+                )
+              }
+            }}
+            sx={{ mb: 2 }}
+          />
+
+          {/* Password Input */}
           <TextField
             fullWidth
             type={showPassword ? 'text' : 'password'}
@@ -141,9 +182,14 @@ export default function LoginModal() {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             disabled={loading}
-            autoFocus
+            autoFocus={Boolean(username)}
             slotProps={{
               input: {
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <LockOutlinedIcon sx={{ color: '#64748B', fontSize: 20 }} />
+                  </InputAdornment>
+                ),
                 endAdornment: (
                   <InputAdornment position="end">
                     <IconButton
@@ -164,25 +210,31 @@ export default function LoginModal() {
             type="submit"
             fullWidth
             variant="contained"
+            size="large"
             disabled={loading}
             startIcon={loading ? <CircularProgress size={18} color="inherit" /> : <SecurityIcon />}
             sx={{
-              py: 1.3,
+              py: 1.25,
               fontWeight: 700,
-              bgcolor: '#0F3C64',
-              '&:hover': { bgcolor: '#082540' },
-              borderRadius: 2,
-              textTransform: 'none',
               fontSize: '0.95rem',
-              boxShadow: '0 4px 12px rgba(15, 60, 100, 0.25)'
+              bgcolor: '#0F3C64',
+              borderRadius: 2.5,
+              textTransform: 'none',
+              boxShadow: '0 4px 14px rgba(15, 60, 100, 0.3)',
+              '&:hover': {
+                bgcolor: '#156C9C'
+              }
             }}
           >
-            {loading ? 'Проверка пароля...' : 'Войти в систему'}
+            {loading ? 'Проверка доступа...' : 'Войти в систему'}
           </Button>
 
-          <Box sx={{ mt: 2.5, textAlign: 'center' }}>
+          <Box sx={{ mt: 3, pt: 2, borderTop: '1px solid #F1F5F9', textAlign: 'center' }}>
             <Typography variant="caption" sx={{ color: '#94A3B8', fontSize: '0.75rem', display: 'block' }}>
-              Пароль хранится на сервере в зашифрованном виде (PBKDF2-SHA512)
+              Защищенное соединение • Хэширование PBKDF2-SHA512 (100k)
+            </Typography>
+            <Typography variant="caption" sx={{ color: '#94A3B8', fontSize: '0.72rem', display: 'block', mt: 0.3 }}>
+              При утере доступа обратитесь к главному администратору клиники
             </Typography>
           </Box>
         </Box>

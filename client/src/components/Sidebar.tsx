@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import {
   Drawer,
   List,
@@ -13,7 +13,8 @@ import {
   InputAdornment,
   IconButton,
   Collapse,
-  Divider
+  Divider,
+  Avatar
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
@@ -23,10 +24,14 @@ import KeyboardDoubleArrowDownIcon from '@mui/icons-material/KeyboardDoubleArrow
 import KeyboardDoubleArrowUpIcon from '@mui/icons-material/KeyboardDoubleArrowUp';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import MenuOpenIcon from '@mui/icons-material/MenuOpen';
+import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
+import LogoutIcon from '@mui/icons-material/Logout';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { navigationGroups, type NavItem } from '../config/navigationConfig';
+import { useAuth } from '../context/AuthContext';
+import { getPermittedNavigation } from '../utils/permissionUtils';
 
-export const DRAWER_WIDTH_EXPANDED = 265;
+export const DRAWER_WIDTH_EXPANDED = 280;
 export const DRAWER_WIDTH_COLLAPSED = 72;
 const SIDEBAR_COLLAPSED_STORAGE_KEY = 'ortho_sidebar_collapsed';
 
@@ -123,13 +128,18 @@ const tooltipSlotProps = {
 export default function Sidebar() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { user, currentUser, lock, logout, isAuthenticated } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
 
   const [isCollapsed, setIsCollapsed] = useState<boolean>(() => {
     try {
-      return localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY) === 'true';
+      const stored = localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY);
+      if (stored !== null) {
+        return stored === 'true';
+      }
+      return true; // Default collapsed on first load
     } catch {
-      return false;
+      return true;
     }
   });
 
@@ -147,11 +157,11 @@ export default function Sidebar() {
 
   const currentDrawerWidth = isCollapsed ? DRAWER_WIDTH_COLLAPSED : DRAWER_WIDTH_EXPANDED;
 
-  // Track collapse/expand state for each multi-level group
+  // Track collapse/expand state for each multi-level group (collapsed to top level on first load)
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() => {
     const initial: Record<string, boolean> = {};
     navigationGroups.forEach((g) => {
-      initial[g.id] = g.defaultOpen;
+      initial[g.id] = false;
     });
     return initial;
   });
@@ -162,15 +172,22 @@ export default function Sidebar() {
     navigationGroups.forEach((g) => {
       g.items.forEach((item) => {
         if (item.children && item.children.length > 0) {
-          initial[item.text] = !!item.defaultOpen;
+          initial[item.text] = false;
         }
       });
     });
     return initial;
   });
 
-  // Automatically expand group and sub-menu containing active route
+  const isFirstLoadRef = useRef(true);
+
+  // Automatically expand group and sub-menu containing active route only on subsequent user route changes
   useEffect(() => {
+    if (isFirstLoadRef.current) {
+      isFirstLoadRef.current = false;
+      return;
+    }
+
     navigationGroups.forEach((group) => {
       const currentFull = `${location.pathname}${location.search}`;
       const hasActiveChild = group.items.some((item) => {
@@ -281,8 +298,13 @@ export default function Sidebar() {
     }
   };
 
-  // Filter groups and items based on search term
-  const filteredGroups = navigationGroups
+  // 1. Filter navigation groups by active user permissions from menuPermissionsConfig.json
+  const permittedGroups = useMemo(() => {
+    return getPermittedNavigation(navigationGroups, currentUser?.permissionCodes || []);
+  }, [currentUser?.permissionCodes]);
+
+  // 2. Filter groups and items based on search term
+  const filteredGroups = permittedGroups
     .map((group) => {
       if (isCollapsed) {
         return group;
@@ -349,7 +371,7 @@ export default function Sidebar() {
           display: 'flex',
           alignItems: 'center',
           justifyContent: isCollapsed ? 'center' : 'space-between',
-          px: isCollapsed ? 1 : 1.5,
+          px: isCollapsed ? 1 : 1.25,
           py: 1,
           flexShrink: 0,
           borderBottom: '1px solid #E2E8F0',
@@ -378,13 +400,13 @@ export default function Sidebar() {
                 <img
                   src="/MainLogoTransparent.png"
                   alt="Логотип Центра Ортопедии и Травматологии"
-                  style={{ width: 40, height: 40, marginRight: 10, objectFit: 'contain', flexShrink: 0 }}
+                  style={{ width: 38, height: 38, marginRight: 8, objectFit: 'contain', flexShrink: 0 }}
                 />
-                <Box sx={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-                  <Typography variant="body2" sx={{ fontWeight: 800, color: '#0F3C64', lineHeight: 1.2, fontSize: '0.80rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                <Box sx={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1 }}>
+                  <Typography variant="body2" sx={{ fontWeight: 800, color: '#0F3C64', lineHeight: 1.2, fontSize: '0.84rem', whiteSpace: 'nowrap' }}>
                     Центр Ортопедии
                   </Typography>
-                  <Typography variant="caption" sx={{ fontWeight: 600, color: '#156C9C', lineHeight: 1.1, mt: 0.2, whiteSpace: 'nowrap' }}>
+                  <Typography variant="caption" sx={{ fontWeight: 600, color: '#156C9C', lineHeight: 1.15, mt: 0.2, whiteSpace: 'nowrap', fontSize: '0.73rem' }}>
                     Добрушкина в Сочи
                   </Typography>
                 </Box>
@@ -397,7 +419,7 @@ export default function Sidebar() {
                 size="small"
                 onClick={toggleSidebarCollapse}
                 sx={{
-                  p: 0.75,
+                  p: 0.65,
                   color: '#475569',
                   borderRadius: 1.5,
                   border: '1px solid #E2E8F0',
@@ -534,25 +556,153 @@ export default function Sidebar() {
           {filteredGroups.map((group) => {
             const isGroupOpen = searchTerm ? true : !!openGroups[group.id];
 
-            // In collapsed mode: render iconographic stack with rich tooltip
+            // In collapsed mode: render ONLY top-level group icon with rich interactive flyout menu
             if (isCollapsed) {
+              const currentFull = `${location.pathname}${location.search}`;
+              const isGroupActive = group.items.some((item) => {
+                if (item.path === location.pathname || item.path === currentFull) return true;
+                if (item.children) {
+                  return item.children.some(
+                    (c) => c.path === location.pathname || c.path === currentFull || c.path.split('?')[0] === location.pathname
+                  );
+                }
+                return false;
+              });
+
               return (
-                <Box key={group.id} sx={{ mb: 1.5, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                  {/* Group Main Icon Button */}
+                <Box key={group.id} sx={{ mb: 1, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                   <Tooltip
                     title={
-                      <Box sx={{ p: 0.5 }}>
-                        <Typography sx={{ fontWeight: 800, fontSize: '0.82rem', color: '#38BDF8', mb: 0.5 }}>
-                          {group.title}
-                        </Typography>
-                        <Typography sx={{ fontSize: '0.72rem', color: '#94A3B8' }}>
-                          {group.items.length} сервисов / подразделов
-                        </Typography>
+                      <Box sx={{ p: 1.2, minWidth: 260, maxWidth: 320 }}>
+                        {/* Flyout Header */}
+                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', pb: 0.75, mb: 1, borderBottom: '1px solid rgba(255,255,255,0.15)' }}>
+                          <Typography sx={{ fontWeight: 800, fontSize: '0.84rem', color: '#38BDF8', letterSpacing: '0.3px' }}>
+                            {group.title}
+                          </Typography>
+                          <Box sx={{ fontSize: '0.68rem', color: '#94A3B8', bgcolor: 'rgba(255,255,255,0.08)', px: 0.8, py: 0.2, borderRadius: 1 }}>
+                            {group.items.length} сервисов
+                          </Box>
+                        </Box>
+
+                        {/* Flyout Items List */}
+                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.4 }}>
+                          {group.items.map((item) => {
+                            if (item.children && item.children.length > 0) {
+                              return (
+                                <Box key={`flyout-sub-${group.id}-${item.text}`} sx={{ mt: 0.5 }}>
+                                  <Typography sx={{ fontSize: '0.68rem', fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', px: 0.5, mb: 0.3 }}>
+                                    {item.text}
+                                  </Typography>
+                                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.3 }}>
+                                    {item.children.map((ch) => {
+                                      const isChildActive = ch.path === location.pathname || ch.path === currentFull || ch.path.split('?')[0] === location.pathname;
+                                      return (
+                                        <Box
+                                          key={ch.text}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleItemClick(ch);
+                                          }}
+                                          sx={{
+                                            p: 0.65,
+                                            borderRadius: 1.5,
+                                            cursor: 'pointer',
+                                            bgcolor: isChildActive ? 'rgba(56, 189, 248, 0.22)' : 'rgba(255,255,255,0.04)',
+                                            color: isChildActive ? '#38BDF8' : '#F1F5F9',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: 1,
+                                            transition: 'all 0.15s ease',
+                                            '&:hover': {
+                                              bgcolor: 'rgba(56, 189, 248, 0.3)',
+                                              color: '#FFFFFF',
+                                              transform: 'translateX(3px)'
+                                            }
+                                          }}
+                                        >
+                                          <Box sx={{ display: 'flex', alignItems: 'center', fontSize: 16, color: isChildActive ? '#38BDF8' : '#94A3B8' }}>
+                                            {ch.icon}
+                                          </Box>
+                                          <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+                                            <Typography sx={{ fontSize: '0.74rem', fontWeight: isChildActive ? 700 : 500, lineHeight: 1.2 }}>
+                                              {ch.text}
+                                            </Typography>
+                                          </Box>
+                                        </Box>
+                                      );
+                                    })}
+                                  </Box>
+                                </Box>
+                              );
+                            }
+
+                            const isActive = location.pathname === item.path || currentFull === item.path;
+
+                            return (
+                              <Box
+                                key={`flyout-item-${group.id}-${item.text}`}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleItemClick(item);
+                                }}
+                                sx={{
+                                  p: 0.65,
+                                  borderRadius: 1.5,
+                                  cursor: 'pointer',
+                                  bgcolor: isActive ? 'rgba(56, 189, 248, 0.22)' : 'rgba(255,255,255,0.04)',
+                                  color: isActive ? '#38BDF8' : '#F1F5F9',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: 1,
+                                  transition: 'all 0.15s ease',
+                                  '&:hover': {
+                                    bgcolor: 'rgba(56, 189, 248, 0.3)',
+                                    color: '#FFFFFF',
+                                    transform: 'translateX(3px)'
+                                  }
+                                }}
+                              >
+                                <Box sx={{ display: 'flex', alignItems: 'center', fontSize: 16, color: isActive ? '#38BDF8' : '#94A3B8' }}>
+                                  {item.icon}
+                                </Box>
+                                <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+                                  <Typography sx={{ fontSize: '0.74rem', fontWeight: isActive ? 700 : 500, lineHeight: 1.2 }}>
+                                    {item.text}
+                                  </Typography>
+                                </Box>
+                              </Box>
+                            );
+                          })}
+                        </Box>
+
+                        {/* Flyout Footer Hint */}
+                        <Box sx={{ mt: 1, pt: 0.6, borderTop: '1px dashed rgba(255,255,255,0.15)' }}>
+                          <Typography sx={{ fontSize: '0.66rem', color: '#94A3B8', fontStyle: 'italic' }}>
+                            Клик на иконку — развернуть меню
+                          </Typography>
+                        </Box>
                       </Box>
                     }
                     placement="right"
                     arrow
-                    slotProps={tooltipSlotProps}
+                    slotProps={{
+                      tooltip: {
+                        sx: {
+                          bgcolor: '#0B233C',
+                          color: '#FFFFFF',
+                          boxShadow: '0 16px 36px rgba(0, 0, 0, 0.45)',
+                          border: '1px solid rgba(56, 189, 248, 0.25)',
+                          borderRadius: 2,
+                          p: 0.5,
+                          pointerEvents: 'auto'
+                        }
+                      },
+                      arrow: {
+                        sx: {
+                          color: '#0B233C'
+                        }
+                      }
+                    }}
                   >
                     <IconButton
                       onClick={() => toggleGroup(group.id)}
@@ -560,136 +710,23 @@ export default function Sidebar() {
                         width: 44,
                         height: 44,
                         borderRadius: 2,
-                        bgcolor: 'rgba(15, 60, 100, 0.05)',
-                        color: '#0F3C64',
-                        mb: 0.5,
+                        bgcolor: isGroupActive ? '#0F3C64' : 'rgba(15, 60, 100, 0.05)',
+                        color: isGroupActive ? '#FFFFFF' : '#0F3C64',
+                        border: isGroupActive ? '1px solid #0F3C64' : '1px solid transparent',
+                        boxShadow: isGroupActive ? '0 3px 10px rgba(15, 60, 100, 0.25)' : 'none',
                         transition: 'all 0.2s',
                         '&:hover': {
-                          bgcolor: '#0F3C64',
+                          bgcolor: isGroupActive ? '#154a7a' : '#0F3C64',
                           color: '#FFFFFF',
-                          transform: 'scale(1.05)'
+                          transform: 'scale(1.06)',
+                          boxShadow: '0 4px 12px rgba(15, 60, 100, 0.3)'
                         }
                       }}
                     >
                       {group.icon}
                     </IconButton>
                   </Tooltip>
-
-                  {/* Individual Icon Items for the group in collapsed mode */}
-                  {group.items.map((item) => {
-                    if (item.children && item.children.length > 0) {
-                      const hasActiveChild = item.children.some(
-                        (c) =>
-                          c.path === location.pathname ||
-                          c.path === `${location.pathname}${location.search}` ||
-                          c.path.split('?')[0] === location.pathname
-                      );
-
-                      return (
-                        <Tooltip
-                          key={`sub-${group.id}-${item.text}`}
-                          title={
-                            <Box sx={{ p: 0.75, maxWidth: 260 }}>
-                              <Typography sx={{ fontWeight: 800, fontSize: '0.80rem', color: '#F8FAFC', mb: 0.5 }}>
-                                {item.text} ({item.children.length})
-                              </Typography>
-                              <Typography sx={{ fontSize: '0.70rem', color: '#94A3B8', mb: 1 }}>
-                                {item.tooltip}
-                              </Typography>
-                              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-                                {item.children.map((ch) => (
-                                  <Box
-                                    key={ch.text}
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleItemClick(ch);
-                                    }}
-                                    sx={{
-                                      p: 0.5,
-                                      borderRadius: 1,
-                                      cursor: 'pointer',
-                                      bgcolor: location.pathname === ch.path ? 'rgba(56, 189, 248, 0.2)' : 'rgba(255,255,255,0.05)',
-                                      color: location.pathname === ch.path ? '#38BDF8' : '#FFFFFF',
-                                      fontSize: '0.74rem',
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      gap: 1,
-                                      '&:hover': { bgcolor: 'rgba(56, 189, 248, 0.3)' }
-                                    }}
-                                  >
-                                    <Box sx={{ fontSize: 16 }}>{ch.icon}</Box>
-                                    <span>{ch.text}</span>
-                                  </Box>
-                                ))}
-                              </Box>
-                            </Box>
-                          }
-                          placement="right"
-                          arrow
-                          slotProps={tooltipSlotProps}
-                        >
-                          <IconButton
-                            onClick={() => toggleSubMenu(item.text)}
-                            sx={{
-                              width: 40,
-                              height: 40,
-                              my: 0.25,
-                              borderRadius: 2,
-                              color: hasActiveChild ? '#D97706' : '#64748B',
-                              bgcolor: hasActiveChild ? 'rgba(217, 119, 6, 0.12)' : 'transparent',
-                              border: hasActiveChild ? '1px solid #D97706' : '1px solid transparent',
-                              '&:hover': {
-                                bgcolor: 'rgba(217, 119, 6, 0.15)',
-                                transform: 'scale(1.05)'
-                              }
-                            }}
-                          >
-                            {item.icon}
-                          </IconButton>
-                        </Tooltip>
-                      );
-                    }
-
-                    const isActive = location.pathname === item.path || `${location.pathname}${location.search}` === item.path;
-
-                    return (
-                      <Tooltip
-                        key={`item-${group.id}-${item.text}-${item.path}`}
-                        title={
-                          <NavTooltipContent
-                            title={item.text}
-                            description={item.tooltip}
-                            isExternal={item.isExternal}
-                            category={group.title}
-                          />
-                        }
-                        placement="right"
-                        arrow
-                        slotProps={tooltipSlotProps}
-                      >
-                        <IconButton
-                          onClick={() => handleItemClick(item)}
-                          sx={{
-                            width: 40,
-                            height: 40,
-                            my: 0.25,
-                            borderRadius: 2,
-                            color: isActive ? '#0F3C64' : '#64748B',
-                            bgcolor: isActive ? 'rgba(15, 60, 100, 0.12)' : 'transparent',
-                            border: isActive ? '1px solid #0F3C64' : '1px solid transparent',
-                            '&:hover': {
-                              bgcolor: 'rgba(15, 60, 100, 0.08)',
-                              color: '#0F3C64',
-                              transform: 'scale(1.05)'
-                            }
-                          }}
-                        >
-                          {item.icon}
-                        </IconButton>
-                      </Tooltip>
-                    );
-                  })}
-                  <Divider sx={{ width: '60%', my: 0.75, borderColor: '#E2E8F0' }} />
+                  <Divider sx={{ width: '50%', my: 0.5, borderColor: '#E2E8F0' }} />
                 </Box>
               );
             }
@@ -986,6 +1023,120 @@ export default function Sidebar() {
         </List>
       </Box>
 
+      {/* User Profile Card with Lock & Logout Buttons */}
+      {isAuthenticated && (
+        <Box
+          sx={{
+            flexShrink: 0,
+            borderTop: '1px solid #E2E8F0',
+            bgcolor: '#F8FAFC',
+            p: isCollapsed ? 1 : 1.5,
+            transition: 'all 0.2s ease'
+          }}
+        >
+          {isCollapsed ? (
+            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
+              <Tooltip title={`${currentUser?.fullName || user || 'Пользователь'} (${currentUser?.role || 'admin'})`} placement="right" arrow>
+                <Avatar
+                  sx={{
+                    width: 32,
+                    height: 32,
+                    bgcolor: '#0F3C64',
+                    fontSize: '0.8rem',
+                    fontWeight: 700,
+                    cursor: 'pointer'
+                  }}
+                  onClick={() => navigate('/admin/users')}
+                >
+                  {(currentUser?.fullName || user || 'A').charAt(0).toUpperCase()}
+                </Avatar>
+              </Tooltip>
+              <Tooltip title="Заблокировать экран (Ctrl+L)" placement="right" arrow>
+                <IconButton size="small" onClick={lock} sx={{ color: '#0F3C64', p: 0.5 }}>
+                  <LockOutlinedIcon sx={{ fontSize: 16 }} />
+                </IconButton>
+              </Tooltip>
+              <Tooltip title="Выйти из системы" placement="right" arrow>
+                <IconButton size="small" onClick={logout} sx={{ color: '#DC2626', p: 0.5 }}>
+                  <LogoutIcon sx={{ fontSize: 16 }} />
+                </IconButton>
+              </Tooltip>
+            </Box>
+          ) : (
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <Box
+                sx={{ display: 'flex', alignItems: 'center', gap: 1.2, minWidth: 0, flex: 1, cursor: 'pointer' }}
+                onClick={() => navigate('/admin/users')}
+              >
+                <Avatar
+                  sx={{
+                    width: 34,
+                    height: 34,
+                    bgcolor: '#0F3C64',
+                    fontSize: '0.85rem',
+                    fontWeight: 700,
+                    flexShrink: 0
+                  }}
+                >
+                  {(currentUser?.fullName || user || 'A').charAt(0).toUpperCase()}
+                </Avatar>
+                <Box sx={{ minWidth: 0 }}>
+                  <Typography
+                    noWrap
+                    sx={{ fontSize: '0.82rem', fontWeight: 700, color: '#0F172A', lineHeight: 1.2 }}
+                  >
+                    {currentUser?.fullName || user || 'Пользователь'}
+                  </Typography>
+                  <Typography
+                    variant="caption"
+                    noWrap
+                    sx={{ color: '#64748B', display: 'block', fontSize: '0.68rem' }}
+                  >
+                    @{currentUser?.username || 'admin'} • {currentUser?.role || 'admin'}
+                  </Typography>
+                </Box>
+              </Box>
+
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0, ml: 1 }}>
+                <Tooltip title="Заблокировать экран (Ctrl+L)">
+                  <IconButton
+                    size="small"
+                    onClick={lock}
+                    sx={{
+                      color: '#0F3C64',
+                      border: '1px solid #E2E8F0',
+                      borderRadius: 1.5,
+                      p: 0.6,
+                      bgcolor: '#FFFFFF',
+                      '&:hover': { bgcolor: '#F0F9FF', borderColor: '#0F3C64' }
+                    }}
+                  >
+                    <LockOutlinedIcon sx={{ fontSize: 15 }} />
+                  </IconButton>
+                </Tooltip>
+
+                <Tooltip title="Выйти из системы (Завершить сеанс)">
+                  <IconButton
+                    size="small"
+                    onClick={logout}
+                    sx={{
+                      color: '#DC2626',
+                      border: '1px solid #E2E8F0',
+                      borderRadius: 1.5,
+                      p: 0.6,
+                      bgcolor: '#FFFFFF',
+                      '&:hover': { bgcolor: '#FEF2F2', borderColor: '#DC2626' }
+                    }}
+                  >
+                    <LogoutIcon sx={{ fontSize: 15 }} />
+                  </IconButton>
+                </Tooltip>
+              </Box>
+            </Box>
+          )}
+        </Box>
+      )}
+
       {/* Compact System & Database Status Footer */}
       <Box
         sx={{
@@ -1021,12 +1172,12 @@ export default function Sidebar() {
         </Box>
         {!isCollapsed ? (
           <Typography variant="caption" sx={{ color: '#A0AEC0', fontSize: '0.68rem', fontWeight: 600 }}>
-            v1.4.5
+            v2.0.1
           </Typography>
         ) : (
-          <Tooltip title="Версия ERP: v1.4.5" placement="right" arrow>
+          <Tooltip title="Версия ERP: v2.0.1" placement="right" arrow>
             <Typography variant="caption" sx={{ color: '#A0AEC0', fontSize: '0.65rem', fontWeight: 700, cursor: 'default' }}>
-              v1.4
+              v2.0
             </Typography>
           </Tooltip>
         )}

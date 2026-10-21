@@ -1,0 +1,149 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Menu and Screen Permissions Configuration",
+  "description": "Схема валидации прав доступа для бокового меню и экранов МИС «ОртоERP»",
+  "type": "object",
+  "required": ["version", "menuGroups"],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "version": {
+      "type": "string",
+      "description": "Версия файла конфигурации"
+    },
+    "description": {
+      "type": "string",
+      "description": "Описание конфигурации"
+    },
+    "rolesAndPermissions": {
+      "type": "array",
+      "description": "Справочник доступных ролей и кодов разрешений",
+      "items": {
+        "type": "object",
+        "required": ["code", "name"],
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "Уникальный строковый код разрешения (например, sysadmin, doctor, accountant)"
+          },
+          "name": {
+            "type": "string",
+            "description": "Человекочитаемое наименование роли"
+          },
+          "description": {
+            "type": "string",
+            "description": "Описание прав и области ответственности"
+          }
+        }
+      }
+    },
+    "menuGroups": {
+      "type": "array",
+      "description": "Группы меню в боковой навигационной панели",
+      "items": {
+        "type": "object",
+        "required": ["id", "title", "items"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Уникальный идентификатор группы меню"
+          },
+          "title": {
+            "type": "string",
+            "description": "Отображаемый заголовок группы"
+          },
+          "permissions": {
+            "type": "array",
+            "description": "Массив прав для доступа ко всей группе. ['*'] — доступно всем.",
+            "items": {
+              "type": "string"
+            }
+          },
+          "icon": {
+            "type": "string",
+            "description": "Имя иконки Material-UI для группы"
+          },
+          "iconColor": {
+            "type": "string",
+            "description": "HEX-цвет иконки группы"
+          },
+          "defaultOpen": {
+            "type": "boolean",
+            "description": "Начальное состояние раскрытия группы"
+          },
+          "tooltip": {
+            "type": "string",
+            "description": "Подробное контекстное описание группы меню"
+          },
+          "items": {
+            "type": "array",
+            "description": "Список пунктов меню внутри группы",
+            "items": {
+              "type": "object",
+              "required": ["id", "text", "path", "permissions"],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "description": "Уникальный идентификатор пункта меню"
+                },
+                "text": {
+                  "type": "string",
+                  "description": "Название пункта меню"
+                },
+                "path": {
+                  "type": "string",
+                  "description": "Маршрут в приложении (URL)"
+                },
+                "icon": {
+                  "type": "string",
+                  "description": "Имя иконки Material-UI"
+                },
+                "iconColor": {
+                  "type": "string",
+                  "description": "HEX-цвет иконки"
+                },
+                "tooltip": {
+                  "type": "string",
+                  "description": "Подробное контекстное описание пункта меню"
+                },
+                "isExternal": {
+                  "type": "boolean",
+                  "description": "Признак внешней ссылки (открытие в новой вкладке)"
+                },
+                "defaultOpen": {
+                  "type": "boolean",
+                  "description": "Начальное состояние раскрытия подменю"
+                },
+                "permissions": {
+                  "type": "array",
+                  "description": "Массив кодов разрешений. ['*'] разрешает доступ всем пользователям.",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "children": {
+                  "type": "array",
+                  "description": "Дочерние подпункты меню"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "screenElements": {
+      "type": "object",
+      "description": "Конфигурация прав доступа для функциональных элементов интерфейса (кнопок, модальных окон, действий)",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}
