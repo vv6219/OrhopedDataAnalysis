@@ -16,13 +16,17 @@ import {
   DialogActions,
   IconButton,
   TextField,
-  MenuItem
+  MenuItem,
+  Chip,
+  Alert
 } from '@mui/material';
 import PrintIcon from '@mui/icons-material/Print';
 import CloseIcon from '@mui/icons-material/Close';
 import LocationOnIcon from '@mui/icons-material/LocationOn';
 import ConfirmationNumberIcon from '@mui/icons-material/ConfirmationNumber';
 import AssignmentIcon from '@mui/icons-material/Assignment';
+import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
+import SaveIcon from '@mui/icons-material/Save';
 import { useReactToPrint } from 'react-to-print';
 import { QRCodeSVG } from 'qrcode.react';
 import type { Appointment, Doctor } from './SchedulingTypes';
@@ -36,6 +40,8 @@ export interface ClinicInfo {
   clinic_elevator: string;
   clinic_driveway: string;
   clinic_phone: string;
+  default_administrator_id?: number;
+  default_administrator_name?: string;
 }
 
 export const DEFAULT_CLINIC_INFO: ClinicInfo = {
@@ -47,13 +53,19 @@ export const DEFAULT_CLINIC_INFO: ClinicInfo = {
   clinic_parking: 'Бесплатная парковка',
   clinic_elevator: 'Лифт (безбарьерная среда)',
   clinic_driveway: 'Заезд с Дублера Курортного пр-та',
-  clinic_phone: '+7 (862) 267-00-00'
+  clinic_phone: '+7 (862) 267-00-00',
+  default_administrator_id: 6,
+  default_administrator_name: 'Соколова Ольга'
 };
 
-interface SchedulingReportsProps {
+export interface SchedulingReportsProps {
   appointments: Appointment[];
   doctors: Doctor[];
   currentDate: string;
+  activeAdministrator?: string;
+  onUpdateAdministrator?: (name: string) => void;
+  staffAdministrators?: Array<{ id: number; full_name: string; role: string }>;
+  defaultAdministrator?: { id: number; name: string } | null;
 }
 
 // -----------------------------------------------------------------------------
@@ -61,8 +73,8 @@ interface SchedulingReportsProps {
 // -----------------------------------------------------------------------------
 export const AppointmentTicket = forwardRef<
   HTMLDivElement,
-  { appointment: Appointment; clinicInfo?: ClinicInfo }
->(({ appointment, clinicInfo = DEFAULT_CLINIC_INFO }, ref) => {
+  { appointment: Appointment; clinicInfo?: ClinicInfo; administratorName?: string }
+>(({ appointment, clinicInfo = DEFAULT_CLINIC_INFO, administratorName }, ref) => {
   return (
     <Box
       ref={ref}
@@ -338,12 +350,12 @@ export const AppointmentTicket = forwardRef<
         </Paper>
 
         {/* Timestamp and Administrator Signature */}
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3, px: 1 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3, px: 1, flexWrap: 'wrap', gap: 1 }}>
           <Typography variant="caption" sx={{ color: '#64748B' }}>
             Талон сформирован: {new Date().toLocaleString('ru-RU')}
           </Typography>
           <Typography variant="caption" sx={{ color: '#64748B' }}>
-            Администратор клиники: Соколова О.В. / Подпись: ______________
+            Администратор клиники: <strong>{administratorName || 'Соколова Ольга'}</strong> / Подпись: ______________
           </Typography>
         </Box>
 
@@ -367,8 +379,9 @@ export const DoctorDailyRoster = forwardRef<
     doctor: Doctor;
     date: string;
     appointments: Appointment[];
+    administratorName?: string;
   }
->(({ doctor, date, appointments }, ref) => {
+>(({ doctor, date, appointments, administratorName }, ref) => {
   const docApps = appointments.filter((a) => a.doctor_id === doctor.id);
 
   return (
@@ -475,21 +488,29 @@ export const DoctorDailyRoster = forwardRef<
       </Table>
 
       {/* Footer Signatures */}
-      <Box sx={{ pageBreakInside: 'avoid', borderTop: '2px solid #0F3C64', pt: 2.5, display: 'flex', justifyContent: 'space-between' }}>
-        <Box>
-          <Typography variant="body2" sx={{ fontWeight: 700 }}>
+      <Box sx={{ pageBreakInside: 'avoid', borderTop: '2px solid #0F3C64', pt: 2.5, display: 'flex', justifyContent: 'space-between', gap: 2 }}>
+        <Box sx={{ minWidth: 160 }}>
+          <Typography variant="body2" sx={{ fontWeight: 700, fontSize: '0.85rem' }}>
             Главный врач клиники:
           </Typography>
-          <Typography variant="caption" sx={{ color: '#475569' }}>
-            Добрушкин А.М. / ___________________ (подпись)
+          <Typography variant="caption" sx={{ color: '#475569', display: 'block', mt: 0.5 }}>
+            Добрушкин А.М. / ______________ (подпись)
           </Typography>
         </Box>
-        <Box sx={{ textAlign: 'right' }}>
-          <Typography variant="body2" sx={{ fontWeight: 700 }}>
+        <Box sx={{ minWidth: 180, textAlign: 'center' }}>
+          <Typography variant="body2" sx={{ fontWeight: 700, fontSize: '0.85rem' }}>
+            Дежурный администратор:
+          </Typography>
+          <Typography variant="caption" sx={{ color: '#0F3C64', fontWeight: 600, display: 'block', mt: 0.5 }}>
+            {administratorName || 'Соколова Ольга'} / ______________ (подпись)
+          </Typography>
+        </Box>
+        <Box sx={{ minWidth: 160, textAlign: 'right' }}>
+          <Typography variant="body2" sx={{ fontWeight: 700, fontSize: '0.85rem' }}>
             Лечащий врач смены:
           </Typography>
-          <Typography variant="caption" sx={{ color: '#475569' }}>
-            {doctor.full_name} / ___________________ (подпись)
+          <Typography variant="caption" sx={{ color: '#475569', display: 'block', mt: 0.5 }}>
+            {doctor.full_name} / ______________ (подпись)
           </Typography>
         </Box>
       </Box>
@@ -500,7 +521,16 @@ export const DoctorDailyRoster = forwardRef<
 // -----------------------------------------------------------------------------
 // 3. MAIN COMPONENT: SchedulingReports Host
 // -----------------------------------------------------------------------------
-export default function SchedulingReports({ appointments, doctors, currentDate }: SchedulingReportsProps) {
+export default function SchedulingReports({
+  appointments,
+  doctors,
+  currentDate,
+  activeAdministrator,
+  onUpdateAdministrator,
+  staffAdministrators = [],
+  defaultAdministrator = null,
+  onRefreshClinicInfo
+}: SchedulingReportsProps & { onRefreshClinicInfo?: () => void }) {
   const [selectedDoctorId, setSelectedDoctorId] = useState<number>(doctors[0]?.id || 2);
   const [ticketModalOpen, setTicketModalOpen] = useState(false);
   const [clinicInfo, setClinicInfo] = useState<ClinicInfo>(DEFAULT_CLINIC_INFO);
@@ -508,16 +538,74 @@ export default function SchedulingReports({ appointments, doctors, currentDate }
     appointments.length > 0 ? appointments[0] : null
   );
 
+  const [adminName, setAdminName] = useState<string>(
+    activeAdministrator || defaultAdministrator?.name || 'Соколова Ольга'
+  );
+  const [savingAdmin, setSavingAdmin] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<{ message: string; severity: 'success' | 'error' } | null>(null);
+
   useEffect(() => {
+    if (activeAdministrator) {
+      setAdminName(activeAdministrator);
+    }
+  }, [activeAdministrator]);
+
+  const loadClinicInfo = () => {
     fetch(`${API_BASE_URL}/api/scheduling/clinic-info`)
       .then((res) => res.json())
       .then((data) => {
         if (data.success && data.clinicInfo) {
           setClinicInfo(data.clinicInfo);
+          if (!activeAdministrator && data.clinicInfo.default_administrator_name) {
+            setAdminName(data.clinicInfo.default_administrator_name);
+          }
         }
       })
       .catch((err) => console.error('Error fetching clinic info:', err));
+  };
+
+  useEffect(() => {
+    loadClinicInfo();
   }, []);
+
+  const handleAdminChange = (newName: string) => {
+    setAdminName(newName);
+    onUpdateAdministrator?.(newName);
+    setSaveStatus(null);
+  };
+
+  const handleSaveAsDefaultAdmin = async () => {
+    setSavingAdmin(true);
+    setSaveStatus(null);
+    try {
+      const matchedStaff = staffAdministrators.find(
+        (s) => s.full_name.trim().toLowerCase() === adminName.trim().toLowerCase()
+      );
+      const res = await fetch(`${API_BASE_URL}/api/scheduling/clinic-info`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          default_administrator_name: adminName,
+          default_administrator_id: matchedStaff?.id || clinicInfo.default_administrator_id || null
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setSaveStatus({
+          message: `Администратор "${adminName}" успешно сохранён в параметрах системы по умолчанию`,
+          severity: 'success'
+        });
+        loadClinicInfo();
+        onRefreshClinicInfo?.();
+      } else {
+        setSaveStatus({ message: data.error || 'Не удалось сохранить параметры', severity: 'error' });
+      }
+    } catch (err: any) {
+      setSaveStatus({ message: err?.message || 'Ошибка сети при сохранении', severity: 'error' });
+    } finally {
+      setSavingAdmin(false);
+    }
+  };
 
   const ticketPrintRef = useRef<HTMLDivElement>(null);
   const rosterPrintRef = useRef<HTMLDivElement>(null);
@@ -537,16 +625,112 @@ export default function SchedulingReports({ appointments, doctors, currentDate }
   return (
     <Box sx={{ width: '100%', mt: 2 }}>
       {/* Top Banner */}
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2.5 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2.5, flexWrap: 'wrap', gap: 2 }}>
         <Box>
           <Typography variant="h6" sx={{ fontWeight: 700, color: '#0F3C64' }}>
             Отчёты и клиническая документация расписания
           </Typography>
           <Typography variant="caption" sx={{ color: '#64748B' }}>
-            Формирование и печать талонов пациентов с QR-кодом и суточных ведомостей приёма врачей
+            Формирование и печать талонов пациентов с QR-кодом, схемы проезда и суточных ведомостей приёма врачей
           </Typography>
         </Box>
       </Box>
+
+      {/* Administrator Control & Default Parameter Settings */}
+      <Paper
+        elevation={0}
+        sx={{
+          p: 2.5,
+          mb: 3,
+          borderRadius: '16px',
+          border: '1.5px solid #CBD5E1',
+          bgcolor: '#F8FAFC'
+        }}
+      >
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 2, mb: 1.5 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+            <AdminPanelSettingsIcon sx={{ fontSize: 28, color: '#0F3C64' }} />
+            <Box>
+              <Typography variant="subtitle1" sx={{ fontWeight: 700, color: '#0F3C64', lineHeight: 1.2 }}>
+                Администратор смены (для подписи в талонах и суточных ведомостях)
+              </Typography>
+              <Typography variant="caption" sx={{ color: '#64748B' }}>
+                ФИО администратора выводится на печать в талоне пациента и ведомости смены врача
+              </Typography>
+            </Box>
+          </Box>
+
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+            <Chip
+              label={`По умолчанию в параметрах: ${clinicInfo.default_administrator_name || defaultAdministrator?.name || 'Соколова Ольга'}`}
+              variant="outlined"
+              size="small"
+              sx={{ bgcolor: '#FFFFFF', borderColor: '#CBD5E1', fontWeight: 600, color: '#334155' }}
+            />
+            {adminName !== (clinicInfo.default_administrator_name || defaultAdministrator?.name) && (
+              <Chip
+                label="Выбран администратор смены"
+                color="primary"
+                size="small"
+                sx={{ fontWeight: 600 }}
+              />
+            )}
+          </Box>
+        </Box>
+
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+          <TextField
+            select
+            label="Выбрать из штата администраторов (staff)"
+            value={
+              staffAdministrators.some((s) => s.full_name === adminName)
+                ? adminName
+                : ''
+            }
+            onChange={(e) => {
+              if (e.target.value) handleAdminChange(e.target.value);
+            }}
+            size="small"
+            sx={{ minWidth: 280, bgcolor: '#FFFFFF' }}
+          >
+            {staffAdministrators.map((s) => (
+              <MenuItem key={s.id} value={s.full_name}>
+                {s.full_name} ({s.role || 'Администратор'})
+              </MenuItem>
+            ))}
+          </TextField>
+
+          <TextField
+            label="Или указать ФИО вручную"
+            size="small"
+            value={adminName}
+            onChange={(e) => handleAdminChange(e.target.value)}
+            sx={{ minWidth: 260, bgcolor: '#FFFFFF' }}
+          />
+
+          <Button
+            variant="outlined"
+            startIcon={<SaveIcon />}
+            disabled={savingAdmin}
+            onClick={handleSaveAsDefaultAdmin}
+            sx={{
+              borderColor: '#0F3C64',
+              color: '#0F3C64',
+              fontWeight: 700,
+              textTransform: 'none',
+              '&:hover': { bgcolor: 'rgba(15, 60, 100, 0.05)' }
+            }}
+          >
+            {savingAdmin ? 'Сохранение...' : 'Сделать по умолчанию в параметрах'}
+          </Button>
+        </Box>
+
+        {saveStatus && (
+          <Alert severity={saveStatus.severity} sx={{ mt: 2, py: 0.5, borderRadius: '8px' }}>
+            {saveStatus.message}
+          </Alert>
+        )}
+      </Paper>
 
       {/* Action Cards */}
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 3, mb: 4 }}>
@@ -571,7 +755,7 @@ export default function SchedulingReports({ appointments, doctors, currentDate }
                 Талон предварительной записи на приём
               </Typography>
               <Typography variant="caption" sx={{ color: '#64748B' }}>
-                Памятка пациенту: дата, кабинет, врач, QR-код схемы проезда и правила подготовки
+                Памятка пациенту: дата, кабинет, врач, QR-код схемы проезда, правила подготовки и подпись администратора ({adminName})
               </Typography>
             </Box>
           </Box>
@@ -626,7 +810,7 @@ export default function SchedulingReports({ appointments, doctors, currentDate }
                 Суточный лист расписания врача (Ведомость смены)
               </Typography>
               <Typography variant="caption" sx={{ color: '#64748B' }}>
-                Официальная сводка приёма на рабочий день: перечень пациентов, сервисов и подписи
+                Официальная сводка приёма на рабочий день: перечень пациентов, сервисов, подписи главврача, дежурного администратора ({adminName}) и врача
               </Typography>
             </Box>
           </Box>
@@ -666,6 +850,7 @@ export default function SchedulingReports({ appointments, doctors, currentDate }
             doctor={selectedDoctorObj}
             date={currentDate}
             appointments={appointments}
+            administratorName={adminName}
           />
         )}
       </Box>
@@ -706,7 +891,12 @@ export default function SchedulingReports({ appointments, doctors, currentDate }
 
           <DialogContent sx={{ p: 2, bgcolor: '#F8FAFC' }}>
             <Paper elevation={2} sx={{ borderRadius: '12px', overflow: 'hidden' }}>
-              <AppointmentTicket ref={ticketPrintRef} appointment={selectedAppForTicket} clinicInfo={clinicInfo} />
+              <AppointmentTicket
+                ref={ticketPrintRef}
+                appointment={selectedAppForTicket}
+                clinicInfo={clinicInfo}
+                administratorName={adminName}
+              />
             </Paper>
           </DialogContent>
 

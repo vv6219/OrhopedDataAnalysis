@@ -199,6 +199,25 @@ export default function ServerHealth() {
     }
   }, [location.search]);
 
+  const [medflexProbing, setMedflexProbing] = useState<boolean>(false);
+  const [medflexProbeResult, setMedflexProbeResult] = useState<any>(null);
+
+  // Direct MedFlex probe handler
+  const handleMedflexProbe = async () => {
+    setMedflexProbing(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/medflex/admin/ping-test`, { method: 'POST' });
+      const json = await res.json();
+      setMedflexProbeResult(json.probeResult);
+      setSuccessFeedback(`Тест связи с MedFlex успешен! Задержка: ${json.probeResult?.latencyMs} мс`);
+      await fetchStatus();
+    } catch (err: any) {
+      setError(`Сбой пинга MedFlex: ${err.message}`);
+    } finally {
+      setMedflexProbing(false);
+    }
+  };
+
   // Helper to choose service icon
   const getServiceIcon = (id: string) => {
     switch (id) {
@@ -212,6 +231,8 @@ export default function ServerHealth() {
         return <CreditCardIcon sx={{ fontSize: 28, color: '#D97706' }} />;
       case 'firebird':
         return <SyncAltIcon sx={{ fontSize: 28, color: '#EA580C' }} />;
+      case 'medflex':
+        return <SyncAltIcon sx={{ fontSize: 28, color: '#4F46E5' }} />;
       case 'swagger':
         return <CodeIcon sx={{ fontSize: 28, color: '#2563EB' }} />;
       case 'backup':
@@ -721,6 +742,35 @@ export default function ServerHealth() {
                     </>
                   )}
 
+                  {svc.id === 'medflex' && svc.details && (
+                    <>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <Typography variant="caption" sx={{ color: 'text.secondary' }}>Статус / Активность:</Typography>
+                        <Typography variant="caption" sx={{ fontWeight: 700, color: svc.details.enabled?.includes('Активен') ? '#16A34A' : '#DC2626' }}>
+                          {svc.details.enabled}
+                        </Typography>
+                      </Box>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <Typography variant="caption" sx={{ color: 'text.secondary' }}>Контур шлюза:</Typography>
+                        <Typography variant="caption" sx={{ fontWeight: 600 }}>{svc.details.mode}</Typography>
+                      </Box>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <Typography variant="caption" sx={{ color: 'text.secondary' }}>Circuit Breaker / RTT:</Typography>
+                        <Typography variant="caption" sx={{ fontWeight: 600 }}>{svc.details.circuitBreaker} ({svc.details.lastPingLatency})</Typography>
+                      </Box>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <Typography variant="caption" sx={{ color: 'text.secondary' }}>Очередь / Ошибки:</Typography>
+                        <Typography variant="caption" sx={{ fontWeight: 600 }}>{svc.details.pendingQueueCount} в очереди (сбоев: {svc.details.failedQueueCount || 0})</Typography>
+                      </Box>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <Typography variant="caption" sx={{ color: 'text.secondary' }}>Частота синхронизации:</Typography>
+                        <Typography variant="caption" sx={{ fontWeight: 700, color: '#4F46E5' }}>
+                          Опрос: {svc.details.pingInterval || '60 сек'} • Расписание: {svc.details.scheduleSyncInterval || '30 мин'}
+                        </Typography>
+                      </Box>
+                    </>
+                  )}
+
                   {/* Error if present */}
                   {svc.error && (
                     <Box sx={{ bgcolor: '#FEF2F2', p: 1, borderRadius: 1, border: '1px solid #FECACA', mt: 0.5 }}>
@@ -879,6 +929,17 @@ export default function ServerHealth() {
                     >
                       {repairingId === 'backup' ? 'Создание снимка...' : 'Создать снимок БД'}
                     </Button>
+                  ) : svc.id === 'medflex' ? (
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      fullWidth
+                      startIcon={<SyncAltIcon sx={{ fontSize: 16 }} />}
+                      onClick={() => navigate('/admin/medflex-sync')}
+                      sx={{ textTransform: 'none', fontWeight: 600, borderColor: '#C7D2FE', color: '#4F46E5', '&:hover': { bgcolor: '#EEF2FF', borderColor: '#818CF8' } }}
+                    >
+                      Центр онлайн-записи
+                    </Button>
                   ) : (
                     <Button
                       size="small"
@@ -897,6 +958,124 @@ export default function ServerHealth() {
           </Grid>
         ))}
       </Grid>
+
+      {/* MedFlex Gateway Deep Diagnostics Panel */}
+      <Paper
+        elevation={0}
+        sx={{
+          p: 3,
+          mb: 3,
+          borderRadius: 3,
+          border: '1px solid #E0E7FF',
+          background: 'linear-gradient(135deg, #F5F3FF 0%, #EEF2FF 100%)',
+          boxShadow: '0 4px 20px rgba(79, 70, 229, 0.06)'
+        }}
+      >
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 2, mb: 2.5 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+            <Box
+              sx={{
+                width: 48,
+                height: 48,
+                borderRadius: 2.5,
+                bgcolor: '#4F46E5',
+                color: '#FFFFFF',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                boxShadow: '0 4px 14px rgba(79, 70, 229, 0.35)'
+              }}
+            >
+              <SyncAltIcon sx={{ fontSize: 26 }} />
+            </Box>
+            <Box>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Typography variant="h6" sx={{ fontWeight: 800, color: '#1E1B4B' }}>
+                  Диагностика шлюза онлайн-записи MedFlex (ПроДокторов)
+                </Typography>
+                <Chip
+                  size="small"
+                  label={data?.services?.find(s => s.id === 'medflex')?.status === 'ONLINE' ? 'ONLINE (В сети)' : 'DEGRADED / OFFLINE'}
+                  color={data?.services?.find(s => s.id === 'medflex')?.status === 'ONLINE' ? 'success' : 'warning'}
+                  sx={{ fontWeight: 700, borderRadius: 1.5 }}
+                />
+              </Box>
+              <Typography variant="body2" sx={{ color: '#4338CA' }}>
+                Непрерывный мониторинг RTT пинга, защита от коллизий, оффлайн FIFO буфер и Serilog аудит
+              </Typography>
+            </Box>
+          </Box>
+
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
+            <Button
+              variant="outlined"
+              size="small"
+              startIcon={<SpeedIcon sx={{ fontSize: 18 }} />}
+              onClick={handleMedflexProbe}
+              disabled={medflexProbing}
+              sx={{
+                fontWeight: 700,
+                color: '#4F46E5',
+                borderColor: '#C7D2FE',
+                bgcolor: '#FFFFFF',
+                '&:hover': { bgcolor: '#F5F3FF', borderColor: '#818CF8' }
+              }}
+            >
+              {medflexProbing ? 'Измерение RTT...' : 'Экспресс-тест пинга'}
+            </Button>
+            <Button
+              variant="contained"
+              size="small"
+              startIcon={<OpenInNewIcon sx={{ fontSize: 16 }} />}
+              onClick={() => navigate('/admin/medflex-sync')}
+              sx={{
+                fontWeight: 700,
+                bgcolor: '#4F46E5',
+                '&:hover': { bgcolor: '#4338CA' },
+                boxShadow: '0 4px 12px rgba(79, 70, 229, 0.25)'
+              }}
+            >
+              Центр онлайн-записи MedFlex
+            </Button>
+          </Box>
+        </Box>
+
+        {/* Diagnostic KPI Counters */}
+        <Grid container spacing={2}>
+          <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+            <Paper elevation={0} sx={{ p: 1.8, borderRadius: 2, bgcolor: '#FFFFFF', border: '1px solid #E2E8F0' }}>
+              <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 600 }}>Режим интеграции</Typography>
+              <Typography variant="subtitle2" sx={{ fontWeight: 800, color: '#0F3C64', mt: 0.3 }}>
+                {data?.services?.find(s => s.id === 'medflex')?.details?.mode || 'Песочница (dual)'}
+              </Typography>
+            </Paper>
+          </Grid>
+          <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+            <Paper elevation={0} sx={{ p: 1.8, borderRadius: 2, bgcolor: '#FFFFFF', border: '1px solid #E2E8F0' }}>
+              <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 600 }}>Пинг (RTT Latency)</Typography>
+              <Typography variant="subtitle2" sx={{ fontWeight: 800, color: '#16A34A', mt: 0.3 }}>
+                {medflexProbeResult?.latencyMs ? `${medflexProbeResult.latencyMs} мс (свежий замер)` : (data?.services?.find(s => s.id === 'medflex')?.details?.lastPingLatency || '—')}
+              </Typography>
+            </Paper>
+          </Grid>
+          <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+            <Paper elevation={0} sx={{ p: 1.8, borderRadius: 2, bgcolor: '#FFFFFF', border: '1px solid #E2E8F0' }}>
+              <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 600 }}>Оффлайн-буфер (Очередь)</Typography>
+              <Typography variant="subtitle2" sx={{ fontWeight: 800, color: '#4F46E5', mt: 0.3 }}>
+                {data?.services?.find(s => s.id === 'medflex')?.details?.pendingQueueCount || 0} задач в очереди
+              </Typography>
+            </Paper>
+          </Grid>
+          <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+            <Paper elevation={0} sx={{ p: 1.8, borderRadius: 2, bgcolor: '#FFFFFF', border: '1px solid #E2E8F0' }}>
+              <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 600 }}>Состояние Circuit Breaker</Typography>
+              <Typography variant="subtitle2" sx={{ fontWeight: 800, color: '#16A34A', mt: 0.3 }}>
+                {data?.services?.find(s => s.id === 'medflex')?.details?.circuitBreaker?.toUpperCase() || 'HEALTHY'}
+              </Typography>
+            </Paper>
+          </Grid>
+        </Grid>
+      </Paper>
 
       {/* Terminal / Execution Console */}
       <Paper

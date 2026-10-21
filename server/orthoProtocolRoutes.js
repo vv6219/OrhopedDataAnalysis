@@ -7,6 +7,7 @@ const multer = require('multer');
 const db = require('./database');
 const { logOrthoAudit, LogLevels, EventTypes } = require('./orthoAuditLogger');
 const { resolveItemProtocol, getRuleBasedProtocol, migrateExistingReferralItems, getItemPreparation, getAggregatedPreparation } = require('./clinicalProtocolHelper');
+const medflexSyncService = require('./medflex/medflexSyncService');
 
 // Automatically ensure existing and future referral items have complete clinical protocols
 migrateExistingReferralItems(db).catch(err => console.error('Referral items protocol migration notice:', err));
@@ -445,6 +446,283 @@ router.get('/registry', (req, res) => {
       });
     });
   }
+});
+
+// -----------------------------------------------------------------------------
+// 1.1. GET /api/ortho/queue - Today/Scheduled Patient Queue for Doctor
+// Supports filtering by date, doctorId, status with KPI summary
+// -----------------------------------------------------------------------------
+router.get('/queue', (req, res) => {
+  const { date, doctorId, status } = req.query;
+  const isAllDates = date === 'all';
+  const targetDate = isAllDates ? 'all' : (date || '2026-10-21');
+
+  let query = `
+    SELECT 
+      a.id,
+      a.patient_id,
+      a.doctor_id,
+      a.operation_id,
+      a.appointment_date,
+      a.start_time,
+      a.end_time,
+      a.duration_minutes,
+      a.room_number,
+      a.joint_area,
+      a.urgency_level,
+      a.status,
+      a.arrival_time,
+      a.notes,
+      a.created_at,
+      p.full_name AS patient_name,
+      p.mednum AS patient_mednum,
+      p.age AS patient_age,
+      p.sex_display AS patient_sex,
+      p.phone AS patient_phone,
+      p.dms_insurer AS patient_dms,
+      s.full_name AS doctor_name,
+      s.role AS doctor_role,
+      s.specialization AS doctor_specialization,
+      o.name AS operation_name,
+      o.price AS operation_price,
+      pr.id AS protocol_id,
+      pr.is_signed AS protocol_is_signed,
+      pr.signed_at AS protocol_signed_at
+    FROM appointments a
+    LEFT JOIN patients p ON a.patient_id = p.id
+    LEFT JOIN staff s ON a.doctor_id = s.id
+    LEFT JOIN operations o ON a.operation_id = o.id
+    LEFT JOIN protocols pr ON pr.appointment_id = a.id
+    WHERE 1=1
+  `;
+
+  const params = [];
+
+  if (!isAllDates) {
+    query += ` AND a.appointment_date = ?`;
+    params.push(targetDate);
+  } else {
+    // Для "Все записанные" показываем от текущей даты вперед
+    query += ` AND a.appointment_date >= '2026-10-21'`;
+  }
+
+  if (doctorId && doctorId !== 'all') {
+    query += ` AND a.doctor_id = ?`;
+    params.push(Number(doctorId));
+  }
+
+  if (status && status !== 'all') {
+    query += ` AND a.status = ?`;
+    params.push(status);
+  }
+
+  query += ` ORDER BY a.appointment_date ASC, a.start_time ASC, a.id ASC`;
+
+  db.all(query, params, (err, rows) => {
+    if (err) {
+      console.error('Error fetching ortho queue:', err);
+      return res.status(500).json({ success: false, error: err.message });
+    }
+
+    // Рассчитаем KPI на эту дату (или на весь период) с учетом фильтра врача
+    let kpiSql = `
+      SELECT 
+        COUNT(*) AS total,
+        SUM(CASE WHEN status = 'waiting' THEN 1 ELSE 0 END) AS waiting,
+        SUM(CASE WHEN status = 'in_progress' THEN 1 ELSE 0 END) AS in_progress,
+        SUM(CASE WHEN status IN ('completed', 'protocol_signed') THEN 1 ELSE 0 END) AS completed,
+        SUM(CASE WHEN status = 'scheduled' THEN 1 ELSE 0 END) AS scheduled,
+        SUM(CASE WHEN urgency_level = 'cito' THEN 1 ELSE 0 END) AS cito
+      FROM appointments
+      WHERE 1=1
+    `;
+    const kpiParams = [];
+    if (!isAllDates) {
+      kpiSql += ` AND appointment_date = ?`;
+      kpiParams.push(targetDate);
+    } else {
+      kpiSql += ` AND appointment_date >= '2026-10-21'`;
+    }
+
+    if (doctorId && doctorId !== 'all') {
+      kpiSql += ` AND doctor_id = ?`;
+      kpiParams.push(Number(doctorId));
+    }
+
+    db.get(kpiSql, kpiParams, (kErr, kpis) => {
+      // Подсчет количества пациентов и детальная сводка по дням для бейджей и модальных окон
+      let dayCountSql = `
+        SELECT 
+          appointment_date, 
+          COUNT(*) as total,
+          SUM(CASE WHEN status = 'waiting' THEN 1 ELSE 0 END) as waiting,
+          SUM(CASE WHEN status = 'in_progress' THEN 1 ELSE 0 END) as in_progress,
+          SUM(CASE WHEN status IN ('completed', 'protocol_signed') THEN 1 ELSE 0 END) as completed,
+          SUM(CASE WHEN status = 'scheduled' THEN 1 ELSE 0 END) as scheduled,
+          SUM(CASE WHEN urgency_level = 'cito' THEN 1 ELSE 0 END) as cito
+        FROM appointments
+        WHERE appointment_date >= '2026-10-21'
+      `;
+      const dayCountParams = [];
+      if (doctorId && doctorId !== 'all') {
+        dayCountSql += ` AND doctor_id = ?`;
+        dayCountParams.push(Number(doctorId));
+      }
+      dayCountSql += ` GROUP BY appointment_date ORDER BY appointment_date ASC`;
+
+      db.all(dayCountSql, dayCountParams, (dErr, dayRows) => {
+        const dayCounts = {};
+        let totalUpcoming = 0;
+        const totalSummary = {
+          total: 0,
+          waiting: 0,
+          in_progress: 0,
+          completed: 0,
+          scheduled: 0,
+          cito: 0
+        };
+
+        (dayRows || []).forEach(r => {
+          dayCounts[r.appointment_date] = r.total;
+          totalUpcoming += r.total;
+
+          totalSummary.total += r.total || 0;
+          totalSummary.waiting += r.waiting || 0;
+          totalSummary.in_progress += r.in_progress || 0;
+          totalSummary.completed += r.completed || 0;
+          totalSummary.scheduled += r.scheduled || 0;
+          totalSummary.cito += r.cito || 0;
+        });
+        dayCounts['all'] = totalUpcoming;
+
+        res.json({
+          success: true,
+          date: targetDate,
+          count: (rows || []).length,
+          kpis: kpis || { total: 0, waiting: 0, in_progress: 0, completed: 0, scheduled: 0, cito: 0 },
+          dayCounts,
+          dayBreakdown: dayRows || [],
+          totalSummary,
+          queue: rows || []
+        });
+      });
+    });
+  });
+});
+
+// -----------------------------------------------------------------------------
+// 1.2. PUT /api/ortho/queue/:id/status - Update queue status (e.g. in_progress, completed)
+// -----------------------------------------------------------------------------
+router.put('/queue/:id/status', (req, res) => {
+  const { id } = req.params;
+  const { status, arrival_time } = req.body;
+
+  if (!status) {
+    return res.status(400).json({ success: false, error: 'Status is required' });
+  }
+
+  const nowTime = new Date().toTimeString().slice(0, 8);
+  const effectiveArrival = arrival_time || (status === 'in_progress' || status === 'waiting' ? nowTime : null);
+
+  db.run(
+    `UPDATE appointments 
+     SET status = ?, 
+         arrival_time = COALESCE(?, arrival_time) 
+     WHERE id = ?`,
+    [status, effectiveArrival, Number(id)],
+    function(err) {
+      if (err) {
+        return res.status(500).json({ success: false, error: err.message });
+      }
+      if (status === 'cancelled' || status === 'no_show') {
+        db.get("SELECT * FROM appointments WHERE id = ?", [Number(id)], (errApp, app) => {
+          if (!errApp && app) {
+            medflexSyncService.pushSlotStatus({
+              doctorId: app.doctor_id,
+              appointmentDate: app.appointment_date,
+              startTime: app.start_time,
+              endTime: app.end_time,
+              isFree: true
+            }).catch((e) => console.warn('[OrthoProtocolRoutes] MedFlex release slot error:', e.message));
+
+            if (app.medflex_claim_id) {
+              medflexSyncService.cancelMedflexAppointment(app.medflex_claim_id)
+                .catch((e) => console.warn('[OrthoProtocolRoutes] MedFlex cancel claim error:', e.message));
+            }
+          }
+        });
+      }
+
+      res.json({
+        success: true,
+        id: Number(id),
+        status,
+        changes: this.changes
+      });
+    }
+  );
+});
+
+// -----------------------------------------------------------------------------
+// 1.3. GET /api/ortho/doctors - Doctor staff catalog for queue selector
+// -----------------------------------------------------------------------------
+router.get('/doctors', (req, res) => {
+  db.all(
+    `SELECT DISTINCT s.id, s.full_name, s.role, s.specialization, s.contact_phone, s.email, s.status
+     FROM staff s
+     WHERE s.status = 'active' OR s.id IN (SELECT DISTINCT doctor_id FROM appointments WHERE doctor_id IS NOT NULL)
+     ORDER BY CASE WHEN s.id = 2 THEN 0 ELSE 1 END, s.full_name ASC`,
+    [],
+    (err, rows) => {
+      if (err) {
+        return res.status(500).json({ success: false, error: err.message });
+      }
+      res.json({
+        success: true,
+        doctors: rows || []
+      });
+    }
+  );
+});
+
+// -----------------------------------------------------------------------------
+// 1.4. GET /api/ortho/patients/search - Full patient list search for quick pick
+// -----------------------------------------------------------------------------
+router.get('/patients/search', (req, res) => {
+  const { q = '', limit = 30 } = req.query;
+  const searchPattern = `%${q.trim()}%`;
+
+  let sql = `
+    SELECT id, full_name, surname, name, patron, age, sex_display, mednum, phone, sphone, dms_insurer, last_visit_date, total_visits
+    FROM patients
+  `;
+  const params = [];
+
+  if (q.trim()) {
+    sql += `
+      WHERE full_name LIKE ? 
+         OR surname LIKE ? 
+         OR phone LIKE ? 
+         OR sphone LIKE ? 
+         OR CAST(mednum AS TEXT) LIKE ?
+         OR CAST(id AS TEXT) = ?
+    `;
+    params.push(searchPattern, searchPattern, searchPattern, searchPattern, searchPattern, q.trim());
+  }
+
+  sql += ` ORDER BY last_visit_date DESC, id DESC LIMIT ?`;
+  params.push(Number(limit));
+
+  db.all(sql, params, (err, rows) => {
+    if (err) {
+      return res.status(500).json({ success: false, error: err.message });
+    }
+    res.json({
+      success: true,
+      count: (rows || []).length,
+      patients: rows || []
+    });
+  });
 });
 
 // -----------------------------------------------------------------------------

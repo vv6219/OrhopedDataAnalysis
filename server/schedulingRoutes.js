@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('./database');
+const medflexSyncService = require('./medflex/medflexSyncService');
 
 // Helper to calculate end time from start time and duration
 function calculateEndTime(startTime, durationMinutes) {
@@ -16,7 +17,7 @@ function calculateEndTime(startTime, durationMinutes) {
 // -----------------------------------------------------------------------------
 router.get('/clinic-info', (req, res) => {
   db.all(
-    "SELECT param_name, param_value FROM calculation_parameters WHERE param_name LIKE 'clinic_%'",
+    "SELECT param_name, param_value FROM calculation_parameters WHERE param_name LIKE 'clinic_%' OR param_name LIKE 'default_admin%'",
     [],
     (err, rows) => {
       if (err) {
@@ -31,16 +32,73 @@ router.get('/clinic-info', (req, res) => {
         clinic_parking: 'Бесплатная парковка',
         clinic_elevator: 'Лифт (безбарьерная среда)',
         clinic_driveway: 'Заезд с Дублера Курортного пр-та',
-        clinic_phone: '+7 (862) 267-00-00'
+        clinic_phone: '+7 (862) 267-00-00',
+        default_administrator_id: 6,
+        default_administrator_name: 'Соколова Ольга'
       };
       if (rows && rows.length > 0) {
         rows.forEach((r) => {
           clinicInfo[r.param_name] = r.param_value;
         });
       }
-      res.json({ success: true, clinicInfo });
+
+      // Загрузим список доступных администраторов клиники из штатного расписания
+      db.all(
+        "SELECT id, full_name, role, specialization, status FROM staff WHERE (role LIKE '%Администратор%' OR role LIKE '%admin%' OR role LIKE '%Регистратура%') AND status != 'deleted' ORDER BY id ASC",
+        [],
+        (sErr, staffAdmins) => {
+          res.json({
+            success: true,
+            clinicInfo,
+            defaultAdministrator: {
+              id: clinicInfo.default_administrator_id || (staffAdmins && staffAdmins[0] ? staffAdmins[0].id : 1),
+              name: clinicInfo.default_administrator_name || (staffAdmins && staffAdmins[0] ? staffAdmins[0].full_name : 'Администратор клиники')
+            },
+            staffAdministrators: staffAdmins || []
+          });
+        }
+      );
     }
   );
+});
+
+// 0.1. PUT /api/scheduling/clinic-info - Update clinic info or default administrator in parameters
+// -----------------------------------------------------------------------------
+router.put('/clinic-info', (req, res) => {
+  const { default_administrator_id, default_administrator_name, clinicInfo } = req.body;
+  const updates = [];
+
+  if (default_administrator_id !== undefined) {
+    updates.push(['default_administrator_id', String(default_administrator_id)]);
+  }
+  if (default_administrator_name !== undefined) {
+    updates.push(['default_administrator_name', String(default_administrator_name)]);
+  }
+  if (clinicInfo && typeof clinicInfo === 'object') {
+    Object.entries(clinicInfo).forEach(([key, val]) => {
+      if (key.startsWith('clinic_') || key.startsWith('default_admin')) {
+        updates.push([key, String(val)]);
+      }
+    });
+  }
+
+  if (updates.length === 0) {
+    return res.json({ success: true, message: 'Нет изменений для сохранения' });
+  }
+
+  db.serialize(() => {
+    const stmt = db.prepare('INSERT OR REPLACE INTO calculation_parameters (param_name, param_value) VALUES (?, ?)');
+    updates.forEach(([name, val]) => {
+      stmt.run(name, val);
+    });
+    stmt.finalize((err) => {
+      if (err) {
+        console.error('Error saving clinic parameters:', err);
+        return res.status(500).json({ success: false, error: err.message });
+      }
+      res.json({ success: true, message: 'Параметры клиники успешно сохранены' });
+    });
+  });
 });
 
 // -----------------------------------------------------------------------------
@@ -462,6 +520,15 @@ router.post('/appointments', (req, res) => {
 
         const appointmentId = this.lastID;
 
+        // Non-blocking real-time slot lock in MedFlex (occupy slot)
+        medflexSyncService.pushSlotStatus({
+          doctorId: doctor_id,
+          appointmentDate: appointment_date,
+          startTime: start_time,
+          endTime: end_time,
+          isFree: false
+        }).catch((e) => console.warn('[SchedulingRoutes] MedFlex push slot error:', e.message));
+
         // Fetch patient and doctor info to build notification
         db.get(
           `SELECT p.full_name AS p_name, p.sphone, s.full_name AS doc_name 
@@ -533,6 +600,21 @@ router.put('/appointments/:id/status', (req, res) => {
     if (status === 'cancelled') {
       updateSql += `, cancellation_reason = ?`;
       params.push(cancellation_reason || 'Отменено пациентом');
+
+      // Non-blocking real-time slot release in MedFlex
+      medflexSyncService.pushSlotStatus({
+        doctorId: app.doctor_id,
+        appointmentDate: app.appointment_date,
+        startTime: app.start_time,
+        endTime: app.end_time,
+        isFree: true
+      }).catch((e) => console.warn('[SchedulingRoutes] MedFlex release slot error:', e.message));
+
+      // If appointment was booked through MedFlex online booking, cancel external claim
+      if (app.medflex_claim_id) {
+        medflexSyncService.cancelMedflexAppointment(app.medflex_claim_id)
+          .catch((e) => console.warn('[SchedulingRoutes] MedFlex cancel claim error:', e.message));
+      }
     }
 
     updateSql += ` WHERE id = ?`;
@@ -686,6 +768,25 @@ router.post('/notifications/:id/simulate-action', (req, res) => {
          WHERE id = ?`,
         [notif.appointment_id]
       );
+
+      // Notify MedFlex to release slot and cancel online claim if applicable
+      db.get("SELECT * FROM appointments WHERE id = ?", [notif.appointment_id], (errApp, app) => {
+        if (!errApp && app) {
+          medflexSyncService.pushSlotStatus({
+            doctorId: app.doctor_id,
+            appointmentDate: app.appointment_date,
+            startTime: app.start_time,
+            endTime: app.end_time,
+            isFree: true
+          }).catch((e) => console.warn('[SchedulingRoutes] MedFlex release slot error:', e.message));
+
+          if (app.medflex_claim_id) {
+            medflexSyncService.cancelMedflexAppointment(app.medflex_claim_id)
+              .catch((e) => console.warn('[SchedulingRoutes] MedFlex cancel claim error:', e.message));
+          }
+        }
+      });
+
       return res.json({
         success: true,
         message: 'Запись отменена по запросу пациента'

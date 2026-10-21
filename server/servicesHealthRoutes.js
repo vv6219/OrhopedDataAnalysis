@@ -430,19 +430,79 @@ async function checkPosService() {
 }
 
 /**
- * Checks all 7 system components
+ * Check MedFlex Online Booking Gateway
+ */
+async function checkMedflexService() {
+  const start = Date.now();
+  try {
+    const medflexClient = require('./medflex/medflexClient');
+    const { circuitBreaker } = require('./medflex/medflexCircuitBreaker');
+    const queueService = require('./medflex/medflexQueueService');
+    const config = await medflexClient.getConfig();
+    const circuitState = circuitBreaker.getState();
+    const queueStats = await queueService.getStats();
+
+    const isEnabled = config.enabled !== false;
+    let status = 'ONLINE';
+    if (!isEnabled) {
+      status = 'DEGRADED';
+    } else if (circuitState.state === 'degraded' || circuitState.state === 'recovering') {
+      status = 'DEGRADED';
+    } else if (circuitState.state === 'offline') {
+      status = 'ERROR';
+    }
+
+    const latencyMs = circuitState.lastLatencyMs || (Date.now() - start);
+
+    return {
+      id: 'medflex',
+      name: 'Шлюз онлайн-записи MedFlex / ПроДокторов',
+      category: 'External Telemetry & Online Booking',
+      status,
+      latencyMs,
+      url: config.api_url || 'https://mis-api.medflex.ru',
+      description: 'Двунаправленная синхронизация расписания врачей, приемов, оффлайн-буфер и защита от коллизий',
+      details: {
+        enabled: isEnabled ? 'Включен (Активен)' : 'Деактивирован администратором',
+        mode: config.mode === 'sandbox' ? `Песочница (${config.sandbox_direction || 'dual'})` : 'Продакшн',
+        circuitBreaker: circuitState.state,
+        lastPingLatency: circuitState.lastLatencyMs ? `${circuitState.lastLatencyMs} мс` : '—',
+        pingInterval: `${config.ping_interval_sec || 60} сек`,
+        scheduleSyncInterval: `${config.schedule_sync_interval_min || 30} мин`,
+        pendingQueueCount: queueStats.pending || 0,
+        failedQueueCount: queueStats.failed || 0,
+        lastPingAt: circuitState.lastPingAt || '—',
+        lastError: circuitState.lastError || null
+      }
+    };
+  } catch (err) {
+    return {
+      id: 'medflex',
+      name: 'Шлюз онлайн-записи MedFlex / ПроДокторов',
+      category: 'External Telemetry & Online Booking',
+      status: 'ERROR',
+      latencyMs: Date.now() - start,
+      description: 'Шлюз онлайн-записи MedFlex',
+      error: err.message
+    };
+  }
+}
+
+/**
+ * Checks all 8 system components
  */
 async function checkAllServices() {
-  const [expressSvc, sqliteSvc, fiscalSvc, firebirdSvc, swaggerSvc, backupSvc, posSvc] = await Promise.all([
+  const [expressSvc, sqliteSvc, fiscalSvc, firebirdSvc, swaggerSvc, backupSvc, posSvc, medflexSvc] = await Promise.all([
     checkExpressService(),
     checkSqliteService(),
     checkFiscalService(),
     checkFirebirdService(),
     checkSwaggerService(),
     checkBackupService(),
-    checkPosService()
+    checkPosService(),
+    checkMedflexService()
   ]);
-  return [expressSvc, sqliteSvc, fiscalSvc, firebirdSvc, swaggerSvc, backupSvc, posSvc];
+  return [expressSvc, sqliteSvc, fiscalSvc, firebirdSvc, swaggerSvc, backupSvc, posSvc, medflexSvc];
 }
 
 /**
@@ -564,6 +624,18 @@ async function repairService(serviceId, addLog = () => {}) {
       return { success: true, message: 'Подключение к базе Firebird MEDICAL.FDB успешно восстановлено.' };
     }
 
+    case 'medflex': {
+      addLog('Диагностика и восстановление шлюза MedFlex...', 'INFO');
+      const { heartbeatWorker } = require('./medflex/medflexHeartbeatWorker');
+      const { circuitBreaker } = require('./medflex/medflexCircuitBreaker');
+      const queueService = require('./medflex/medflexQueueService');
+      const probe = await heartbeatWorker.probe();
+      circuitBreaker.recordSuccess(probe.latencyMs);
+      const queueRes = await queueService.drainQueue();
+      addLog(`Пинг MedFlex выполнен: ${probe.latencyMs}мс, очередь синхронизирована: ${queueRes.processed} задач`, 'INFO');
+      return { success: true, message: `Шлюз MedFlex восстановлен (RTT: ${probe.latencyMs}мс). Очередь: ${queueRes.processed} синхронизировано.` };
+    }
+
     case 'express':
     case 'swagger':
       return { success: true, message: 'Служба работает штатно.' };
@@ -650,6 +722,7 @@ router.post('/test-all', async (req, res) => {
   await runCheck('OpenAPI Swagger UI (порт 5000)', checkSwaggerService);
   await runCheck('SQLite Hot Backup Subsystem', checkBackupService);
   await runCheck('POS Acquiring & PIN-pad (INPAS/Arcus)', checkPosService);
+  await runCheck('Шлюз онлайн-записи MedFlex (ПроДокторов)', checkMedflexService);
 
   addLog('Все проверки серверных служб завершены.');
 

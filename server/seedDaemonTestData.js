@@ -587,6 +587,10 @@ async function seedDaemonTestData() {
   `);
   console.log('✓ Создан тестовый расчетный параметр: [TEST_DAEMON] Лимит распределения маржи бригады (Cap)');
 
+  // 14. Генерация очереди приемов на 5 дней для АРМ врача
+  const { seedDaemonQueue } = require('./seedDaemonQueue');
+  await seedDaemonQueue();
+
   console.log('✓ Итоговые суммы ведомостей пересчитаны и обновлены');
   console.log('===============================================================');
   console.log('>>> Тестовые данные [TEST_DAEMON] успешно загружены в БД! <<<');

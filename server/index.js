@@ -26,6 +26,9 @@ app.use('/api/payouts', payoutRoutes);
 const servicesBiRoutes = require('./servicesBiRoutes');
 app.use('/api/analytics/services-bi', servicesBiRoutes);
 
+const receptionHistoryRoutes = require('./receptionHistoryRoutes');
+app.use('/api/analytics/reception-history', receptionHistoryRoutes);
+
 const fiscalRoutes = require('./fiscalRoutes');
 app.use('/api/fiscal', fiscalRoutes);
 
@@ -50,6 +53,16 @@ app.use('/api/permissions', permissionRoutes);
 
 const menuConfigRoutes = require('./menuConfigRoutes');
 app.use('/api/menu-permissions', menuConfigRoutes);
+
+// MedFlex Online Booking & Queue Provider Integration Routes
+const medflexWebhookRoutes = require('./medflex/medflexWebhookRoutes');
+app.use('/api/medflex/webhook', medflexWebhookRoutes);
+
+const medflexAdminRoutes = require('./medflex/medflexAdminRoutes');
+app.use('/api/medflex/admin', medflexAdminRoutes);
+
+const medflexReportRoutes = require('./medflex/medflexReportRoutes');
+app.use('/api/medflex/reports', medflexReportRoutes);
 
 app.use('/api/db', requireAuth);
 
@@ -3222,6 +3235,20 @@ app.put('/api/parameters-admin/:id', (req, res) => {
   const stmt = db.prepare("UPDATE calculation_parameters SET param_value = ? WHERE param_name = ?");
   stmt.run(param_value, id, function (err) {
     if (err) return res.status(500).json({ error: err.message });
+
+    // Dynamic interval update for MedFlex synchronization
+    if (id === 'medflex_ping_interval_sec') {
+      try {
+        const heartbeatWorker = require('./medflex/medflexHeartbeatWorker');
+        heartbeatWorker.updateIntervals({ pingIntervalSec: Number(param_value) });
+      } catch (e) {}
+    } else if (id === 'medflex_schedule_sync_interval_min') {
+      try {
+        const heartbeatWorker = require('./medflex/medflexHeartbeatWorker');
+        heartbeatWorker.updateIntervals({ scheduleSyncIntervalMin: Number(param_value) });
+      } catch (e) {}
+    }
+
     res.json({ id, param_name: id, param_value });
   });
   stmt.finalize();
@@ -4123,5 +4150,13 @@ app.listen(PORT, () => {
     performSqliteBackup().catch((err) => {
       console.warn('[STARTUP BACKUP WARNING] Failed startup backup:', err.message);
     });
+  }
+
+  // Start background MedFlex Heartbeat Watchdog
+  try {
+    const medflexHeartbeatWorker = require('./medflex/medflexHeartbeatWorker');
+    medflexHeartbeatWorker.start();
+  } catch (mfErr) {
+    console.warn('[MedFlex] Failed to start heartbeat worker:', mfErr.message);
   }
 });

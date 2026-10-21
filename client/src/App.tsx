@@ -33,6 +33,8 @@ import OrthoTemplatesManager from './pages/OrthoTemplatesManager';
 import PatientReferralsManager from './pages/PatientReferralsManager';
 import UsersManager from './pages/UsersManager';
 import MenuPermissionsEditor from './pages/MenuPermissionsEditor';
+import ReceptionHistoryBi from './pages/ReceptionHistoryBi';
+import MedflexSyncCenter from './pages/MedflexSyncCenter';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { FiscalProvider } from './context/FiscalContext';
 import { PosProvider } from './context/PosContext';
@@ -269,6 +271,11 @@ function AppContent() {
             <Route path="/analytics/operations" element={<OperationsAnalytics />} />
             <Route path="/analytics/services-bi" element={<ServicesBiAnalytics />} />
             <Route path="/services-bi" element={<ServicesBiAnalytics />} />
+            <Route path="/analytics/reception-history" element={<ReceptionHistoryBi />} />
+            <Route path="/reception-history" element={<ReceptionHistoryBi />} />
+            <Route path="/admin/medflex-sync" element={<MedflexSyncCenter />} />
+            <Route path="/analytics/medflex-sync" element={<MedflexSyncCenter />} />
+            <Route path="/medflex-sync" element={<MedflexSyncCenter />} />
             <Route path="/checkout" element={<CheckoutWizard />} />
             <Route path="/scheduling" element={<Scheduling />} />
             <Route path="/ortho-workstation/:appointmentId" element={<OrthoWorkstation />} />

@@ -9,7 +9,10 @@ import {
   Tooltip,
   Chip,
   Avatar,
-  Divider
+  Divider,
+  Popover,
+  Switch,
+  Button
 } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import NavigateNextIcon from '@mui/icons-material/NavigateNext';
@@ -22,6 +25,8 @@ import PointOfSaleIcon from '@mui/icons-material/PointOfSale';
 import CreditCardIcon from '@mui/icons-material/CreditCard';
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
 import SecurityIcon from '@mui/icons-material/Security';
+import SyncAltIcon from '@mui/icons-material/SyncAlt';
+import { API_BASE_URL } from '../config/apiConfig';
 import { routeMetaMap } from '../config/navigationConfig';
 import { useAuth } from '../context/AuthContext';
 import { usePos } from '../context/PosContext';
@@ -37,6 +42,10 @@ export default function TopStatusBar() {
   const { fiscalStatus, refreshFiscalStatus } = useFiscal();
   const [shiftStatus, setShiftStatus] = useState<any>(null);
   const [closeShiftModalOpen, setCloseShiftModalOpen] = useState(false);
+  const [medflexStatus, setMedflexStatus] = useState<any>(null);
+  const [medflexAnchorEl, setMedflexAnchorEl] = useState<HTMLElement | null>(null);
+  const [medflexToggling, setMedflexToggling] = useState(false);
+  const [medflexPingLoading, setMedflexPingLoading] = useState(false);
 
   // Read permissions from menuPermissionsConfig.json
   const userPerms = currentUser?.permissionCodes?.length
@@ -46,6 +55,8 @@ export default function TopStatusBar() {
   const canClickShift = isElementPermitted('top_status_bar', 'kkt_shift_modal', userPerms);
   const canClickAtol = isElementPermitted('top_status_bar', 'atol_wizard_chip', userPerms);
   const canClickPos = isElementPermitted('top_status_bar', 'alfa_pos_chip', userPerms);
+  const canViewMedflex = isElementPermitted('top_status_bar', 'medflex_status_chip', userPerms);
+  const canToggleMedflex = isElementPermitted('top_status_bar', 'medflex_toggle_active', userPerms);
 
   const fetchShiftStatus = async () => {
     try {
@@ -57,12 +68,57 @@ export default function TopStatusBar() {
     }
   };
 
+  const fetchMedflexStatus = async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/medflex/admin/live-status`);
+      if (res.ok) {
+        const data = await res.json();
+        setMedflexStatus(data);
+      }
+    } catch (e) {
+      // ignore
+    }
+  };
+
+  const handleToggleMedflex = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const nextState = e.target.checked;
+    setMedflexToggling(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/medflex/admin/toggle-active`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: nextState })
+      });
+      if (res.ok) {
+        await fetchMedflexStatus();
+      }
+    } catch (err) {
+      console.error('Failed to toggle medflex:', err);
+    } finally {
+      setMedflexToggling(false);
+    }
+  };
+
+  const handleMedflexPingTest = async () => {
+    setMedflexPingLoading(true);
+    try {
+      await fetch(`${API_BASE_URL}/api/medflex/admin/ping-test`, { method: 'POST' });
+      await fetchMedflexStatus();
+    } catch (err) {
+      console.error('Ping test failed:', err);
+    } finally {
+      setMedflexPingLoading(false);
+    }
+  };
+
   useEffect(() => {
     fetchShiftStatus();
+    fetchMedflexStatus();
     const interval = setInterval(() => {
       fetchShiftStatus();
       refreshFiscalStatus();
       refreshPosStatus();
+      fetchMedflexStatus();
     }, 30000);
     return () => clearInterval(interval);
   }, []);
@@ -392,6 +448,65 @@ export default function TopStatusBar() {
             }}
           />
         </Tooltip>
+
+        {/* MedFlex Online Booking Gateway Status Badge */}
+        {canViewMedflex && (
+          <Tooltip
+            title={
+              medflexStatus
+                ? `MedFlex: ${medflexStatus.enabled ? 'Активен' : 'Отключен'}. Режим: ${medflexStatus.mode} (${medflexStatus.sandboxDirection || 'dual'}). Опрос: ${medflexStatus.pingIntervalSec || 60}с, синхр.: ${medflexStatus.scheduleSyncIntervalMin || 30}м. RTT: ${medflexStatus.lastLatencyMs || 0}мс. Очередь: ${medflexStatus.queueStats?.pending || 0}. Инциденты: ${medflexStatus.openIncidentsCount || 0}. Нажмите для управления.`
+                : 'Шлюз онлайн-записи MedFlex / ПроДокторов. Загрузка статуса...'
+            }
+          >
+            <Chip
+              icon={
+                <SyncAltIcon
+                  sx={{
+                    fontSize: '15px !important',
+                    color: !medflexStatus?.enabled
+                      ? '#64748B !important'
+                      : medflexStatus?.isOnline
+                      ? '#4F46E5 !important'
+                      : '#DC2626 !important'
+                  }}
+                />
+              }
+              label={
+                !medflexStatus?.enabled
+                  ? 'MedFlex: Выкл'
+                  : medflexStatus?.isOnline
+                  ? `MedFlex: ${medflexStatus.lastLatencyMs || 0}мс`
+                  : 'MedFlex: Оффлайн'
+              }
+              size="small"
+              onClick={(e) => setMedflexAnchorEl(e.currentTarget)}
+              clickable
+              sx={{
+                bgcolor: !medflexStatus?.enabled
+                  ? '#F1F5F9'
+                  : medflexStatus?.isOnline
+                  ? '#EEF2FF'
+                  : '#FEF2F2',
+                color: !medflexStatus?.enabled
+                  ? '#64748B'
+                  : medflexStatus?.isOnline
+                  ? '#4338CA'
+                  : '#DC2626',
+                border: `1px solid ${
+                  !medflexStatus?.enabled
+                    ? '#CBD5E1'
+                    : medflexStatus?.isOnline
+                    ? '#C7D2FE'
+                    : '#FCA5A5'
+                }`,
+                fontWeight: 700,
+                fontSize: '0.75rem',
+                height: 28,
+                cursor: 'pointer'
+              }}
+            />
+          </Tooltip>
+        )}
 
         {/* User, Lock Screen & Logout Controls */}
         {isAuthenticated && (
@@ -748,6 +863,133 @@ export default function TopStatusBar() {
         onClose={() => setCloseShiftModalOpen(false)}
         onShiftClosed={fetchShiftStatus}
       />
+
+      {/* Popover for MedFlex Online Booking Service */}
+      <Popover
+        open={Boolean(medflexAnchorEl)}
+        anchorEl={medflexAnchorEl}
+        onClose={() => setMedflexAnchorEl(null)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+        transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+        slotProps={{
+          paper: {
+            sx: {
+              p: 2,
+              width: 340,
+              borderRadius: 2.5,
+              boxShadow: '0 10px 30px rgba(15, 60, 100, 0.18)',
+              border: '1px solid #E2E8F0'
+            }
+          }
+        }}
+      >
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <SyncAltIcon sx={{ color: '#4F46E5', fontSize: 22 }} />
+            <Typography variant="subtitle2" sx={{ fontWeight: 800, color: '#0F3C64' }}>
+              Онлайн-запись MedFlex
+            </Typography>
+          </Box>
+          <Chip
+            size="small"
+            label={medflexStatus?.mode === 'sandbox' ? `Sandbox (${medflexStatus?.sandboxDirection || 'dual'})` : 'Продакшн'}
+            sx={{
+              fontSize: '0.68rem',
+              fontWeight: 700,
+              bgcolor: medflexStatus?.mode === 'sandbox' ? '#FEF3C7' : '#DCFCE7',
+              color: medflexStatus?.mode === 'sandbox' ? '#92400E' : '#166534'
+            }}
+          />
+        </Box>
+
+        <Box sx={{ p: 1.2, mb: 1.5, bgcolor: '#F8FAFC', borderRadius: 2, border: '1px solid #E2E8F0' }}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.8 }}>
+            <Typography variant="caption" sx={{ color: '#64748B' }}>Статус связи:</Typography>
+            <Typography variant="caption" sx={{ fontWeight: 700, color: medflexStatus?.isOnline ? '#16A34A' : '#DC2626' }}>
+              {medflexStatus?.isOnline ? 'ONLINE (На связи)' : 'OFFLINE'}
+            </Typography>
+          </Box>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.8 }}>
+            <Typography variant="caption" sx={{ color: '#64748B' }}>Пинг (RTT):</Typography>
+            <Typography variant="caption" sx={{ fontWeight: 700 }}>
+              {medflexStatus?.lastLatencyMs ? `${medflexStatus.lastLatencyMs} мс` : '—'}
+            </Typography>
+          </Box>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.8 }}>
+            <Typography variant="caption" sx={{ color: '#64748B' }}>Очередь offline:</Typography>
+            <Typography variant="caption" sx={{ fontWeight: 700, color: (medflexStatus?.queueStats?.pending || 0) > 0 ? '#D97706' : '#166534' }}>
+              {medflexStatus?.queueStats?.pending || 0} задач
+            </Typography>
+          </Box>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.8 }}>
+            <Typography variant="caption" sx={{ color: '#64748B' }}>Инциденты (RCA):</Typography>
+            <Typography variant="caption" sx={{ fontWeight: 700, color: (medflexStatus?.openIncidentsCount || 0) > 0 ? '#DC2626' : '#166534' }}>
+              {medflexStatus?.openIncidentsCount || 0} открыто
+            </Typography>
+          </Box>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+            <Typography variant="caption" sx={{ color: '#64748B' }}>Частота синхр. (пинг/расп.):</Typography>
+            <Typography variant="caption" sx={{ fontWeight: 700, color: '#4F46E5' }}>
+              {medflexStatus?.pingIntervalSec || 60}с / {medflexStatus?.scheduleSyncIntervalMin || 30}м
+            </Typography>
+          </Box>
+        </Box>
+
+        {/* Active / Inactive Toggle Switch */}
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            mb: 1.5,
+            p: 1.2,
+            bgcolor: medflexStatus?.enabled ? '#F0FDF4' : '#FEF2F2',
+            borderRadius: 2,
+            border: `1px solid ${medflexStatus?.enabled ? '#BBF7D0' : '#FECACA'}`
+          }}
+        >
+          <Box>
+            <Typography variant="body2" sx={{ fontWeight: 700, fontSize: '0.8rem', color: medflexStatus?.enabled ? '#166534' : '#991B1B' }}>
+              {medflexStatus?.enabled ? 'Служба активна' : 'Служба отключена'}
+            </Typography>
+            <Typography variant="caption" sx={{ color: '#64748B', display: 'block', fontSize: '0.7rem' }}>
+              {medflexStatus?.enabled ? 'Прием и передача записей включены' : 'Синхронизация приостановлена'}
+            </Typography>
+          </Box>
+          <Switch
+            size="small"
+            checked={Boolean(medflexStatus?.enabled)}
+            disabled={!canToggleMedflex || medflexToggling}
+            onChange={handleToggleMedflex}
+            color="primary"
+          />
+        </Box>
+
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          <Button
+            fullWidth
+            variant="outlined"
+            size="small"
+            disabled={medflexPingLoading}
+            onClick={handleMedflexPingTest}
+            sx={{ fontSize: '0.74rem', py: 0.6 }}
+          >
+            {medflexPingLoading ? 'Пинг...' : 'Тест пинга'}
+          </Button>
+          <Button
+            fullWidth
+            variant="contained"
+            size="small"
+            onClick={() => {
+              setMedflexAnchorEl(null);
+              navigate('/admin/medflex-sync');
+            }}
+            sx={{ fontSize: '0.74rem', py: 0.6, bgcolor: '#4F46E5', '&:hover': { bgcolor: '#4338CA' } }}
+          >
+            Центр MedFlex
+          </Button>
+        </Box>
+      </Popover>
     </Box>
   );
 }

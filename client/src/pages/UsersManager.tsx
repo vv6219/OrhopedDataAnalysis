@@ -270,8 +270,10 @@ export default function UsersManager() {
       })
       .sort((a, b) => {
         // 1. Active first (is_active: 1 before 0)
-        if (b.is_active !== a.is_active) {
-          return b.is_active - a.is_active;
+        const activeA = a.is_active === 1 ? 1 : 0;
+        const activeB = b.is_active === 1 ? 1 : 0;
+        if (activeB !== activeA) {
+          return activeB - activeA;
         }
         // 2. Alphabetical order А..Я by full_name (fallback to username)
         const nameA = (a.full_name || a.username || '').trim();
@@ -765,6 +767,7 @@ export default function UsersManager() {
       flex: 1.8,
       minWidth: 170,
       valueGetter: (_value, row) => `${row.full_name || ''} ${row.username || ''}`,
+      sortComparator: (v1, v2) => (v1 || '').localeCompare(v2 || '', 'ru', { sensitivity: 'base' }),
       renderCell: (params) => {
         const u = params.row;
         const roleCfg = getRoleConfig(u.role);
@@ -968,7 +971,15 @@ export default function UsersManager() {
       minWidth: 95,
       align: 'center',
       headerAlign: 'center',
+      type: 'singleSelect',
+      valueOptions: ['Активен', 'Заблокирован'],
       valueGetter: (_value, row) => (row.is_active === 1 ? 'Активен' : 'Заблокирован'),
+      sortComparator: (v1, v2) => {
+        // Higher value for 'Активен' so that 'desc' sorting puts Active users first
+        const n1 = (v1 === 'Активен' || v1 === 1 || v1 === true) ? 1 : 0;
+        const n2 = (v2 === 'Активен' || v2 === 1 || v2 === true) ? 1 : 0;
+        return n1 - n2;
+      },
       renderCell: (params) => {
         const u = params.row;
         return (
@@ -1565,8 +1576,7 @@ export default function UsersManager() {
                 },
                 sorting: {
                   sortModel: [
-                    { field: 'is_active', sort: 'desc' },
-                    { field: 'full_name', sort: 'asc' }
+                    { field: 'is_active', sort: 'desc' }
                   ]
                 }
               }}

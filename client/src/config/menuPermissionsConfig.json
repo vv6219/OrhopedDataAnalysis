@@ -224,6 +224,15 @@
           "icon": "QueryStats",
           "tooltip": "Многомерный BI-анализ: корреляция выручки от оказанных услуг и расходов на выплаты врачам, маржинальная прибыль клиники",
           "permissions": ["sysadmin", "accountant"]
+        },
+        {
+          "id": "reception_history_bi",
+          "text": "История Приема (BI)",
+          "path": "/analytics/reception-history",
+          "icon": "CalendarMonth",
+          "iconColor": "#0F3C64",
+          "tooltip": "Многомерный BI-анализ истории приёма пациентов: загрузка врачей, явка, выручка, средний чек и сводные KPI по всей клинике",
+          "permissions": ["sysadmin", "administrator", "doctor", "accountant"]
         }
       ]
     },
@@ -261,6 +270,15 @@
           "iconColor": "#0284C7",
           "tooltip": "Мониторинг и диагностика серверов: проверка доступности Express API, базы SQLite, демона ККТ, сервера Firebird и REST-документации",
           "permissions": ["sysadmin"]
+        },
+        {
+          "id": "medflex_sync_center",
+          "text": "Онлайн-запись MedFlex",
+          "path": "/admin/medflex-sync",
+          "icon": "SyncAlt",
+          "iconColor": "#4F46E5",
+          "tooltip": "Центр синхронизации онлайн-записи MedFlex / ПроДокторов: мониторинг RTT пинга, RCA-анализ инцидентов, оффлайн-очередь, песочница Sandbox и аудит Serilog",
+          "permissions": ["sysadmin", "administrator"]
         },
         {
           "id": "firebird_sync",
@@ -344,7 +362,9 @@
       "atol_wizard_chip": ["sysadmin", "administrator", "accountant"],
       "alfa_pos_chip": ["sysadmin", "administrator", "accountant"],
       "user_manager_link": ["sysadmin"],
-      "user_guide_buttons": ["*"]
+      "user_guide_buttons": ["*"],
+      "medflex_status_chip": ["sysadmin", "administrator"],
+      "medflex_toggle_active": ["sysadmin", "administrator"]
     },
     "ortho_workstation": {
       "sign_protocol_button": ["sysadmin", "doctor"],
@@ -373,6 +393,17 @@
     "menu_permissions_editor": {
       "save_config": ["sysadmin"],
       "restore_backup": ["sysadmin"]
+    },
+    "reception_history_bi": {
+      "export_csv": ["sysadmin", "administrator", "accountant"],
+      "seed_mock_button": ["sysadmin"],
+      "clean_mock_button": ["sysadmin"]
+    },
+    "medflex_sync_center": {
+      "flush_queue": ["sysadmin", "administrator"],
+      "change_mode": ["sysadmin"],
+      "test_simulators": ["sysadmin", "administrator"],
+      "resolve_incidents": ["sysadmin", "administrator"]
     }
   }
 }

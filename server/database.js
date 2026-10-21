@@ -427,6 +427,14 @@ const db = new sqlite3.Database(dbPath, (err) => {
       } catch (err) {
         console.error('Error initializing Users schema:', err.message);
       }
+
+      // Initialize MedFlex Online Queue and Dual-Sink Serilog Audit schema
+      try {
+        const initMedflexSchema = require('./initMedflexSchema');
+        initMedflexSchema(db);
+      } catch (err) {
+        console.error('Error initializing MedFlex schema:', err.message);
+      }
     });
   }
 });

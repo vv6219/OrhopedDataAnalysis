@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { API_BASE_URL } from '../config/apiConfig';
+import { useAuth } from '../context/AuthContext';
 import {
   Box,
   Paper,
@@ -11,7 +12,8 @@ import {
   Tooltip,
   IconButton,
   TextField,
-  CircularProgress
+  CircularProgress,
+  Chip
 } from '@mui/material';
 import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
 import MeetingRoomIcon from '@mui/icons-material/MeetingRoom';
@@ -24,19 +26,25 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
 
 import TimetableGrid from '../components/scheduling/TimetableGrid';
 import LiveQueueMonitor from '../components/scheduling/LiveQueueMonitor';
 import NotificationCenter from '../components/scheduling/NotificationCenter';
 import SchedulingReports from '../components/scheduling/SchedulingReports';
 import SchedulingWizard from '../components/scheduling/SchedulingWizard';
+import MedflexLiveStatusBar from '../components/medflex/MedflexLiveStatusBar';
 import type { Appointment, Doctor, SchedulingSummary } from '../components/scheduling/SchedulingTypes';
 
 export default function Scheduling() {
+  const { currentUser } = useAuth();
   const [activeTab, setActiveTab] = useState(0);
   const [currentDate, setCurrentDate] = useState<string>(new Date().toISOString().slice(0, 10));
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [doctors, setDoctors] = useState<Doctor[]>([]);
+  const [staffAdministrators, setStaffAdministrators] = useState<Array<{ id: number; full_name: string; role: string }>>([]);
+  const [defaultAdministrator, setDefaultAdministrator] = useState<{ id: number; name: string } | null>(null);
+  const [activeAdministrator, setActiveAdministrator] = useState<string>('');
   const [summary, setSummary] = useState<SchedulingSummary>({
     total: 0,
     scheduled: 0,
@@ -65,6 +73,38 @@ export default function Scheduling() {
       })
       .catch((err) => console.error('Error fetching doctors:', err));
   }, []);
+
+  // Fetch clinic info and administrators
+  const fetchClinicInfo = useCallback(() => {
+    fetch(`${API_BASE_URL}/api/scheduling/clinic-info`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success) {
+          if (data.staffAdministrators) {
+            setStaffAdministrators(data.staffAdministrators);
+          }
+          if (data.defaultAdministrator) {
+            setDefaultAdministrator(data.defaultAdministrator);
+            setActiveAdministrator((prev) => {
+              if (prev) return prev;
+              const userCandidate = currentUser?.fullName || currentUser?.staffName;
+              const isUserAdmin =
+                currentUser?.role?.toLowerCase().includes('admin') ||
+                currentUser?.role?.toLowerCase().includes('registrat');
+              if (userCandidate && isUserAdmin) {
+                return userCandidate;
+              }
+              return data.defaultAdministrator.name || 'Соколова Ольга';
+            });
+          }
+        }
+      })
+      .catch((err) => console.error('Error fetching clinic info in Scheduling:', err));
+  }, [currentUser]);
+
+  useEffect(() => {
+    fetchClinicInfo();
+  }, [fetchClinicInfo]);
 
   // Fetch data for date
   const loadData = useCallback(() => {
@@ -109,8 +149,16 @@ export default function Scheduling() {
     loadData();
   };
 
+  const currentUserName = currentUser?.fullName || currentUser?.staffName || currentUser?.username || '';
+  const isCurrentAdmin =
+    currentUser?.role?.toLowerCase().includes('admin') ||
+    currentUser?.role?.toLowerCase().includes('registrat');
+
   return (
     <Box sx={{ width: '100%', pb: 6 }}>
+      {/* Live MedFlex Sync Status & Ping Bar */}
+      <MedflexLiveStatusBar compact />
+
       {/* Top Header */}
       <Box
         sx={{
@@ -133,6 +181,62 @@ export default function Scheduling() {
             Центр Ортопедии и Травматологии Добрушкина (г. Сочи) · Координация расписания, монитор холла и
             уведомления
           </Typography>
+
+          {/* Active Administrator screen badge */}
+          <Box
+            sx={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 1.25,
+              mt: 1.25,
+              px: 1.5,
+              py: 0.6,
+              borderRadius: '10px',
+              bgcolor: '#F0FDF4',
+              border: '1.5px solid #86EFAC',
+              boxShadow: '0 1px 2px rgba(0,0,0,0.04)'
+            }}
+          >
+            <AdminPanelSettingsIcon sx={{ fontSize: 20, color: '#16A34A' }} />
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+              <Typography variant="caption" sx={{ color: '#15803D', fontWeight: 700, fontSize: '0.75rem', lineHeight: 1 }}>
+                ДЕЖУРНЫЙ АДМИНИСТРАТОР:
+              </Typography>
+              <Typography variant="body2" sx={{ color: '#14532D', fontWeight: 800, fontSize: '0.85rem' }}>
+                {activeAdministrator || defaultAdministrator?.name || 'Соколова Ольга'}
+              </Typography>
+
+              {currentUser && (
+                (activeAdministrator === currentUserName || (!activeAdministrator && isCurrentAdmin)) ? (
+                  <Chip
+                    size="small"
+                    label="Вы (текущий пользователь)"
+                    sx={{
+                      height: 18,
+                      fontSize: '0.65rem',
+                      fontWeight: 700,
+                      bgcolor: '#DCFCE7',
+                      color: '#15803D',
+                      border: '1px solid #86EFAC'
+                    }}
+                  />
+                ) : null
+              )}
+
+              <Chip
+                size="small"
+                variant="outlined"
+                label={`По умолч. в параметрах: ${defaultAdministrator?.name || 'Соколова Ольга'}`}
+                sx={{
+                  height: 18,
+                  fontSize: '0.65rem',
+                  fontWeight: 600,
+                  borderColor: '#BBF7D0',
+                  color: '#166534'
+                }}
+              />
+            </Box>
+          </Box>
         </Box>
 
         {/* Date Selector & Action Button */}
@@ -435,7 +539,16 @@ export default function Scheduling() {
       )}
 
       {activeTab === 3 && (
-        <SchedulingReports appointments={appointments} doctors={doctors} currentDate={currentDate} />
+        <SchedulingReports
+          appointments={appointments}
+          doctors={doctors}
+          currentDate={currentDate}
+          activeAdministrator={activeAdministrator}
+          onUpdateAdministrator={(name) => setActiveAdministrator(name)}
+          staffAdministrators={staffAdministrators}
+          defaultAdministrator={defaultAdministrator}
+          onRefreshClinicInfo={fetchClinicInfo}
+        />
       )}
 
       {/* Scheduling Wizard Modal */}

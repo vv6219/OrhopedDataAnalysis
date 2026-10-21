@@ -82,6 +82,8 @@ import { OrthoSandwichCard } from '../components/ortho/OrthoSandwichCard';
 import LatexText from '../components/ortho/LatexText';
 import OrthoProtocolPreview from '../components/ortho/OrthoProtocolPreview';
 import IssueReferralModal from '../components/ortho/IssueReferralModal';
+import DoctorQueueHub, { type QueueItem } from '../components/ortho/DoctorQueueHub';
+import FullPatientSearchModal from '../components/ortho/FullPatientSearchModal';
 import type { OrthoProtocolData, OrthoPrescriptionItem } from '../components/reports/OrthoProtocolPrintTemplate';
 import { parseProtocolContent } from '../utils/protocolXmlParser';
 import { getWeightBearingBadge } from './OrthoTemplatesManager';
@@ -264,7 +266,24 @@ export default function OrthoWorkstation() {
   const [searchParams] = useSearchParams();
   const queryProtocolId = searchParams.get('protocolId');
   const queryPatientId = searchParams.get('patientId');
+  const queryAppointmentId = searchParams.get('appointmentId');
   const navigate = useNavigate();
+
+  // Two-Stage Flow: 'queue' (default on entering without patient) | 'examination' (clinical exam)
+  const hasDirectTarget = Boolean((appointmentId && appointmentId !== 'new') || queryPatientId || queryProtocolId || queryAppointmentId);
+  const [viewMode, setViewMode] = useState<'queue' | 'examination'>(hasDirectTarget ? 'examination' : 'queue');
+  const [fullPatientSearchOpen, setFullPatientSearchOpen] = useState(false);
+
+  // Sync viewMode when query parameters change
+  useEffect(() => {
+    const qAppId = searchParams.get('appointmentId');
+    const qPatId = searchParams.get('patientId');
+    const qProtoId = searchParams.get('protocolId');
+    const target = Boolean((appointmentId && appointmentId !== 'new') || qPatId || qProtoId || qAppId);
+    if (target) {
+      setViewMode('examination');
+    }
+  }, [appointmentId, searchParams]);
 
   // Loading & State
   const [loading, setLoading] = useState(true);
@@ -667,11 +686,14 @@ export default function OrthoWorkstation() {
       const qParams = new URLSearchParams();
       if (queryProtocolId) qParams.append('protocolId', queryProtocolId);
       if (queryPatientId) qParams.append('patientId', queryPatientId);
+      if (queryAppointmentId) qParams.append('appointmentId', queryAppointmentId);
 
-      const hasDirectTarget = (appointmentId && appointmentId !== 'new') || Boolean(queryPatientId) || Boolean(queryProtocolId);
+      const hasTarget = (appointmentId && appointmentId !== 'new') || Boolean(queryPatientId) || Boolean(queryProtocolId) || Boolean(queryAppointmentId);
 
       if (appointmentId && appointmentId !== 'new') {
         url = `${API_BASE_URL}/api/ortho/context/${appointmentId}`;
+      } else if (queryAppointmentId) {
+        url = `${API_BASE_URL}/api/ortho/context/${queryAppointmentId}`;
       } else if (qParams.toString()) {
         url = `${API_BASE_URL}/api/ortho/context?${qParams.toString()}`;
       } else {
@@ -689,7 +711,7 @@ export default function OrthoWorkstation() {
       }
 
       // If entered cleanly without a patient key, set patient to null so doctor chooses patient first
-      if (!hasDirectTarget) {
+      if (!hasTarget) {
         setContextData({
           ...data,
           patient: null,
@@ -889,7 +911,7 @@ export default function OrthoWorkstation() {
 
   useEffect(() => {
     fetchContext();
-  }, [appointmentId, queryProtocolId, queryPatientId]);
+  }, [appointmentId, queryProtocolId, queryPatientId, queryAppointmentId]);
 
   // Helper to map template to accurate JointAreaId
   const resolveJointArea = (jointName?: string, title?: string, content?: string, defaultSide?: string): JointAreaId => {
@@ -1923,6 +1945,24 @@ export default function OrthoWorkstation() {
   const patient = contextData?.patient || {};
   const appointment = contextData?.appointment || {};
 
+  // Stage 1: Очередь приема пациентов (DoctorQueueHub)
+  if (viewMode === 'queue') {
+    return (
+      <DoctorQueueHub
+        selectedAppointmentId={contextData?.appointment?.id ? Number(contextData.appointment.id) : null}
+        onSelectAppointment={(item: QueueItem) => {
+          setViewMode('examination');
+          navigate(`/ortho-workstation?appointmentId=${item.id}`);
+        }}
+        onSelectPatientDirectly={(pt: any) => {
+          setViewMode('examination');
+          navigate(`/ortho-workstation?patientId=${pt.id}`);
+        }}
+      />
+    );
+  }
+
+  // Stage 2: Клинический осмотр и протокол (Examination)
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 64px)', overflow: 'hidden', bgcolor: '#F1F5F9' }}>
       {/* TOP HEADER / PATIENT BANNER */}
@@ -1941,12 +1981,52 @@ export default function OrthoWorkstation() {
           zIndex: 10
         }}
       >
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flex: '1 1 auto', minWidth: 0, flexWrap: 'wrap' }}>
-          <Tooltip title="Назад в расписание / реестр">
-            <IconButton size="small" onClick={() => navigate('/protocols-registry')}>
-              <ArrowBackIcon />
-            </IconButton>
-          </Tooltip>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flex: '1 1 auto', minWidth: 0, flexWrap: 'wrap' }}>
+          <Button
+            variant="contained"
+            size="small"
+            startIcon={<ArrowBackIcon sx={{ fontSize: 16 }} />}
+            onClick={() => {
+              setViewMode('queue');
+              navigate('/ortho-workstation');
+            }}
+            sx={{
+              bgcolor: '#0F3C64',
+              color: '#FFFFFF',
+              fontWeight: 700,
+              fontSize: '0.8rem',
+              textTransform: 'none',
+              borderRadius: 2,
+              py: 0.6,
+              px: 1.5,
+              whiteSpace: 'nowrap',
+              boxShadow: 'none',
+              '&:hover': { bgcolor: '#0284C7' }
+            }}
+          >
+            ← К очереди пациентов
+          </Button>
+
+          <Button
+            variant="outlined"
+            size="small"
+            startIcon={<PersonSearchIcon sx={{ fontSize: 16 }} />}
+            onClick={() => setFullPatientSearchOpen(true)}
+            sx={{
+              fontWeight: 700,
+              fontSize: '0.78rem',
+              borderColor: '#CBD5E1',
+              color: '#334155',
+              textTransform: 'none',
+              borderRadius: 2,
+              py: 0.5,
+              px: 1.2,
+              whiteSpace: 'nowrap',
+              '&:hover': { borderColor: '#0F3C64', color: '#0F3C64' }
+            }}
+          >
+            Картотека
+          </Button>
           <Box sx={{ flex: '1 1 auto', minWidth: 0 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
               {contextData?.patient?.id ? (
@@ -4100,6 +4180,16 @@ export default function OrthoWorkstation() {
         activeDiagnostics={activeTemplateDiagnostics}
         onReferralIssued={(ref) => {
           setToastMessage(`Направление ${ref.referral_number} успешно выписано на бланке Центра`);
+        }}
+      />
+
+      {/* Модальное окно поиска любого пациента из общей картотеки */}
+      <FullPatientSearchModal
+        open={fullPatientSearchOpen}
+        onClose={() => setFullPatientSearchOpen(false)}
+        onSelectPatient={(pt) => {
+          setFullPatientSearchOpen(false);
+          navigate(`/ortho-workstation?patientId=${pt.id}`);
         }}
       />
     </Box>
