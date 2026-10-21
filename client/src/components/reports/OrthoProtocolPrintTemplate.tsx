@@ -187,6 +187,7 @@ export const OrthoProtocolPrintTemplate = React.forwardRef<HTMLDivElement, Ortho
         lasegue: 'Симптом Ласега (Lasegue)',
         wassermann: 'Симптом Вассермана',
         adams: 'Проба Адамса (сколиоз)',
+        risser_sign: 'Тест Риссера (костная зрелость)',
         radicular: 'Корешковый синдром',
         spurling: 'Тест Сперлинга (Spurling)',
         schober: 'Тест Шобера'

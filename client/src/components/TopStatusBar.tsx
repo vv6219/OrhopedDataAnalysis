@@ -87,13 +87,16 @@ export default function TopStatusBar() {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        flexWrap: 'wrap',
+        flexWrap: 'nowrap',
+        overflowX: 'auto',
         gap: 1.5,
+        scrollbarWidth: 'none',
+        '&::-webkit-scrollbar': { display: 'none' },
         boxShadow: '0 2px 10px rgba(0, 0, 0, 0.02)'
       }}
     >
       {/* Left side: Back Navigation & Breadcrumbs */}
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexShrink: 0 }}>
         <Tooltip
           title={isHome ? 'Вы находитесь на главном экране' : 'Вернуться назад'}
           placement="bottom"
@@ -174,19 +177,21 @@ export default function TopStatusBar() {
       </Box>
 
       {/* Right side: System Status Indicators & Guide */}
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.2 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0, whiteSpace: 'nowrap' }}>
         {/* Redesigned Multi-Target User Guide Navigation Control */}
         <Box
           sx={{
-            display: 'flex',
+            display: 'inline-flex',
             alignItems: 'center',
             bgcolor: '#FFFFFF',
-            borderRadius: 2,
+            borderRadius: '20px',
             border: '1px solid',
             borderColor: (location.pathname === '/user-guide' || location.pathname === '/guide') ? '#0F3C64' : '#CBD5E1',
             boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
             overflow: 'hidden',
-            height: 28,
+            height: 30,
+            flexShrink: 0,
+            whiteSpace: 'nowrap',
             transition: 'all 0.2s ease'
           }}
         >
@@ -195,12 +200,15 @@ export default function TopStatusBar() {
             <Box
               onClick={() => navigate('/user-guide?volume=all')}
               sx={{
-                display: 'flex',
+                display: 'inline-flex',
                 alignItems: 'center',
                 gap: 0.6,
-                px: 1,
+                px: 1.2,
                 height: '100%',
                 cursor: 'pointer',
+                whiteSpace: 'nowrap',
+                flexShrink: 0,
+                userSelect: 'none',
                 bgcolor: (location.pathname === '/user-guide' || location.pathname === '/guide') && (!location.search || location.search.includes('volume=all')) ? '#EBF5FA' : 'transparent',
                 color: (location.pathname === '/user-guide' || location.pathname === '/guide') && (!location.search || location.search.includes('volume=all')) ? '#0F3C64' : '#334155',
                 fontWeight: 700,
@@ -210,8 +218,9 @@ export default function TopStatusBar() {
                 '&:hover': { bgcolor: '#F0F9FF', color: '#0F3C64' }
               }}
             >
-              <MenuBookIcon sx={{ fontSize: '14px !important', color: '#0F3C64' }} />
-              <span>Полное Руководство</span>
+              <MenuBookIcon sx={{ fontSize: '15px !important', color: '#0F3C64', flexShrink: 0 }} />
+              <Box component="span" sx={{ display: { xs: 'none', xl: 'inline' }, whiteSpace: 'nowrap' }}>Полное Руководство</Box>
+              <Box component="span" sx={{ display: { xs: 'inline', xl: 'none' }, whiteSpace: 'nowrap' }}>Руководство</Box>
             </Box>
           </Tooltip>
 
@@ -220,21 +229,25 @@ export default function TopStatusBar() {
             <Box
               onClick={() => navigate('/user-guide?volume=system')}
               sx={{
-                display: 'flex',
+                display: 'inline-flex',
                 alignItems: 'center',
-                px: 0.9,
+                px: 1.1,
                 height: '100%',
                 cursor: 'pointer',
+                whiteSpace: 'nowrap',
+                flexShrink: 0,
+                userSelect: 'none',
                 bgcolor: (location.pathname === '/user-guide' || location.pathname === '/guide') && location.search.includes('volume=system') ? '#E0F2FE' : 'transparent',
                 color: (location.pathname === '/user-guide' || location.pathname === '/guide') && location.search.includes('volume=system') ? '#0284C7' : '#64748B',
                 fontWeight: (location.pathname === '/user-guide' || location.pathname === '/guide') && location.search.includes('volume=system') ? 800 : 600,
-                fontSize: '0.72rem',
+                fontSize: '0.73rem',
                 borderRight: '1px solid #E2E8F0',
                 transition: 'all 0.15s ease',
                 '&:hover': { bgcolor: '#F1F5F9', color: '#0F3C64' }
               }}
             >
-              Том I (Системный)
+              <Box component="span" sx={{ display: { xs: 'none', xl: 'inline' }, whiteSpace: 'nowrap' }}>Том I (Системный)</Box>
+              <Box component="span" sx={{ display: { xs: 'inline', xl: 'none' }, whiteSpace: 'nowrap' }}>Том I</Box>
             </Box>
           </Tooltip>
 
@@ -243,20 +256,24 @@ export default function TopStatusBar() {
             <Box
               onClick={() => navigate('/user-guide?volume=clinical')}
               sx={{
-                display: 'flex',
+                display: 'inline-flex',
                 alignItems: 'center',
-                px: 0.9,
+                px: 1.1,
                 height: '100%',
                 cursor: 'pointer',
+                whiteSpace: 'nowrap',
+                flexShrink: 0,
+                userSelect: 'none',
                 bgcolor: (location.pathname === '/user-guide' || location.pathname === '/guide') && location.search.includes('volume=clinical') ? '#DCFCE7' : 'transparent',
                 color: (location.pathname === '/user-guide' || location.pathname === '/guide') && location.search.includes('volume=clinical') ? '#166534' : '#64748B',
                 fontWeight: (location.pathname === '/user-guide' || location.pathname === '/guide') && location.search.includes('volume=clinical') ? 800 : 600,
-                fontSize: '0.72rem',
+                fontSize: '0.73rem',
                 transition: 'all 0.15s ease',
                 '&:hover': { bgcolor: '#F1F5F9', color: '#166534' }
               }}
             >
-              Том II (Клинический)
+              <Box component="span" sx={{ display: { xs: 'none', xl: 'inline' }, whiteSpace: 'nowrap' }}>Том II (Клинический)</Box>
+              <Box component="span" sx={{ display: { xs: 'inline', xl: 'none' }, whiteSpace: 'nowrap' }}>Том II</Box>
             </Box>
           </Tooltip>
         </Box>

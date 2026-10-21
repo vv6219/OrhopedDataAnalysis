@@ -39,6 +39,9 @@ if %ERRORLEVEL% EQU 0 (
     )
 )
 
+:: Отключение QuickEdit Mode консоли Windows во избежание зависания Node.js при клике мыши
+reg add "HKCU\Console" /v QuickEdit /t REG_DWORD /d 0 /f >nul 2>&1
+
 :: Проверка занятости порта 5000
 netstat -ano | findstr :5000 | findstr LISTENING >nul 2>&1
 if %ERRORLEVEL% EQU 0 (

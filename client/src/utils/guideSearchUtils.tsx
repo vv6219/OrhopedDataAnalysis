@@ -24,6 +24,40 @@ export function switchKeyboardLayout(str: string): string {
 }
 
 /**
+ * Russian Morphological Stemmer (Porter-style for medical/technical inflections)
+ */
+export function stemRussian(word: string): string {
+  if (!word || word.length < 4) return word.toLowerCase();
+  const lower = word.toLowerCase();
+
+  // Strip inflectional suffixes
+  const stemmed = lower
+    .replace(/(?:ившись|ывшись|ивши|ывши|вшись|ив|ыв)$/, '')
+    .replace(/(?:остями|остей|остях|остью|остям|ости|ость|оста|осты)$/, '')
+    .replace(/(?:ейшего|ейшему|ейшим|ейшем|ейшая|ейшее|ейшей|ейшую|ейшие|ейших|ейшими|ейше)$/, '')
+    .replace(/(?:ившего|ывшего|ующего|ющего|ившему|ывшему|ующему|ющему|ившим|ывшим|ующим|ющим|ившем|ывшем|ующем|ющем|ившая|ывшая|ующая|ющая|ившее|ывшее|ующее|ющее|ившей|ывшей|ующей|ющей|ившую|ывшую|ующую|ющую|ившие|ывшие|ующие|ющие|ивших|ывших|ующих|ющих|ившими|ывшими|ующими|ющими)$/, '')
+    .replace(/(?:ального|альному|альным|альном|альная|альное|альной|альную|альные|альных|альными|арентного|ического|ическому|ическим|ическом|ическая|ическое|ической|ическую|ические|ических|ическими)$/, '')
+    .replace(/(?:ами|ями|оми|еми|его|ого|ему|ому|ими|ыми|ых|их|ую|юю|ая|яя|ою|ею|ое|ее|ие|ые|ей|ой|ем|ом|им|ым|ий|ый|ой)$/, '')
+    .replace(/(?:иями|иях|иям|ием|ией|ионного|ионному|ионным|ионном|ионная|ионное|ионной|ионную|ионные|ионных|ионными|ях|ах|ов|ев|ей|ям|ам|ом|ем|ии|ия|ие|ий|ья|ье|ьи|ью|ию|ей|ой)$/, '')
+    .replace(/(?:ила|ыла|ела|али|или|ыли|ели|ить|ыть|еть|ать|ять|ует|уют|ите|ете|ишь|ешь|тся|ться|ся|сь|ет|ит|ут|ют|ат|ят|ал|ил|ыл|ел|на|но|ны|не|ем|им)$/, '')
+    .replace(/(?:а|е|и|й|о|у|ы|ь|я|ю)$/, '');
+
+  return stemmed.length >= 3 ? stemmed : lower;
+}
+
+/**
+ * Simple English Stemmer
+ */
+export function stemEnglish(word: string): string {
+  if (!word || word.length < 4) return word.toLowerCase();
+  return word
+    .toLowerCase()
+    .replace(/(?:ational|tional|ation|ence|ance|able|ible)$/, '')
+    .replace(/(?:ically|ful|ing|ive|ize|ise|ism|ity)$/, '')
+    .replace(/(?:ed|es|ly|s)$/, '');
+}
+
+/**
  * Specialized Orthopedic & ERP Medical Synonyms Dictionary
  */
 export const SYNONYM_DICTIONARY: Record<string, string[]> = {
@@ -65,8 +99,9 @@ export const SYNONYM_DICTIONARY: Record<string, string[]> = {
   'ккт': ['атол', 'atol', '91ф', 'фискализация', 'чек', 'фн', 'офд'],
   'мрт': ['mrt', 'томография', 'магнитно-резонансная', 'stoller', '1.5', '3.0', 'столлер'],
   'mrt': ['мрт', 'томография', 'stoller', 'тесла'],
-  'узи': ['uzi', 'ультразвук', 'сонография', 'эхография', 'us-guided', 'датчик', 'заворот'],
-  'uzi': ['узи', 'ультразвук', 'us-guided'],
+  'узи': ['uzi', 'ультразвук', 'сонография', 'эхография', 'us-guided', 'датчик', 'заворот', 'допплер', 'цдк'],
+  'uzi': ['узи', 'ультразвук', 'us-guided', 'сонография'],
+  'ультразвук': ['узи', 'uzi', 'сонография', 'эхография', 'допплер'],
   'лахман': ['lachman', 'пкс', 'нестабильность', 'колено'],
   'lachman': ['лахман', 'пкс', 'передний выдвижной ящик'],
   'bom': ['бом', 'спецификация', 'техкарта', 'расходники', 'нормы расхода', 'материалы'],
@@ -76,81 +111,196 @@ export const SYNONYM_DICTIONARY: Record<string, string[]> = {
   'софтлок': ['soft lock', 'блокировка', 'lock_token'],
   'блокада': ['инъекция', 'us-guided', 'лидокаин', 'дипроспан', 'анестезия', 'гидродиссекция'],
   'пункция': ['аспирация', 'гемартроз', 'синовит', 'эвакуация', 'киста бейкера'],
-  'контрактура': ['тугоподвижность', 'rom', 'дефицит', 'анкилоз', 'сгибание'],
-  'сколиоз': ['корсет', 'шено', 'кобб', 'адамс', 'деротация'],
+  'сколиоз': ['корсет', 'шено', 'кобб', 'адамс', 'риссер', 'risser', 'деротация'],
+  'адамс': ['adams', 'проба адамса', 'тест адамса', 'признак адамса', 'наклон вперед', 'сколиоз', 'реберный горб', 'торсия'],
+  'адамса': ['адамс', 'adams', 'проба адамса', 'тест адамса', 'наклон вперед', 'сколиоз', 'реберный горб'],
+  'adams': ['адамс', 'тест адамса', 'проба адамса', 'adams forward bend', 'сколиоз'],
+  'проба адамса': ['тест адамса', 'адамс', 'adams', 'adams forward bend', 'сколиоз', 'наклон вперед'],
+  'тест адамса': ['проба адамса', 'адамс', 'adams', 'adams forward bend', 'сколиоз'],
+  'риссер': ['risser', 'тест риссера', 'признак риссера', 'проба риссера', 'симптом риссера', 'шкала риссера', 'risser sign', 'костная зрелость', 'зоны роста', 'сколиоз', 'апофиз'],
+  'риссера': ['риссер', 'risser', 'тест риссера', 'признак риссера', 'проба риссера', 'симптом риссера', 'шкала риссера', 'risser sign', 'костная зрелость', 'зоны роста', 'сколиоз', 'апофиз'],
+  'risser': ['риссер', 'тест риссера', 'признак риссера', 'risser sign', 'костная зрелость', 'сколиоз', 'апофиз'],
+  'признак риссера': ['тест риссера', 'риссер', 'risser', 'risser sign', 'костная зрелость', 'зоны роста', 'сколиоз', 'апофиз'],
+  'тест риссера': ['признак риссера', 'риссер', 'risser', 'risser sign', 'костная зрелость', 'сколиоз', 'апофиз'],
+  'risser sign': ['риссер', 'признак риссера', 'тест риссера', 'костная зрелость', 'сколиоз'],
+  'признак': ['симптом', 'тест', 'проба', 'феномен', 'sign'],
+  'признаки': ['симптомы', 'тесты', 'пробы', 'signs'],
+  'симптом': ['признак', 'тест', 'проба', 'феномен', 'symptom'],
+  'симптомы': ['признаки', 'тесты', 'пробы', 'symptoms'],
+  'проба': ['тест', 'признак', 'симптом', 'пробы', 'test'],
+  'пробы': ['тесты', 'признаки', 'симптомы', 'tests'],
+  'тест': ['проба', 'признак', 'симптом', 'тесты', 'test'],
+  'шкала': ['шкалы', 'классификация', 'стадии', 'score', 'scale', 'тест', 'признак'],
   'плоскостопие': ['стельки', 'формтотикс', 'плантография', 'свод', 'вальгус'],
   'мениск': ['stoller', 'мак-мюррей', 'эпли', 'ручка лейки', 'артроскопия'],
-  'пкс': ['лахман', 'передний выдвижной ящик', 'pivot-shift', 'связка', 'стабильность']
+  'пкс': ['лахман', 'передний выдвижной ящик', 'pivot-shift', 'связка', 'стабильность'],
+  'эквайринг': ['pos', 'терминал', 'альфа-банк', 'arcus-2', 'inpas', 'слип', 'авторизация'],
+  'выплаты': ['зарплата', 'начисления', 'ведомость', 'вознаграждение', 'team cap', 'ставка', 'процент', 'сторно'],
+  'диагностика': ['диагностические', 'исследования', 'методы', 'исследование', 'анализ'],
+  'манипуляции': ['манипуляция', 'инъекция', 'инъекции', 'блокада', 'блокады', 'пункция', 'пункции', 'prp', 'гиалуронат'],
+  'тесты': ['тест', 'проба', 'пробы', 'симптомы', 'симптом', 'признаки', 'признак', 'se', 'sp', 'чувствительность', 'специфичность'],
+  'шаблоны': ['шаблон', 'протокол', 'протоколы', 'нозологии', 'нозология', '180'],
+  'справочник': ['реестр', 'каталог', 'база знаний']
 };
+
+export interface TokenVariant {
+  text: string;
+  isRegex: boolean;
+  regex?: RegExp;
+}
 
 export interface ParsedSearchQuery {
   raw: string;
   originalTokens: string[];
+  tokenGroups: TokenVariant[][];
+  highlightTokens: string[];
   expandedTokens: string[];
-  tokenGroups: string[][];
 }
 
 /**
- * Parses user input into structured token groups with transliteration and clinical synonyms
+ * Strips punctuation around words while preserving internal hyphens, dots, and wildcards
+ */
+function cleanRawToken(tok: string): string {
+  // Strip leading and trailing quotes, brackets, commas, colons, etc.
+  return tok.replace(/^[«"'\(\)\[\]\{\}\.,;:!<>]+|[«"'\(\)\[\]\{\}\.,;:!<>]+$/g, '').trim();
+}
+
+/**
+ * Builds a RegEx from a pattern with wildcard characters (* and ?)
+ */
+function compileWildcard(pattern: string): RegExp {
+  const escaped = pattern
+    .replace(/[.+^${}()|[\]\\]/g, '\\$&') // escape regex specials except * and ?
+    .replace(/\*/g, '[\\wа-яёА-ЯЁ-]*')
+    .replace(/\?/g, '[\\wа-яёА-ЯЁ-]');
+  return new RegExp(`(?:^|\\W)(${escaped})(?:$|\\W)`, 'i');
+}
+
+/**
+ * Parses user input into structured token groups with wildcards, transliteration, morphology, and clinical synonyms
  */
 export function parseAndExpandQuery(query: string): ParsedSearchQuery {
   const raw = query.trim();
   if (!raw) {
-    return { raw: '', originalTokens: [], expandedTokens: [], tokenGroups: [] };
+    return { raw: '', originalTokens: [], tokenGroups: [], highlightTokens: [], expandedTokens: [] };
   }
 
-  const originalTokens = raw.toLowerCase().split(/\s+/).filter(Boolean);
-  const tokenGroups: string[][] = [];
-  const allExpandedSet = new Set<string>();
+  // Tokenize by spaces and commas, then clean tokens
+  const rawTokens = raw.toLowerCase().split(/[\s,]+/).filter(Boolean);
+  const originalTokens = rawTokens.map(cleanRawToken).filter(Boolean);
+
+  const tokenGroups: TokenVariant[][] = [];
+  const highlightTokenSet = new Set<string>();
 
   for (const token of originalTokens) {
-    const groupSet = new Set<string>();
-    groupSet.add(token);
-    allExpandedSet.add(token);
+    const groupVariants: TokenVariant[] = [];
+    const seenStrings = new Set<string>();
 
-    // Layout switch transliteration (e.g. "ghg" -> "прп", "ehn" -> "узи")
+    const addStringVariant = (str: string) => {
+      const s = str.trim().toLowerCase();
+      if (!s || seenStrings.has(s)) return;
+      seenStrings.add(s);
+      groupVariants.push({ text: s, isRegex: false });
+      if (s.length >= 2 && !s.includes('*') && !s.includes('?')) {
+        highlightTokenSet.add(s);
+      }
+    };
+
+    // 1. Wildcard Check (* or ?)
+    if (token.includes('*') || token.includes('?')) {
+      const cleanWildcard = token.toLowerCase();
+      try {
+        const regex = compileWildcard(cleanWildcard);
+        groupVariants.push({ text: cleanWildcard, isRegex: true, regex });
+        
+        // Also add base word without wildcards for highlighting
+        const baseWord = cleanWildcard.replace(/[*?]/g, '');
+        if (baseWord.length >= 2) {
+          addStringVariant(baseWord);
+        }
+      } catch {
+        addStringVariant(cleanWildcard);
+      }
+      
+      // Also try layout-switched wildcard
+      const switched = switchKeyboardLayout(token);
+      if (switched && switched !== token) {
+        try {
+          const swRegex = compileWildcard(switched);
+          groupVariants.push({ text: switched, isRegex: true, regex: swRegex });
+        } catch {}
+      }
+
+      tokenGroups.push(groupVariants);
+      continue;
+    }
+
+    // 2. Exact token
+    addStringVariant(token);
+
+    // 3. Hyphen normalization (e.g., "54-фз" -> "54 фз", "54фз")
+    if (token.includes('-')) {
+      addStringVariant(token.replace(/-/g, ' '));
+      addStringVariant(token.replace(/-/g, ''));
+    }
+
+    // 4. Keyboard Layout Transliteration (e.g., "ghg" -> "прп", "ehn" -> "узи")
     const switched = switchKeyboardLayout(token);
     if (switched && switched !== token) {
-      groupSet.add(switched);
-      allExpandedSet.add(switched);
+      addStringVariant(switched);
+      if (switched.includes('-')) {
+        addStringVariant(switched.replace(/-/g, ' '));
+        addStringVariant(switched.replace(/-/g, ''));
+      }
     }
 
-    // Direct synonyms
-    if (SYNONYM_DICTIONARY[token]) {
-      SYNONYM_DICTIONARY[token].forEach((s) => {
-        groupSet.add(s);
-        allExpandedSet.add(s);
-      });
-    }
-
-    // Switched synonyms
-    if (SYNONYM_DICTIONARY[switched]) {
-      SYNONYM_DICTIONARY[switched].forEach((s) => {
-        groupSet.add(s);
-        allExpandedSet.add(s);
-      });
-    }
-
-    // Substring synonym check for word stems (min 4 chars)
+    // 5. Morphological Stemming (Russian & English)
     if (token.length >= 4) {
-      for (const [key, syns] of Object.entries(SYNONYM_DICTIONARY)) {
-        if (token.startsWith(key) || key.startsWith(token)) {
-          syns.forEach((s) => {
-            groupSet.add(s);
-            allExpandedSet.add(s);
-          });
+      const ruStem = stemRussian(token);
+      if (ruStem && ruStem !== token && ruStem.length >= 3) {
+        addStringVariant(ruStem);
+      }
+      const enStem = stemEnglish(token);
+      if (enStem && enStem !== token && enStem.length >= 3) {
+        addStringVariant(enStem);
+      }
+
+      if (switched && switched !== token) {
+        const ruSwitchedStem = stemRussian(switched);
+        if (ruSwitchedStem && ruSwitchedStem.length >= 3) {
+          addStringVariant(ruSwitchedStem);
         }
       }
     }
 
-    tokenGroups.push(Array.from(groupSet));
+    // 6. Direct and partial synonyms from SYNONYM_DICTIONARY
+    if (SYNONYM_DICTIONARY[token]) {
+      SYNONYM_DICTIONARY[token].forEach(addStringVariant);
+    }
+    if (switched && SYNONYM_DICTIONARY[switched]) {
+      SYNONYM_DICTIONARY[switched].forEach(addStringVariant);
+    }
+
+    // Substring synonym check for word roots (min 4 chars)
+    if (token.length >= 4) {
+      for (const [key, syns] of Object.entries(SYNONYM_DICTIONARY)) {
+        if (token.startsWith(key) || key.startsWith(token)) {
+          syns.forEach(addStringVariant);
+        }
+      }
+    }
+
+    tokenGroups.push(groupVariants);
   }
+
+  const sortedHighlights = Array.from(highlightTokenSet).sort((a, b) => b.length - a.length);
 
   return {
     raw,
     originalTokens,
-    expandedTokens: Array.from(allExpandedSet),
     tokenGroups,
+    highlightTokens: sortedHighlights,
+    expandedTokens: sortedHighlights,
   };
 }
 
@@ -161,9 +311,20 @@ export function matchesQuery(aggregateText: string, parsedQuery: ParsedSearchQue
   if (!parsedQuery.tokenGroups || parsedQuery.tokenGroups.length === 0) return true;
   const lower = aggregateText.toLowerCase();
 
-  return parsedQuery.tokenGroups.every((group) =>
-    group.some((variant) => lower.includes(variant))
-  );
+  // 1. Direct multi-word raw phrase match (e.g. "признак риссера")
+  if (parsedQuery.raw && parsedQuery.raw.length >= 3 && lower.includes(parsedQuery.raw.toLowerCase())) {
+    return true;
+  }
+
+  // 2. Token groups evaluation (AND between tokens, OR within variants)
+  return parsedQuery.tokenGroups.every((group) => {
+    return group.some((variant) => {
+      if (variant.isRegex && variant.regex) {
+        return variant.regex.test(lower);
+      }
+      return lower.includes(variant.text);
+    });
+  });
 }
 
 /**
@@ -179,7 +340,7 @@ export function countKeywordMatches(text: string, tokens: string[]): number {
     let pos = 0;
     while ((pos = lower.indexOf(t, pos)) !== -1) {
       count++;
-      pos += t.length;
+      pos += Math.max(1, t.length);
     }
   }
 
@@ -192,7 +353,7 @@ export function countKeywordMatches(text: string, tokens: string[]): number {
 export function extractMatchSnippet(
   searchableText: string,
   tokens: string[],
-  contextRadius = 70
+  contextRadius = 85
 ): string | null {
   if (!searchableText || tokens.length === 0) return null;
   const lower = searchableText.toLowerCase();
@@ -235,9 +396,9 @@ export const HighlightMatch: React.FC<HighlightMatchProps> = ({ text, tokens, st
   if (!tokens || tokens.length === 0) return <span style={style}>{text}</span>;
 
   // Filter valid tokens and sort by length descending to match longest phrases first
-  const validTokens = Array.from(new Set(tokens.filter((t) => t && t.length >= 2))).sort(
-    (a, b) => b.length - a.length
-  );
+  const validTokens = Array.from(
+    new Set(tokens.filter((t) => t && t.length >= 2 && !t.includes('*') && !t.includes('?')))
+  ).sort((a, b) => b.length - a.length);
 
   if (validTokens.length === 0) return <span style={style}>{text}</span>;
 
@@ -273,33 +434,3 @@ export const HighlightMatch: React.FC<HighlightMatchProps> = ({ text, tokens, st
     </span>
   );
 };
-
-export interface QuickSearchChipDef {
-  id: string;
-  label: string;
-  query: string;
-  categoryName?: string;
-  color: string;
-  icon?: string;
-}
-
-/**
- * Curated Quick Search Chips covering key clinical, biomechanical, diagnostic, and financial queries
- */
-export const QUICK_SEARCH_CHIPS: QuickSearchChipDef[] = [
-  { id: 'prp', label: 'PRP Cortexil 10/20 мл', query: 'PRP Cortexil', color: '#0F766E', icon: '💉' },
-  { id: 'hilt', label: 'HILT Лазер 1064 нм', query: 'HILT 1064', color: '#1E40AF', icon: '⚡' },
-  { id: 'sis', label: 'SIS Магнит 3.0 Тл', query: 'SIS 3.0 Тл', color: '#1D4ED8', icon: '🧲' },
-  { id: 'uvt', label: 'УВТ пьезо / радиал', query: 'УВТ пьезо', color: '#0369A1', icon: '🔊' },
-  { id: 'formthotics', label: 'Стельки Formthotics', query: 'Formthotics', color: '#6D28D9', icon: '🛡️' },
-  { id: 'cheneau', label: 'Корсет Шено', query: 'Шено корсет', color: '#7C3AED', icon: '🦺' },
-  { id: 'silbernagel', label: 'Silbernagel ЛФК (ВАШ)', query: 'Silbernagel', color: '#047857', icon: '🏃' },
-  { id: 'rom', label: 'SFTR Neutral-0 (10 суставов)', query: 'Neutral-0 SFTR', color: '#0F3C64', icon: '📐' },
-  { id: 'endfeel', label: 'End-Feel Cyriax', query: 'End-Feel', color: '#B45309', icon: '🦴' },
-  { id: 'mrt', label: 'МРТ 3.0 Тл Stoller', query: 'МРТ 3.0 Тл', color: '#0284C7', icon: '🩻' },
-  { id: 'us_guided', label: 'Блокады под УЗИ (US-guided)', query: 'US-guided', color: '#0D9488', icon: '🎯' },
-  { id: 'lachman', label: 'Тест Лахмана (ПКС)', query: 'Лахман', color: '#BE123C', icon: '🩺' },
-  { id: 'atol', label: 'ККТ АТОЛ 91Ф (54-ФЗ)', query: 'АТОЛ 91Ф', color: '#B91C1C', icon: '🧾' },
-  { id: 'bom', label: 'Спецификации BOM', query: 'BOM спецификация', color: '#475569', icon: '🧮' },
-  { id: 'softlock', label: 'Soft Lock 30 мин', query: 'Soft Lock', color: '#4338CA', icon: '🔒' },
-];

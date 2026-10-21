@@ -8,38 +8,11 @@ echo ======================================================================
 echo  Центр Ортопедии Добрушкина — Остановка сервера
 echo ======================================================================
 
-echo Поиск процесса на порту 5000...
-for /f "tokens=5" %%a in ('netstat -aon ^| findstr :5000 ^| findstr LISTENING') do (
-    set PID=%%a
-)
+echo Поиск и остановка процессов на порту 5000 (Сервер Express API)...
+powershell -NoProfile -Command "$conns = Get-NetTCPConnection -LocalPort 5000 -State Listen -ErrorAction SilentlyContinue; if ($conns) { $pids = $conns.OwningProcess | Select-Object -Unique; foreach ($p in $pids) { if ($p -gt 0) { Stop-Process -Id $p -Force -ErrorAction SilentlyContinue; Write-Host ('[УСПЕХ] Сервер успешно остановлен (PID: ' + $p + ').') } } } else { Write-Host '[ИНФОРМАЦИЯ] Работающий сервер на порту 5000 не обнаружен.' }"
 
-if defined PID (
-    echo Завершение процесса сервера (PID: %PID%)...
-    taskkill /F /PID %PID% >nul 2>&1
-    if %ERRORLEVEL% EQU 0 (
-        echo [УСПЕХ] Сервер успешно остановлен.
-    ) else (
-        echo [ОШИБКА] Не удалось завершить процесс %PID%. Попробуйте запуск от имени Администратора.
-    )
-) else (
-    echo [ИНФОРМАЦИЯ] Работающий сервер на порту 5000 не обнаружен.
-)
-
-set "FPID="
-echo Поиск процесса на порту 5050 (Фискальный сервис)...
-for /f "tokens=5" %%a in ('netstat -aon ^| findstr :5050 ^| findstr LISTENING') do (
-    set FPID=%%a
-)
-
-if defined FPID (
-    echo Завершение фискального сервиса (PID: %FPID%)...
-    taskkill /F /PID %FPID% >nul 2>&1
-    if %ERRORLEVEL% EQU 0 (
-        echo [УСПЕХ] Фискальный сервис успешно остановлен.
-    )
-) else (
-    echo [ИНФОРМАЦИЯ] Работающий фискальный сервис на порту 5050 не обнаружен.
-)
+echo Поиск и остановка процессов на порту 5050 (Фискальный сервис ККТ)...
+powershell -NoProfile -Command "$conns = Get-NetTCPConnection -LocalPort 5050 -State Listen -ErrorAction SilentlyContinue; if ($conns) { $pids = $conns.OwningProcess | Select-Object -Unique; foreach ($p in $pids) { if ($p -gt 0) { Stop-Process -Id $p -Force -ErrorAction SilentlyContinue; Write-Host ('[УСПЕХ] Фискальный сервис успешно остановлен (PID: ' + $p + ').') } } } else { Write-Host '[ИНФОРМАЦИЯ] Работающий фискальный сервис на порту 5050 не обнаружен.' }"
 
 echo ======================================================================
 timeout /t 3 >nul 2>&1 || ping -n 4 127.0.0.1 >nul

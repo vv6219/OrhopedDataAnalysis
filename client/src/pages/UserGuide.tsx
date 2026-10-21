@@ -42,6 +42,7 @@ import SmartToyIcon from '@mui/icons-material/SmartToy';
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
 import MenuBookIcon from '@mui/icons-material/MenuBook';
 import AutoStoriesIcon from '@mui/icons-material/AutoStories';
+import TocIcon from '@mui/icons-material/Toc';
 import BiotechIcon from '@mui/icons-material/Biotech';
 import HealingIcon from '@mui/icons-material/Healing';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
@@ -67,8 +68,7 @@ import {
   matchesQuery,
   countKeywordMatches,
   extractMatchSnippet,
-  HighlightMatch,
-  QUICK_SEARCH_CHIPS
+  HighlightMatch
 } from '../utils/guideSearchUtils';
 
 interface GuideSection {
@@ -92,8 +92,12 @@ export default function UserGuide() {
   const navigate = useNavigate();
 
   const [selectedVolume, setSelectedVolume] = useState<'all' | 'system' | 'clinical'>('all');
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('q') || params.get('search') || '';
+  });
   const [selectedCategory, setSelectedCategory] = useState('all');
+  const [showTableOfContents, setShowTableOfContents] = useState(false);
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
     'section-entities': true,
     'section-formulas': false,
@@ -1191,22 +1195,29 @@ export default function UserGuide() {
         'шаблоны', 'клинические шаблоны', 'протоколы', '180 нозологий', '11 кластеров', 'ортопедия', 'тесты', 'диагностика',
         'мкб-10', 'мрт', 'рентген', 'узи', 'энмг', 'плантография', 'servdict', 'гониометрия', 'rom', 'neutral-0', 'лахман',
         'манипуляции', 'prp cortexil', 'гиалуронат', 'физиотерапия', 'hilt', 'sis', 'увт', 'ортезирование', 'nwb', 'fwb',
-        'лфк', 'silbernagel', 'доказательная медицина', 'live arm preview', 'полнотекстовый поиск', 'арм врача', 'калькуляция', 'касса'
+        'лфк', 'silbernagel', 'доказательная медицина', 'live arm preview', 'полнотекстовый поиск', 'арм врача', 'калькуляция', 'касса',
+        'сколиоз', 'адамс', 'риссер', 'тест адамса', 'проба адамса', 'тест риссера', 'признак риссера', 'risser sign', 'корсет шено',
+        'm17', 'm16', 'm75', 'm77', 'm72', 'm23', 'm65', 'm54', 'm41', 'm20', 'm81', 's83', 's43', 's63', 's93'
       ],
       searchableText: `
         Справочник клинических шаблонов 2.0 Templates Manager Ортопедические тесты Методы диагностики
-        180 эталонных шаблонов протоколов по 11 клиническим кластерам Коленный сустав Плечевой сустав Тазобедренный сустав Стопа и голеностоп Локтевой сустав Кисть и запястье Позвоночник Детская ортопедия Системные синдромы Постоперационный контроль Авторские протоколы
-        8 взаимосвязанных каталогов Шаблоны протоколов Стандарты ROM Neutral-0 Специальные ортопедические тесты Методы диагностики Лечебные манипуляции и блокады Аппаратная физиотерапия Ортезирование и разгрузка Лечебная физкультура ЛФК
-        1377 валидированных тестов доказательной медицины Чувствительность Se Специфичность Sp Уровень доказательности A B C Tier 1 Tier 2 Tier 3
-        381 метод диагностики рентгенография МРТ УЗИ КТ ЭНМГ компьютерная плантография микроскопия синовии ревматологическая панель
-        26 манипуляций PRP-терапия Cortexil 10 мл 20 мл гиалуроновая кислота Армавискон Гиалрипайер блокада триггерных точек УЗИ-навигация CDSS Red Flags
-        21 метод физиотерапии HILT лазер высокой интенсивности SIS магнит ударно-волновая терапия УВТ TECAR диатермия криотерапия
-        26 ортопедических изделий брейсы туторы шарнирные ортезы стельки ФормТотикс режимы нагрузки NWB TTWB PWB WBAT FWB
-        29 комплексов ЛФК кинезиотерапия трехфазная модель Silbernagel мониторинг боли ВАШ зеленая желтая красная зона
-        Привязка к номенклатуре платных услуг servdict id 114 1675 99 1600 автоматический расчет стоимости
-        Полнотекстовый поиск Full-Text Search FTS по МКБ-10 авторам латыни анатомическому субстрату методике показаниям
-        Интерактивный Live ARM Preview переключатель Отрицательный Положительный обучающая подсказка по кнопке i
-        Сквозной поток в АРМ врача выбор сустава на Гомункулусе передача назначений В кассу без расхождений
+        180 эталонных шаблонов протоколов по 11 клиническим кластерам:
+        Кластер 1: Коленный сустав (гонартроз M17, повреждение мениска M23, разрыв ПКС S83, пателлофеморальный артроз, синовит, киста Бейкера).
+        Кластер 2: Плечевой сустав (субакромиальный импинджмент M75, теносиновит бицепса, разрыв ротаторной манжеты, адгезивный капсулит, артроз АКС, нестабильность Банкарт S43).
+        Кластер 3: Тазобедренный сустав (коксартроз M16, вертельный болевой синдром трохантерит GTPS, фемороацетабулярный импинджмент FAI, асептический некроз АНГБК).
+        Кластер 4: Стопа и голеностоп (плантарный фасциит пяточная шпора M72, ахиллодиния тендинит ахилла, разрыв связок голеностопа ATFL S93, метатарзалгия Мортона, плоскостопие, Hallux Valgus M20).
+        Кластер 5: Локтевой сустав (латеральный эпикондилит локоть теннисиста M77.1, медиальный эпикондилит локоть гольфиста M77.0, неврит кубитального канала, бурсит локтевого отростка).
+        Кластер 6: Кисть и запястье (синдром карпального канала CTS G56, болезнь де Кервена M65.4, повреждение TFCC триангулярного комплекса S63, стенозирующий лигаментит щелкающий палец, ризартроз M19).
+        Кластер 7: Позвоночник (дорсалгия люмбалгия M54, цервикалгия, корешковый синдром радикулопатия грыжа диска L4 L5 S1, спондилоартроз, фасеточный синдром).
+        Кластер 8: Детская ортопедия и вертебрология (сколиоз M41.2 шаблоны #85 и #151, тест Адамса с наклоном вперед сколиометрия Adams forward bend, тест и признак Риссера Risser sign костная зрелость скелета стадии 0-5 оценка потенциала прогрессирования, угол Кобба, корсет Шено, кифоз, торсия позвонков, дисплазия ТБС Q65, плосковальгусная деформация стоп).
+        Кластер 9: Системные заболевания (остеопороз остеопения M81, подагрический артрит M10, ревматоидный артрит M05).
+        Кластер 10: Спортивная травма (миофасциальный синдром, растяжение хамстринг, травмы связочного аппарата).
+        Кластер 11: Постоперационная реабилитация (состояние после эндопротезирования ТБС и колена, шов мениска, пластика ПКС).
+        8 взаимосвязанных каталогов: Шаблоны протоколов, Стандарты ROM Neutral-0, Специальные ортопедические тесты (1377 тестов Se/Sp), Методы диагностики (381 метод, 37 УЗИ), Лечебные манипуляции и блокады (26 процедур PRP Cortexil), Аппаратная физиотерапия (21 метод HILT SIS УВТ), Ортезирование и разгрузка (26 изделий Formthotics), Лечебная физкультура ЛФК (29 комплексов Silbernagel).
+        Привязка к номенклатуре платных услуг servdict id 114 1675 99 1600 автоматический расчет стоимости.
+        Полнотекстовый поиск Full-Text Search FTS по МКБ-10 авторам латыни анатомическому субстрату методике показаниям.
+        Интерактивный Live ARM Preview переключатель Отрицательный Положительный обучающая подсказка по кнопке i.
+        Сквозной поток в АРМ врача выбор сустава на Гомункулусе передача назначений в кассу без расхождений.
       `,
       content: (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
@@ -1297,7 +1308,9 @@ export default function UserGuide() {
       tags: [
         'тесты', 'ортопедические тесты', 'биомеханика', 'физикальная диагностика', '1377 тестов', 'se', 'sp', 'доказательность',
         'колено', 'плечо', 'локоть', 'тбс', 'стопа', 'кисть', 'позвоночник', 'лахман', 'пивот-шифт', 'мак-мюррей', 'нир',
-        'хокинс', 'козен', 'фален', 'тинель', 'фабер', 'ласег', 'адамс', 'гониометрия', 'sftr'
+        'хокинс', 'козен', 'фален', 'тинель', 'фабер', 'ласег', 'адамс', 'гониометрия', 'sftr',
+        'риссер', 'risser', 'тест риссера', 'признак риссера', 'проба риссера', 'симптом риссера', 'risser sign',
+        'тест адамса', 'проба адамса', 'признак адамса', 'костная зрелость', 'зоны роста'
       ],
       searchableText: `
         Полный реестр 1377 ортопедических тестов с руководствами для врача доказательная медицина
@@ -1307,7 +1320,7 @@ export default function UserGuide() {
         Тазобедренный сустав: Тест FABER Патрика сакроилеит коксартроз Patrick, Тест FADIR фемороацетабулярный импинджмент губа FAI, Тест Томаса сгибательная контрактура подвздошно-поясничной мышцы Thomas, Проба Тренделенбурга слабость средней ягодичной мышцы Trendelenburg, Тест Обера натяжение илиотибиального тракта Ober.
         Стопа и голеностоп: Тест Уиндласса плантарная фасция пяточная шпора Windlass, Тест Томпсона разрыв ахиллова сухожилия Thompson, Тест переднего выдвижного ящика голеностопа таранно-малоберцовая связка ATFL Anterior drawer ankle, Тест наклона таранной кости инверсионный стресс Talar tilt.
         Кисть и запястье: Тест Фалена карпальный канал срединный нерв medianus, Симптом Тиннеля на запястье, Тест Финкельштейна болезнь де Кервена, Симптом клавиши пианино ДРУС TFCC, Тест шлифовки 1-го ПЗП Grind test ризартроз.
-        Позвоночник и спина: Симптом Ласега натяжение седалищного нерва корешки L4 L5 S1 грыжа диска люмбоишиалгия, Проба Адамса наклон вперед сколиоз торсия позвонков реберный горб, Тест Сперлинга фораминальная компрессия шейная радикулопатия C5 C6 C7, Тест Вассермана бедренный нерв корешки L2 L3 L4.
+        Позвоночник и спина: Симптом Ласега натяжение седалищного нерва корешки L4 L5 S1 грыжа диска люмбоишиалгия, Проба Адамса наклон вперед сколиоз торсия позвонков реберный горб Adams forward bend, Тест / признак Риссера Risser sign костная зрелость скелетный рост зоны роста гребня подвздошной кости апофиз стадии 0-5 сколиоз прогрессирование корсет Шено, Тест Сперлинга фораминальная компрессия шейная радикулопатия C5 C6 C7, Тест Вассермана бедренный нерв корешки L2 L3 L4.
       `,
       content: <OrthoTestsGuideRegistry />
     },
@@ -1325,15 +1338,55 @@ export default function UserGuide() {
       tags: [
         'диагностика', 'методы диагностики', 'инструментальные исследования', '381 метод', 'рентген', 'мрт', 'узи', 'энмг', 'плантография',
         'кт', 'лаборатория', 'синовия', 'ревматологическая панель', 'показания', 'формулировка', 'servdict', 'цена', 'касса',
-        'гонартроз', 'коксартроз', 'мениск', 'пкс', 'зкс', 'плечо', 'ротаторная манжета', 'сколиоз', 'плоскостопие'
+        'гонартроз', 'коксартроз', 'мениск', 'пкс', 'зкс', 'плечо', 'ротаторная манжета', 'сколиоз', 'плоскостопие',
+        'риссер', 'risser', 'тест риссера', 'признак риссера', 'risser sign', 'угол кобба', 'адамс',
+        '37 узи', 'us_achilles', 'us_knee', 'us_shoulder', 'us_elbow', 'us_wrist', 'us_hip', 'us_ankle', 'omeract', 'graf', 'sammarco', 'leddy-packer'
       ],
       searchableText: `
-        Каталог методов диагностики и инструментальных исследований 381 метод
-        Рентгенография: коленный сустав стоя под нагрузкой Kellgren-Lawrence, таз и оба ТБС коксартроз АНГБК, стопы с нагрузкой угол свода Штритер Чижин плоскостопие, плечевой сустав акромион Bigliani кальцификаты, локтевой сустав суставная мышь, лучезапястный сустав дуги Карпала ризартроз, функциональная рентгенография позвоночника спондилолистез нестабильность, панорамная спондилография сколиоз угол Кобба.
-        МРТ томография: коленный сустав 1.5-3.0 Тл Stoller мениски ПКС ЗКС, плечевой сустав ротаторная манжета надостная Банкарт SLAP, ТБС асептический некроз вертлужная губа FAI, пояснично-крестцовый отдел грыжи L1-S1 радикулопатия корешки, локтевой сустав рефрактерный эпикондилит LUCL, лучезапястный сустав TFCC триангулярный комплекс.
-        УЗИ ультразвук: коленный сустав завороты синовит киста Бейкера пункция, плечевой сустав динамические пробы импинджмент бицепс, ахиллово сухожилие плантарная фасция пяточная шпора > 4 мм, локтевой сустав энтезопатия ЦДК допплер, ТБС большой вертел трохантерит GTPS, карпальный канал срединный нерв CSA > 10 мм².
+        Каталог методов диагностики и инструментальных исследований 381 метод стандарты EBM
+        Цифровая рентгенография: коленный сустав стоя под нагрузкой Kellgren-Lawrence, таз и оба ТБС коксартроз АНГБК, стопы с нагрузкой угол свода Штритер Чижин плоскостопие, плечевой сустав акромион Bigliani кальцификаты, локтевой сустав суставная мышь, лучезапястный сустав дуги Карпала ризартроз, функциональная рентгенография позвоночника спондилолистез нестабильность, панорамная спондилография сколиоз угол Кобба, тест и признак Риссера (Risser sign 0–5) костная зрелость скелета зоны роста гребня подвздошной кости.
+        Высокопольная МРТ томография 1.5-3.0 Тл: коленный сустав Stoller мениски разрывы ПКС ЗКС, плечевой сустав ротаторная манжета надостная Банкарт SLAP, ТБС асептический некроз вертлужная губа FAI фемороацетабулярный импинджмент, пояснично-крестцовый отдел грыжи L1-S1 радикулопатия корешки, локтевой сустав рефрактерный эпикондилит LUCL, лучезапястный сустав TFCC триангулярный комплекс.
+        Ультразвуковая диагностика УЗИ (37 специализированных ортопедических протоколов):
+        us_achilles (Ахиллово сухожилие Sammarco дегенерация теносиновит частичный полный разрыв),
+        us_ankle_atfl (Передняя таранно-малоберцовая связка ATFL повреждение нестабильность голеностопа),
+        us_ankle_posterior (Задний отдел голеностопа треугольная кость Os trigonum задний импинджмент флексор галлюцис),
+        us_ankle_retinaculum (Удерживатели малоберцовых сухожилий вывих щелкающая наружная лодыжка),
+        us_ankle_syndesmosis (Дистальный межберцовый синдесмоз AITFL динамический диастаз стресс-тест),
+        us_elbow_biceps (Дистальное сухожилие бицепса разрыв ретракция апоневроз Пирогова lacertus fibrosus),
+        us_elbow_cubital (Кубитальный канал локтевой нерв неврит компрессия дислокация),
+        us_elbow_epicond (Надмыщелки плечевой кости латеральный медиальный эпикондилит ECRB теносиновит энтезофит),
+        us_elbow_joint (Локтевой сустав выпот синовит остеофиты суставная мышь гемартроз),
+        us_foot_intermetatarsal (Межплюсневые промежутки неврома Мортона Morton neuroma сдавление тест Малдера),
+        us_foot_plantar (Плантарная фасция подошвенный фасциит пяточная шпора утолщение > 4 мм энтезопатия),
+        us_foot_tibialis_post (Сухожилие задней большеберцовой мышцы TP дисфункция плоскостопие деформация),
+        us_hand_annular (Кольцевидные связки A1 A2 A3 стенозирующий лигаментит щелкающий палец ноттинг),
+        us_hand_collateral (Коллатеральные связки пальцев палец лыжника боковая нестабильность UCL),
+        us_hand_extensors (Сухожилия разгибателей пальцев сагиттальные пучки дислокация),
+        us_hand_flexors (Сухожилия глубоких и поверхностных сгибателей FDS FDP дефект Leddy-Packer),
+        us_hip_adult (Тазобедренный сустав у взрослых вертлужная губа коксартроз выпот синовит),
+        us_hip_greater_troch (Большой вертел трохантерит GTPS вертельная сумка средняя ягодичная мышца),
+        us_hip_iliopsoas (Подвздошно-поясничная мышца и сухожилие илиопсоит бурсит щелкающее бедро),
+        us_hip_pediatric (Тазобедренные суставы у детей скрининг дисплазии ТБС по Графу Graf тип I IIa IIb IIc D III IV костный эркер угол альфа бета),
+        us_knee_acl_indirect (ПКС передняя крестообразная связка косвенные признаки разрыва гемартроз симптом Segond),
+        us_knee_anterior (Передний отдел коленного сустава супрапателлярный заворот препателлярный бурсит тендинит связки надколенника колено прыгуна),
+        us_knee_cartilage (Суставной хрящ мыщелков бедра хондромаляция гонартроз дефект толщина),
+        us_knee_collateral (Боковые связки MCL LCL растяжение разрыв оссификат Пеллегрини-Штида Pellegrini-Stieda),
+        us_knee_meniscus (Мениски медиальный латеральный экструзия мениска дегенерация параменисковая киста разрыв),
+        us_knee_posterior (Подколенная ямка киста Бейкера Baker cyst разрыв гематома голени),
+        us_nerve_peroneal (Малоберцовый нерв компрессия у головки малоберцовой кости конская стопа свисание),
+        us_nerve_sciatic (Седалищный нерв синдром грушевидной мышцы УЗИ навигация блокада пириформис),
+        us_nerve_tibial (Большеберцовый нерв тарзальный канал синдром компрессии онемение подошвы),
+        us_rheumatoid_omeract (Ревматологический ультразвуковой протокол OMERACT допплеровский сигнал синовит паннус эрозии кости),
+        us_shoulder_ac_joint (Акромиально-ключичный сустав АКС артроз диастаз связок),
+        us_shoulder_biceps (Длинная головка бицепса межбугорковая борозда теносиновит вывих подлопаточная мышца),
+        us_shoulder_dynamic (Динамические ультразвуковые пробы субакромиальный импинджмент ущемление манжеты),
+        us_shoulder_rotator (Ротаторная манжета надостная подостная подлопаточная малая круглая частичный полный разрыв),
+        us_wrist_carpal (Карпальный канал срединный нерв карпальный синдром CTS площадь поперечного сечения CSA > 10 мм²),
+        us_wrist_dequervain (Первый канал разгибателей болезнь де Кервена теносиновит APL EPB),
+        us_wrist_tfcc (Триангулярный фиброзно-хрящевой комплекс TFCC локтевой край запястья разрыв боль),
+        us_dvt_veins (УЗДГ вен нижних конечностей компрессионный ультразвук CUS тромбоз глубоких вен ТГВ тромбофлебит).
         ЭНМГ электронейромиография: срединный нерв дистальная моторная латентность карпальный синдром, локтевой нерв кубитальный канал блок проведения.
-        Плантография: компьютерная оптическая подометрия индивидуальные стельки ФормТотикс.
+        Плантография: компьютерная оптическая подометрия индивидуальные стельки ФормТотикс Formthotics.
         КТ и Лаборатория: КТ с 3D-реконструкцией остеотомия, ревматологическая панель СРБ РФ АЦЦП мочевая кислота подагра, исследование синовиальной жидкости цитоз кристаллы уратов пирофосфаты.
       `,
       content: <DiagnosticMethodsGuideRegistry />
@@ -1406,6 +1459,7 @@ export default function UserGuide() {
       directAppTooltip: 'Открыть каталог ортезов и разгрузки стопы/суставов в Справочнике шаблонов',
       tags: [
         'ортезирование', 'стельки', 'формтотикс', 'formthotics', 'брейсы', 'туторы', 'корсеты', 'шено', 'разгрузка',
+        'риссер', 'risser', 'тест риссера', 'признак риссера', 'risser sign', 'сколиоз',
         'nwb', 'ttwb', 'pwb', 'wbat', 'fwb', '26 изделий', 'servdict', 'склад', 'термоформовка', '85 градусов',
         'колено', 'стопа', 'позвоночник', 'плечо', 'кисть', 'деротационный сапожок', 'дезо', 'абдукционная подушка'
       ],
@@ -1415,7 +1469,7 @@ export default function UserGuide() {
         Шарнирные коленные ортезы брейсы с регулятором углов ROM Range of Motion 0° до 90° градуировка фиксация после пластики ПКС шва мениска остеотомии
         Жесткие коленные туторы иммобилизация 0° гемартроз перелом надколенника свежий разрыв связок
         Деротационный сапожок голеностопный ортез фиксация стопы профилактика наружной ротации при переломах шейки бедра
-        Корсет Шено жесткий термопластический деротационный корсет индивидуального изготовления 3D-сканирование коррекция сколиоза 2-3 степени у детей и подростков разгрузка компрессии торсии позвонков
+        Корсет Шено жесткий термопластический деротационный корсет индивидуального изготовления 3D-сканирование коррекция сколиоза 2-3 степени у детей и подростков разгрузка компрессии торсии позвонков, протокол SOSORT режим 18-23 часа в сутки при тесте и признаке Риссера 0-3 (Risser sign) до завершения костного роста (Риссер 4-5).
         Ортезы верхней конечности повязка Дезо косыночный бандаж с абдукционной подушкой отведение плеча 30-45° после шва ротаторной манжеты
         Лучезапястные шины лонгеты фиксация первого луча ризартроз ночная шина карпальный канал
         Регламенты осевой нагрузки: NWB Non-Weight Bearing без нагрузки костыли, TTWB Toe-Touch касание носком 10%, PWB Partial частичная нагрузка 30-50%, WBAT по переносимости, FWB полная осевая нагрузка склад servdict
@@ -1505,11 +1559,16 @@ export default function UserGuide() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  // Handle URL query parameters (?volume=all|system|clinical, ?section=section-xyz, or hash #section-xyz)
+  // Handle URL query parameters (?volume=all|system|clinical, ?q=query, ?section=section-xyz, or hash #section-xyz)
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const volumeParam = params.get('volume');
     const sectionParam = params.get('section') || (location.hash ? location.hash.replace('#', '') : null);
+    const queryParam = params.get('q') || params.get('search');
+
+    if (queryParam !== null && queryParam !== searchQuery) {
+      setSearchQuery(queryParam);
+    }
 
     if (volumeParam === 'system' || volumeParam === 'clinical' || volumeParam === 'all') {
       setSelectedVolume(volumeParam);
@@ -1552,49 +1611,74 @@ export default function UserGuide() {
     }, { replace: true });
   };
 
+  const handleJumpToSection = (sectionId: string, sectionVolume?: 'system' | 'clinical') => {
+    if (sectionVolume && selectedVolume !== 'all' && selectedVolume !== sectionVolume) {
+      setSelectedVolume(sectionVolume);
+    }
+    setExpandedSections((prev) => ({
+      ...prev,
+      [sectionId]: true
+    }));
+    setTimeout(() => {
+      const el = document.getElementById(sectionId);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }, 100);
+  };
+
   // Structured query parsing with transliteration and synonyms
   const parsedQuery = useMemo(() => {
     return parseAndExpandQuery(searchQuery);
   }, [searchQuery]);
 
   // Comprehensive full-text filtering with relevance statistics & snippet extraction
-  const { filteredSections, sectionStats, totalMatchesCount } = useMemo(() => {
+  const isSearchActive = Boolean(parsedQuery.raw && parsedQuery.raw.length > 0);
+
+  const { filteredSections, sectionStats, totalMatchesCount, volumeBreakdown } = useMemo(() => {
     const stats: Record<string, { matchCount: number; snippet: string | null; matchedTags: string[] }> = {};
     let total = 0;
+    const volCounts = { system: 0, clinical: 0 };
 
     const filtered = sections.filter((sec) => {
-      // Filter by Volume
-      if (selectedVolume !== 'all' && sec.volume !== selectedVolume) {
-        return false;
-      }
-
-      // Filter by Category
-      const matchesCategory = selectedCategory === 'all' || sec.category === selectedCategory;
-      if (!matchesCategory) return false;
-
-      const aggregate = `${sec.volumeNumber} ${sec.title} ${sec.subtitle} ${sec.tags.join(' ')} ${sec.searchableText}`;
-
-      if (!parsedQuery.raw) {
+      // When NOT searching, filter strictly by selectedVolume and selectedCategory
+      if (!isSearchActive) {
+        if (selectedVolume !== 'all' && sec.volume !== selectedVolume) {
+          return false;
+        }
+        if (selectedCategory !== 'all' && sec.category !== selectedCategory) {
+          return false;
+        }
         stats[sec.id] = { matchCount: 0, snippet: null, matchedTags: [] };
         return true;
       }
 
+      // When searching, SEARCH WHOLE CONTEXT across all volumes and categories!
+      const aggregate = `${sec.volumeNumber} ${sec.title} ${sec.subtitle} ${sec.tags.join(' ')} ${sec.searchableText}`;
+
       const isMatch = matchesQuery(aggregate, parsedQuery);
       if (!isMatch) return false;
 
-      const count = countKeywordMatches(aggregate, parsedQuery.expandedTokens);
-      const snippet = extractMatchSnippet(sec.searchableText, parsedQuery.expandedTokens, 80);
+      const count = countKeywordMatches(aggregate, parsedQuery.highlightTokens);
+      const snippet = extractMatchSnippet(sec.searchableText, parsedQuery.highlightTokens, 85);
       const matchedTags = sec.tags.filter(tag => 
-        parsedQuery.expandedTokens.some(tok => tag.toLowerCase().includes(tok.toLowerCase()))
+        parsedQuery.highlightTokens.some(tok => tag.toLowerCase().includes(tok.toLowerCase()))
       );
 
-      stats[sec.id] = { matchCount: count, snippet, matchedTags };
-      total += count;
+      const resolvedCount = Math.max(1, count);
+      stats[sec.id] = { matchCount: resolvedCount, snippet, matchedTags };
+      total += resolvedCount;
+      volCounts[sec.volume]++;
       return true;
     });
 
-    return { filteredSections: filtered, sectionStats: stats, totalMatchesCount: total };
-  }, [sections, selectedVolume, selectedCategory, parsedQuery]);
+    return { 
+      filteredSections: filtered, 
+      sectionStats: stats, 
+      totalMatchesCount: total,
+      volumeBreakdown: volCounts
+    };
+  }, [sections, selectedVolume, selectedCategory, parsedQuery, isSearchActive]);
 
   // Auto-expand matching sections when user types a search query
   useEffect(() => {
@@ -1668,7 +1752,7 @@ export default function UserGuide() {
   }, [sections, selectedVolume]);
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', width: '100%', maxWidth: '1440px', margin: '0 auto', gap: 3, pb: 6 }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', width: '100%', maxWidth: '1600px', margin: '0 auto', gap: 2, pb: 6 }}>
       {/* Hidden A4 Printable Template for react-to-print */}
       <Box sx={{ display: 'none' }}>
         <UserGuidePrintTemplate ref={printRef} version="1.4.5" />
@@ -1944,7 +2028,7 @@ export default function UserGuide() {
         sx={{
           p: 2,
           border: '1.5px solid #CBD5E1',
-          borderRadius: 3,
+          borderRadius: 2.5,
           bgcolor: '#FFFFFF',
           display: 'flex',
           flexDirection: 'column',
@@ -1962,7 +2046,7 @@ export default function UserGuide() {
             inputRef={searchInputRef}
             fullWidth
             size="small"
-            placeholder="Интеллектуальный поиск: PRP Cortexil, HILT 1064, SIS 3 Тл, Formthotics, Silbernagel, Лахман, Шено, АТОЛ 91Ф, BOM..."
+            placeholder="Интеллектуальный сквозной поиск: узи*, *пластика, PRP Cortexil, HILT 1064, SIS 3 Тл, Formthotics, Silbernagel, Лахман, 54-ФЗ..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             slotProps={{
@@ -2010,38 +2094,6 @@ export default function UserGuide() {
               }
             }}
           />
-        </Box>
-
-        {/* Curated Quick Search Suggestion Chips */}
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-          <Typography variant="caption" sx={{ fontWeight: 800, color: '#0F3C64', display: 'flex', alignItems: 'center', gap: 0.5, mr: 0.5 }}>
-            💡 Быстрые запросы:
-          </Typography>
-          {QUICK_SEARCH_CHIPS.map((chip) => {
-            const isActive = searchQuery.toLowerCase().trim() === chip.query.toLowerCase().trim();
-            return (
-              <Chip
-                key={chip.id}
-                label={`${chip.icon || ''} ${chip.label}`}
-                onClick={() => setSearchQuery(isActive ? '' : chip.query)}
-                size="small"
-                sx={{
-                  fontWeight: isActive ? 800 : 600,
-                  fontSize: '0.74rem',
-                  bgcolor: isActive ? '#0F3C64' : `${chip.color}10`,
-                  color: isActive ? '#FFFFFF' : chip.color,
-                  border: `1px solid ${isActive ? '#0F3C64' : `${chip.color}30`}`,
-                  borderRadius: 1.5,
-                  cursor: 'pointer',
-                  transition: 'all 0.15s ease',
-                  '&:hover': {
-                    bgcolor: isActive ? '#0A2540' : `${chip.color}20`,
-                    borderColor: chip.color
-                  }
-                }}
-              />
-            );
-          })}
         </Box>
 
         {/* Category Filters Bar */}
@@ -2092,7 +2144,7 @@ export default function UserGuide() {
         >
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
             <Chip
-              label={`🟢 Найдено разделов: ${filteredSections.length} из ${sections.length}`}
+              label={`🟢 Найдено разделов: ${filteredSections.length} из ${sections.length} (Том I: ${volumeBreakdown.system}, Том II: ${volumeBreakdown.clinical})`}
               size="small"
               sx={{ bgcolor: '#DCFCE7', color: '#166534', fontWeight: 800, fontSize: '0.78rem' }}
             />
@@ -2103,11 +2155,9 @@ export default function UserGuide() {
             />
             <Typography variant="body2" sx={{ color: '#166534', fontSize: '0.88rem' }}>
               по запросу «<strong>{searchQuery}</strong>»
-              {parsedQuery.expandedTokens.length > parsedQuery.originalTokens.length && (
-                <span style={{ color: '#64748B', fontSize: '0.8rem', marginLeft: '6px' }}>
-                  (с учетом синонимов и раскладки клавиатуры)
-                </span>
-              )}
+              <span style={{ color: '#0F3C64', fontSize: '0.8rem', marginLeft: '6px', fontWeight: 600 }}>
+                (сквозной поиск по всему руководству: подстановки *, ?, словоформы, синонимы)
+              </span>
             </Typography>
           </Box>
           <Button
@@ -2127,6 +2177,287 @@ export default function UserGuide() {
           </Button>
         </Paper>
       )}
+
+      {/* Executive Table of Contents & Direct Link Directory */}
+      <Paper
+        elevation={0}
+        sx={{
+          p: showTableOfContents ? 2.5 : 1.25,
+          px: 2,
+          border: '1px solid #CBD5E1',
+          borderRadius: 2.5,
+          bgcolor: '#FFFFFF',
+          boxShadow: '0 2px 8px rgba(15, 60, 100, 0.04)',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: showTableOfContents ? 2 : 0,
+          transition: 'all 0.2s ease'
+        }}
+      >
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 1 }}>
+          <Box
+            onClick={() => setShowTableOfContents(prev => !prev)}
+            sx={{ display: 'flex', alignItems: 'center', gap: 1.2, cursor: 'pointer' }}
+          >
+            <TocIcon sx={{ color: '#0F3C64', fontSize: 24 }} />
+            <Typography variant="subtitle1" sx={{ fontWeight: 800, color: '#0F3C64', fontSize: '0.96rem', letterSpacing: '-0.2px' }}>
+              Оглавление и экспресс-переход по разделам руководства
+            </Typography>
+            <Chip
+              label="18 глав"
+              size="small"
+              sx={{ bgcolor: '#F1F5F9', color: '#475569', fontWeight: 800, fontSize: '0.74rem' }}
+            />
+          </Box>
+          <Button
+            size="small"
+            variant="text"
+            onClick={() => setShowTableOfContents(prev => !prev)}
+            sx={{
+              textTransform: 'none',
+              fontWeight: 700,
+              fontSize: '0.8rem',
+              color: '#0F3C64',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 0.5
+            }}
+          >
+            {showTableOfContents ? 'Свернуть оглавление' : 'Развернуть оглавление'}
+            <ExpandMoreIcon
+              sx={{
+                fontSize: 20,
+                transform: showTableOfContents ? 'rotate(180deg)' : 'none',
+                transition: 'transform 0.2s ease'
+              }}
+            />
+          </Button>
+        </Box>
+
+        {showTableOfContents && (
+          <Box
+            sx={{
+              display: 'grid',
+              gridTemplateColumns: { xs: '1fr', lg: '1fr 1fr' },
+              gap: 2.5,
+              pt: 1,
+              borderTop: '1px solid #F1F5F9'
+            }}
+          >
+            {/* Column 1: Volume I (1.1 - 1.10) */}
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5, pb: 0.5, borderBottom: '2px solid #0284C7' }}>
+                <MenuBookIcon sx={{ color: '#0284C7', fontSize: 20 }} />
+                <Typography variant="subtitle2" sx={{ fontWeight: 800, color: '#0F3C64', textTransform: 'uppercase', fontSize: '0.8rem', letterSpacing: '0.5px' }}>
+                  ТОМ I: Системное Руководство (1.1 — 1.10)
+                </Typography>
+                <Chip label="10 глав" size="small" sx={{ ml: 'auto', height: 20, fontSize: '0.68rem', fontWeight: 800, bgcolor: '#E0F2FE', color: '#0369A1' }} />
+              </Box>
+
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.8 }}>
+                {sections.filter(s => s.volume === 'system').map((sec) => (
+                  <Box
+                    key={sec.id}
+                    onClick={() => handleJumpToSection(sec.id, sec.volume)}
+                    sx={{
+                      p: 1.2,
+                      borderRadius: 1.5,
+                      border: '1px solid #E2E8F0',
+                      bgcolor: '#F8FAFC',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 0.4,
+                      '&:hover': {
+                        borderColor: '#0284C7',
+                        bgcolor: '#F0F9FF',
+                        transform: 'translateX(3px)',
+                        boxShadow: '0 2px 8px rgba(2, 132, 199, 0.1)'
+                      }
+                    }}
+                  >
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 1 }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
+                        <Chip
+                          label={sec.volumeNumber}
+                          size="small"
+                          sx={{
+                            height: 20,
+                            minWidth: 32,
+                            fontWeight: 800,
+                            fontSize: '0.72rem',
+                            bgcolor: '#0F3C64',
+                            color: '#FFFFFF'
+                          }}
+                        />
+                        <Typography
+                          variant="body2"
+                          sx={{
+                            fontWeight: 700,
+                            color: '#0F3C64',
+                            fontSize: '0.85rem',
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis'
+                          }}
+                        >
+                          {sec.title.replace(/^[\d.]+\s*/, '')}
+                        </Typography>
+                      </Box>
+                      {sec.directAppPath && (
+                        <Tooltip title={sec.directAppTooltip || `Перейти в экран: ${sec.directAppLabel}`} arrow>
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              navigate(sec.directAppPath!);
+                            }}
+                            sx={{
+                              height: 22,
+                              px: 0.8,
+                              fontSize: '0.68rem',
+                              fontWeight: 700,
+                              textTransform: 'none',
+                              color: '#0284C7',
+                              borderColor: '#BAE6FD',
+                              bgcolor: '#FFFFFF',
+                              flexShrink: 0,
+                              '&:hover': { bgcolor: '#E0F2FE', borderColor: '#0284C7' }
+                            }}
+                          >
+                            {sec.directAppLabel || 'В модуль'}
+                          </Button>
+                        </Tooltip>
+                      )}
+                    </Box>
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        color: '#64748B',
+                        lineHeight: 1.35,
+                        display: '-webkit-box',
+                        WebkitLineClamp: 2,
+                        WebkitBoxOrient: 'vertical',
+                        overflow: 'hidden'
+                      }}
+                    >
+                      {sec.subtitle}
+                    </Typography>
+                  </Box>
+                ))}
+              </Box>
+            </Box>
+
+            {/* Column 2: Volume II (2.1 - 2.8) */}
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5, pb: 0.5, borderBottom: '2px solid #059669' }}>
+                <BiotechIcon sx={{ color: '#059669', fontSize: 20 }} />
+                <Typography variant="subtitle2" sx={{ fontWeight: 800, color: '#065F46', textTransform: 'uppercase', fontSize: '0.8rem', letterSpacing: '0.5px' }}>
+                  ТОМ II: Клиническое Руководство (2.1 — 2.8)
+                </Typography>
+                <Chip label="8 глав" size="small" sx={{ ml: 'auto', height: 20, fontSize: '0.68rem', fontWeight: 800, bgcolor: '#DCFCE7', color: '#166534' }} />
+              </Box>
+
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.8 }}>
+                {sections.filter(s => s.volume === 'clinical').map((sec) => (
+                  <Box
+                    key={sec.id}
+                    onClick={() => handleJumpToSection(sec.id, sec.volume)}
+                    sx={{
+                      p: 1.2,
+                      borderRadius: 1.5,
+                      border: '1px solid #E2E8F0',
+                      bgcolor: '#F8FAFC',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 0.4,
+                      '&:hover': {
+                        borderColor: '#059669',
+                        bgcolor: '#F0FDF4',
+                        transform: 'translateX(3px)',
+                        boxShadow: '0 2px 8px rgba(5, 150, 105, 0.1)'
+                      }
+                    }}
+                  >
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 1 }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
+                        <Chip
+                          label={sec.volumeNumber}
+                          size="small"
+                          sx={{
+                            height: 20,
+                            minWidth: 32,
+                            fontWeight: 800,
+                            fontSize: '0.72rem',
+                            bgcolor: '#059669',
+                            color: '#FFFFFF'
+                          }}
+                        />
+                        <Typography
+                          variant="body2"
+                          sx={{
+                            fontWeight: 700,
+                            color: '#065F46',
+                            fontSize: '0.85rem',
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis'
+                          }}
+                        >
+                          {sec.title.replace(/^[\d.]+\s*/, '')}
+                        </Typography>
+                      </Box>
+                      {sec.directAppPath && (
+                        <Tooltip title={sec.directAppTooltip || `Перейти в экран: ${sec.directAppLabel}`} arrow>
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              navigate(sec.directAppPath!);
+                            }}
+                            sx={{
+                              height: 22,
+                              px: 0.8,
+                              fontSize: '0.68rem',
+                              fontWeight: 700,
+                              textTransform: 'none',
+                              color: '#059669',
+                              borderColor: '#A7F3D0',
+                              bgcolor: '#FFFFFF',
+                              flexShrink: 0,
+                              '&:hover': { bgcolor: '#DCFCE7', borderColor: '#059669' }
+                            }}
+                          >
+                            {sec.directAppLabel || 'В модуль'}
+                          </Button>
+                        </Tooltip>
+                      )}
+                    </Box>
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        color: '#64748B',
+                        lineHeight: 1.35,
+                        display: '-webkit-box',
+                        WebkitLineClamp: 2,
+                        WebkitBoxOrient: 'vertical',
+                        overflow: 'hidden'
+                      }}
+                    >
+                      {sec.subtitle}
+                    </Typography>
+                  </Box>
+                ))}
+              </Box>
+            </Box>
+          </Box>
+        )}
+      </Paper>
 
       {/* Accordion Sections List */}
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>

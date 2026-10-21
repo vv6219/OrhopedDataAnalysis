@@ -35,8 +35,10 @@ import {
   ToggleButtonGroup,
   Switch,
   FormControlLabel,
-  Badge
+  Badge,
+  Stack
 } from '@mui/material';
+import RefreshIcon from '@mui/icons-material/Refresh';
 import MedicalServicesIcon from '@mui/icons-material/MedicalServices';
 import SaveIcon from '@mui/icons-material/Save';
 import LockIcon from '@mui/icons-material/Lock';
@@ -657,6 +659,9 @@ export default function OrthoWorkstation() {
     setLoading(true);
     setError(null);
     resetAllCardsState();
+    const abortController = new AbortController();
+    const timeoutId = setTimeout(() => abortController.abort(), 12000);
+
     try {
       let url = `${API_BASE_URL}/api/ortho/context`;
       const qParams = new URLSearchParams();
@@ -674,9 +679,9 @@ export default function OrthoWorkstation() {
         url = `${API_BASE_URL}/api/ortho/context/2`;
       }
 
-      const res = await fetch(url);
+      const res = await fetch(url, { signal: abortController.signal });
       if (!res.ok) {
-        throw new Error(`Ошибка загрузки контекста приема`);
+        throw new Error(`Ошибка загрузки контекста приема (HTTP ${res.status})`);
       }
       const data = await res.json();
       if (!data.success) {
@@ -871,8 +876,13 @@ export default function OrthoWorkstation() {
       }
     } catch (err: any) {
       console.error('Error fetching ortho context:', err);
-      setError(err.message || 'Ошибка соединения с сервером');
+      if (err?.name === 'AbortError') {
+        setError('Превышено время ожидания ответа от сервера API (таймаут 12 сек). Проверьте запуск сервера бэкенда.');
+      } else {
+        setError(err.message || 'Ошибка соединения с сервером');
+      }
     } finally {
+      clearTimeout(timeoutId);
       setLoading(false);
     }
   };
@@ -1885,13 +1895,27 @@ export default function OrthoWorkstation() {
 
   if (error) {
     return (
-      <Box sx={{ p: 3, maxWidth: 800, mx: 'auto' }}>
-        <Alert severity="error" sx={{ mb: 2 }}>
+      <Box sx={{ p: 4, maxWidth: 800, mx: 'auto', mt: 4 }}>
+        <Alert severity="error" sx={{ mb: 3 }}>
           {error}
         </Alert>
-        <Button variant="outlined" startIcon={<ArrowBackIcon />} onClick={() => navigate('/protocols-registry')}>
-          К реестру протоколов
-        </Button>
+        <Stack direction="row" spacing={2}>
+          <Button
+            variant="contained"
+            color="primary"
+            startIcon={<RefreshIcon />}
+            onClick={() => fetchContext()}
+          >
+            Повторить загрузку
+          </Button>
+          <Button
+            variant="outlined"
+            startIcon={<ArrowBackIcon />}
+            onClick={() => navigate('/protocols-registry')}
+          >
+            К реестру протоколов
+          </Button>
+        </Stack>
       </Box>
     );
   }
