@@ -491,7 +491,7 @@ export default function UserGuide() {
             МИС «ОртоERP» стандартизирует все возможные клинические комбинации приема через строго определенные эталонные профили потока (Flow Templates FL-V01 — FL-V05):
           </Typography>
 
-          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 2 }}>
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '1fr 1fr' }, gap: 2 }}>
             <Paper elevation={0} sx={{ p: 2, bgcolor: '#FFFFFF', border: '1px solid #CBD5E1', borderRadius: 2 }}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
                 <Chip label="FL-V01" size="small" sx={{ bgcolor: '#0F3C64', color: '#FFFFFF', fontWeight: 800 }} />
@@ -659,7 +659,7 @@ export default function UserGuide() {
             Интерфейс «ОртоERP» разделен на специализированные рабочие места:
           </Typography>
 
-          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 2 }}>
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '1fr 1fr' }, gap: 2 }}>
             <Paper elevation={0} sx={{ p: 2, border: '1px solid #E2E8F0', borderRadius: 2 }}>
               <Typography variant="subtitle2" sx={{ fontWeight: 700, color: '#0F3C64' }}>
                 📊 Главный дашборд руководителя (<code>/</code>)
@@ -763,7 +763,7 @@ export default function UserGuide() {
               Конфигурация кассового узла хранится в базе данных SQLite в таблицах <code>pos_terminal_settings</code> (эквайринг) и <code>fiscal_device_settings</code> (ККТ). Это обеспечивает мгновенное переключение рабочих мест и независимость от перезапуска сервера:
             </Typography>
 
-            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 2 }}>
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '1fr 1fr' }, gap: 2 }}>
               <Paper elevation={0} sx={{ p: 2, bgcolor: '#FFFFFF', border: '1px solid #CBD5E1', borderRadius: 2 }}>
                 <Typography variant="subtitle2" sx={{ fontWeight: 700, color: '#0F3C64', mb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
                   <CreditCardIcon fontSize="small" /> Эквайринг «Альфа-Банк» (Arcus-2 / INPAS)
@@ -1014,7 +1014,7 @@ export default function UserGuide() {
             Панель <strong>«Управление демо-данными [TEST_DAEMON]»</strong> (<code>/admin/daemon-data</code>) обеспечивает полную изоляцию тестовых испытаний от реальных финансовых и клинических записей:
           </Typography>
 
-          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr 1fr' }, gap: 2 }}>
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr', lg: '1fr 1fr 1fr' }, gap: 2 }}>
             <Paper elevation={0} sx={{ p: 2, border: '1px solid #E2E8F0', borderRadius: 2, bgcolor: '#FFFFFF' }}>
               <Typography variant="subtitle2" sx={{ fontWeight: 700, color: '#16A34A' }}>
                 1. Заполнить БД (Seed)
@@ -1267,7 +1267,7 @@ export default function UserGuide() {
             <Typography variant="body2" sx={{ color: '#334155', mb: 1.5, lineHeight: 1.6 }}>
               Гониометрия амплитуды движений регистрируется по международному стандарту <strong>Neutral-0 (SFTR)</strong> в трех плоскостях (Sagittal, Frontal, Rotational). Все тесты каталога калиброваны по показателям чувствительности (<LatexText text="$\text{Se}$" />), специфичности (<LatexText text="$\text{Sp}$" />) и отношения правдоподобия (<LatexText text="$LR^+$" />):
             </Typography>
-            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 2 }}>
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '1fr 1fr' }, gap: 2 }}>
               <Paper elevation={0} sx={{ p: 1.5, bgcolor: '#FFFFFF', border: '1px solid #CBD5E1', borderRadius: 1.5 }}>
                 <Typography variant="caption" sx={{ fontWeight: 700, color: '#0F3C64', display: 'block', mb: 0.5 }}>
                   Нотация SFTR Neutral-0 (Коленный сустав):
@@ -1752,7 +1752,7 @@ export default function UserGuide() {
   }, [sections, selectedVolume]);
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', width: '100%', maxWidth: '1600px', margin: '0 auto', gap: 2, pb: 6 }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', width: '100%', maxWidth: '1600px', margin: '0 auto', gap: { xs: 1.5, sm: 2 }, px: { xs: 1, sm: 2, md: 3 }, pb: 6 }}>
       {/* Hidden A4 Printable Template for react-to-print */}
       <Box sx={{ display: 'none' }}>
         <UserGuidePrintTemplate ref={printRef} version="2.0.1" />
@@ -1760,10 +1760,10 @@ export default function UserGuide() {
       </Box>
 
       {/* Top Header & Actions */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 2 }}>
-        <Box>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-            <Typography variant="h4" sx={{ fontWeight: 800, color: '#0F3C64', letterSpacing: '-0.5px' }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: { xs: 'stretch', md: 'flex-start' }, flexDirection: { xs: 'column', md: 'row' }, gap: 2 }}>
+        <Box sx={{ minWidth: 0 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
+            <Typography variant="h4" sx={{ fontWeight: 800, color: '#0F3C64', letterSpacing: '-0.5px', fontSize: { xs: '1.25rem', sm: '1.5rem', md: '1.9rem' } }}>
               Полное Руководство пользователя МИС «ОртоERP»
             </Typography>
             <Chip
@@ -1772,12 +1772,12 @@ export default function UserGuide() {
               sx={{ bgcolor: '#EBF8FF', color: '#0F3C64', fontWeight: 800, border: '1px solid #BEE3F8' }}
             />
           </Box>
-          <Typography variant="body2" sx={{ color: '#64748B', mt: 0.5 }}>
+          <Typography variant="body2" sx={{ color: '#64748B', mt: 0.5, fontSize: { xs: '0.8rem', sm: '0.875rem' } }}>
             Интерактивный технологический регламент клиники: архитектура сущностей, параметры расчетов, сквозной поток (flow), мониторинг служб и печатные формы
           </Typography>
         </Box>
 
-        <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center', flexWrap: 'wrap' }}>
+        <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap', width: { xs: '100%', md: 'auto' }, justifyContent: { xs: 'stretch', sm: 'flex-start', md: 'flex-end' } }}>
           <Tooltip title="Развернуть все разделы инструкции" arrow enterDelay={200}>
             <Button
               variant="outlined"
@@ -1785,11 +1785,13 @@ export default function UserGuide() {
               startIcon={<UnfoldMoreIcon />}
               onClick={handleExpandAll}
               sx={{
+                flex: { xs: '1 1 calc(50% - 4px)', sm: '0 0 auto' },
                 borderColor: '#CBD5E1',
                 color: '#475569',
                 textTransform: 'none',
                 fontWeight: 600,
                 borderRadius: 2,
+                fontSize: { xs: '0.75rem', sm: '0.8125rem' },
                 '&:hover': { borderColor: '#0F3C64', color: '#0F3C64' }
               }}
             >
@@ -1804,11 +1806,13 @@ export default function UserGuide() {
               startIcon={<UnfoldLessIcon />}
               onClick={handleCollapseAll}
               sx={{
+                flex: { xs: '1 1 calc(50% - 4px)', sm: '0 0 auto' },
                 borderColor: '#CBD5E1',
                 color: '#475569',
                 textTransform: 'none',
                 fontWeight: 600,
                 borderRadius: 2,
+                fontSize: { xs: '0.75rem', sm: '0.8125rem' },
                 '&:hover': { borderColor: '#0F3C64', color: '#0F3C64' }
               }}
             >
@@ -1823,11 +1827,13 @@ export default function UserGuide() {
               startIcon={<PictureAsPdfIcon />}
               onClick={() => handlePrintTrigger()}
               sx={{
+                flex: { xs: '1 1 100%', sm: '0 0 auto' },
                 bgcolor: '#0F3C64',
                 color: '#FFFFFF',
                 fontWeight: 700,
                 textTransform: 'none',
                 borderRadius: 2,
+                fontSize: { xs: '0.75rem', sm: '0.8125rem' },
                 boxShadow: '0 2px 6px rgba(15, 60, 100, 0.25)',
                 '&:hover': { bgcolor: '#156C9C' }
               }}
@@ -1843,12 +1849,14 @@ export default function UserGuide() {
               startIcon={<ReceiptLongIcon />}
               onClick={() => handlePrintPosFiscalManual()}
               sx={{
+                flex: { xs: '1 1 100%', sm: '0 0 auto' },
                 borderColor: '#0284C7',
                 color: '#0284C7',
                 bgcolor: '#F0F9FF',
                 fontWeight: 700,
                 textTransform: 'none',
                 borderRadius: 2,
+                fontSize: { xs: '0.75rem', sm: '0.8125rem' },
                 '&:hover': { borderColor: '#0369A1', bgcolor: '#E0F2FE' }
               }}
             >
@@ -1862,12 +1870,12 @@ export default function UserGuide() {
       <Paper
         elevation={0}
         sx={{
-          p: 1.5,
+          p: { xs: 1.25, sm: 1.5 },
           borderRadius: 3,
           border: '1px solid #CBD5E1',
           bgcolor: '#F8FAFC',
           display: 'grid',
-          gridTemplateColumns: { xs: '1fr', md: 'repeat(3, 1fr)' },
+          gridTemplateColumns: { xs: '1fr', sm: '1fr', md: '1fr', lg: 'repeat(3, 1fr)' },
           gap: 1.5
         }}
       >
@@ -2238,7 +2246,7 @@ export default function UserGuide() {
           <Box
             sx={{
               display: 'grid',
-              gridTemplateColumns: { xs: '1fr', lg: '1fr 1fr' },
+              gridTemplateColumns: { xs: '1fr', sm: '1fr', md: '1fr', lg: '1fr 1fr' },
               gap: 2.5,
               pt: 1,
               borderTop: '1px solid #F1F5F9'
@@ -2277,8 +2285,8 @@ export default function UserGuide() {
                       }
                     }}
                   >
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 1 }}>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: { xs: 'flex-start', sm: 'center' }, flexDirection: { xs: 'column', sm: 'row' }, gap: 1 }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0, flexWrap: { xs: 'wrap', sm: 'nowrap' } }}>
                         <Chip
                           label={sec.volumeNumber}
                           size="small"
@@ -2297,7 +2305,7 @@ export default function UserGuide() {
                             fontWeight: 700,
                             color: '#0F3C64',
                             fontSize: '0.85rem',
-                            whiteSpace: 'nowrap',
+                            whiteSpace: { xs: 'normal', sm: 'nowrap' },
                             overflow: 'hidden',
                             textOverflow: 'ellipsis'
                           }}
@@ -2324,6 +2332,7 @@ export default function UserGuide() {
                               borderColor: '#BAE6FD',
                               bgcolor: '#FFFFFF',
                               flexShrink: 0,
+                              alignSelf: { xs: 'flex-start', sm: 'center' },
                               '&:hover': { bgcolor: '#E0F2FE', borderColor: '#0284C7' }
                             }}
                           >
@@ -2383,8 +2392,8 @@ export default function UserGuide() {
                       }
                     }}
                   >
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 1 }}>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: { xs: 'flex-start', sm: 'center' }, flexDirection: { xs: 'column', sm: 'row' }, gap: 1 }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0, flexWrap: { xs: 'wrap', sm: 'nowrap' } }}>
                         <Chip
                           label={sec.volumeNumber}
                           size="small"
@@ -2403,7 +2412,7 @@ export default function UserGuide() {
                             fontWeight: 700,
                             color: '#065F46',
                             fontSize: '0.85rem',
-                            whiteSpace: 'nowrap',
+                            whiteSpace: { xs: 'normal', sm: 'nowrap' },
                             overflow: 'hidden',
                             textOverflow: 'ellipsis'
                           }}
@@ -2430,6 +2439,7 @@ export default function UserGuide() {
                               borderColor: '#A7F3D0',
                               bgcolor: '#FFFFFF',
                               flexShrink: 0,
+                              alignSelf: { xs: 'flex-start', sm: 'center' },
                               '&:hover': { bgcolor: '#DCFCE7', borderColor: '#059669' }
                             }}
                           >
@@ -2488,30 +2498,31 @@ export default function UserGuide() {
                 expandIcon={<ExpandMoreIcon sx={{ color: isExpanded ? '#0F3C64' : '#64748B' }} />}
                 sx={{
                   bgcolor: isExpanded ? '#F8FAFC' : hasMatches ? '#FFFBEB' : '#FFFFFF',
-                  px: 2.5,
-                  py: 1.5,
+                  px: { xs: 1.5, sm: 2.5 },
+                  py: { xs: 1, sm: 1.5 },
                   borderBottom: isExpanded ? '1px solid #E2E8F0' : 'none',
-                  '& .MuiAccordionSummary-content': { margin: '8px 0' }
+                  '& .MuiAccordionSummary-content': { margin: '8px 0', minWidth: 0 }
                 }}
               >
-                <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 2, width: '100%', pr: 2 }}>
+                <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: { xs: 1.25, sm: 2 }, width: '100%', pr: { xs: 0.5, sm: 1.5 } }}>
                   <Box
                     sx={{
                       p: 1,
                       borderRadius: 2,
                       bgcolor: isExpanded ? '#EBF8FF' : '#F1F5F9',
-                      display: 'flex',
+                      display: { xs: 'none', sm: 'flex' },
                       alignItems: 'center',
                       justifyContent: 'center',
-                      mt: 0.3
+                      mt: 0.3,
+                      flexShrink: 0
                     }}
                   >
                     {section.icon}
                   </Box>
 
-                  <Box sx={{ flexGrow: 1 }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1 }}>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                  <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+                    <Box sx={{ display: 'flex', alignItems: { xs: 'flex-start', md: 'center' }, justifyContent: 'space-between', flexDirection: { xs: 'column', md: 'row' }, gap: 1 }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', minWidth: 0 }}>
                         <Chip
                           label={section.volume === 'system' ? `Том I: ${section.volumeNumber}` : `Том II: ${section.volumeNumber}`}
                           size="small"
@@ -2523,7 +2534,7 @@ export default function UserGuide() {
                             border: `1px solid ${section.volume === 'system' ? '#BEE3F8' : '#A7F3D0'}`
                           }}
                         />
-                        <Typography variant="subtitle1" sx={{ fontWeight: 800, color: '#0F3C64', fontSize: '1.05rem', lineHeight: 1.3 }}>
+                        <Typography variant="subtitle1" sx={{ fontWeight: 800, color: '#0F3C64', fontSize: { xs: '0.92rem', sm: '1.05rem' }, lineHeight: 1.3, wordBreak: 'break-word' }}>
                           {parsedQuery.raw ? (
                             <HighlightMatch text={section.title} tokens={parsedQuery.expandedTokens} />
                           ) : (
@@ -2532,7 +2543,7 @@ export default function UserGuide() {
                         </Typography>
                       </Box>
 
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', alignSelf: { xs: 'flex-start', md: 'center' } }}>
                         {section.directAppPath && (
                           <Tooltip title={section.directAppTooltip || `Перейти в экран ${section.directAppLabel || ''}`} arrow enterDelay={200}>
                             <Button
@@ -2554,6 +2565,7 @@ export default function UserGuide() {
                                 color: section.volume === 'clinical' ? '#047857' : '#0369A1',
                                 bgcolor: section.volume === 'clinical' ? '#F0FDF4' : '#F0F9FF',
                                 borderRadius: 1.5,
+                                flexShrink: 0,
                                 '&:hover': {
                                   bgcolor: section.volume === 'clinical' ? '#DCFCE7' : '#E0F2FE',
                                   borderColor: section.volume === 'clinical' ? '#059669' : '#0284C7',
@@ -2638,7 +2650,7 @@ export default function UserGuide() {
                 </Box>
               </AccordionSummary>
 
-              <AccordionDetails sx={{ p: 3, bgcolor: '#FFFFFF' }}>
+              <AccordionDetails sx={{ p: { xs: 1.5, sm: 2.5, md: 3 }, bgcolor: '#FFFFFF' }}>
                 {section.content}
               </AccordionDetails>
             </Accordion>
