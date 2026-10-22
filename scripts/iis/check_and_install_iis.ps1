@@ -1,4 +1,4 @@
-#requires -Version 5.1
+﻿#requires -Version 5.1
 <#
 .SYNOPSIS
     Проверка, установка и настройка Microsoft IIS, URL Rewrite и ARR для Центра Ортопедии Добрушкина.

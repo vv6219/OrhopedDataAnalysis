@@ -1,4 +1,4 @@
-#requires -Version 5.1
+﻿#requires -Version 5.1
 <#
 .SYNOPSIS
     Создание и публикация веб-сайта клиники в Microsoft IIS в режиме Reverse Proxy.
@@ -69,7 +69,7 @@ if (Test-Path "IIS:\Sites\$SiteName") {
     Set-ItemProperty "IIS:\Sites\$SiteName" -Name "applicationPool" -Value $poolName
 } else {
     Write-Host "Создание нового сайта $SiteName на порту $Port..." -ForegroundColor Yellow
-    New-Item "IIS:\Sites\$SiteName" -bindings @{protocol="http";bindingInformation="*:$Port:"} -physicalPath $siteRoot
+    New-Item "IIS:\Sites\$SiteName" -bindings @{protocol="http";bindingInformation="*:$($Port):"} -physicalPath $siteRoot
     Set-ItemProperty "IIS:\Sites\$SiteName" -Name "applicationPool" -Value $poolName
 }
 
