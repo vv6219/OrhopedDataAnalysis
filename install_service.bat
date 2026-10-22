@@ -31,8 +31,7 @@ set "NSSM_EXE="
 if exist "%~dp0tools\nssm\nssm.exe" (
     set "NSSM_EXE=%~dp0tools\nssm\nssm.exe"
 ) else (
-    where nssm >nul 2>&1
-    if %ERRORLEVEL% EQU 0 set "NSSM_EXE=nssm"
+    where nssm >nul 2>&1 && set "NSSM_EXE=nssm"
 )
 
 if defined NSSM_EXE (
