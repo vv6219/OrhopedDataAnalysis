@@ -6,10 +6,9 @@ import {
   Grid,
   TextField,
   Button,
+  ButtonBase,
   Chip,
   IconButton,
-  Tabs,
-  Tab,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -2420,55 +2419,15 @@ export default function OrthoTemplatesManager() {
                       Клинический гид
                     </Button>
                   </Box>
-                  <Tabs
-                    value={activeTab}
-                    onChange={(_, v) => setActiveTab(v)}
-                    variant="standard"
+                  <Box
+                    role="tablist"
+                    aria-label="Клинические разделы протокола"
                     sx={{
-                      minHeight: 40,
+                      display: 'flex',
+                      flexWrap: 'wrap',
                       width: '100%',
-                      '& .MuiTabs-indicator': {
-                        display: 'none'
-                      },
-                      '& .MuiTabs-scroller': {
-                        overflow: 'visible !important'
-                      },
-                      '& .MuiTabs-flexContainer': {
-                        display: 'flex',
-                        flexWrap: 'wrap',
-                        width: '100%',
-                        gap: 0.75,
-                        pb: 0.75
-                      },
-                      '& .MuiTab-root': {
-                        flex: '1 1 auto',
-                        minWidth: 'fit-content',
-                        maxWidth: 'none',
-                        minHeight: 38,
-                        py: 0.6,
-                        px: { xs: 1, sm: 1.25, md: 1.5 },
-                        textTransform: 'none',
-                        fontWeight: 700,
-                        fontSize: { xs: '0.73rem', sm: '0.75rem', xl: '0.78rem' },
-                        borderRadius: 1.5,
-                        border: '1px solid #E2E8F0',
-                        bgcolor: '#F8FAFC',
-                        color: '#475569',
-                        transition: 'all 0.15s ease-in-out',
-                        '&:hover': {
-                          color: '#0F3C64',
-                          bgcolor: '#F1F5F9',
-                          borderColor: '#CBD5E1'
-                        },
-                        '&.Mui-selected': {
-                          color: '#0284C7',
-                          bgcolor: '#F0F9FF',
-                          borderColor: '#38BDF8',
-                          borderWidth: '1.5px',
-                          fontWeight: 800,
-                          boxShadow: '0 1px 4px rgba(2, 132, 199, 0.12)'
-                        }
-                      }
+                      gap: 0.75,
+                      pb: 0.75
                     }}
                   >
                     {[
@@ -2542,68 +2501,96 @@ export default function OrthoTemplatesManager() {
                         icon: <PreviewIcon sx={{ fontSize: 16 }} />
                       }
                     ].map((tab) => (
-                      <Tab
+                      <Tooltip
                         key={tab.index}
-                        label={
-                          <Tooltip
-                            title={
-                              <Box sx={{ p: 0.75, maxWidth: 320 }}>
-                                <Typography sx={{ fontWeight: 800, fontSize: '0.8rem', color: '#FFFFFF', mb: 0.35, display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                                  {tab.fullTitle}
-                                </Typography>
-                                <Typography sx={{ fontSize: '0.72rem', color: '#E2E8F0', lineHeight: 1.45 }}>
-                                  {tab.description}
-                                </Typography>
-                              </Box>
+                        title={
+                          <Box sx={{ p: 0.75, maxWidth: 320 }}>
+                            <Typography sx={{ fontWeight: 800, fontSize: '0.8rem', color: '#FFFFFF', mb: 0.35, display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                              {tab.fullTitle}
+                            </Typography>
+                            <Typography sx={{ fontSize: '0.72rem', color: '#E2E8F0', lineHeight: 1.45 }}>
+                              {tab.description}
+                            </Typography>
+                          </Box>
+                        }
+                        arrow
+                        placement="bottom"
+                        enterDelay={150}
+                        leaveDelay={100}
+                      >
+                        <ButtonBase
+                          role="tab"
+                          aria-selected={activeTab === tab.index}
+                          onClick={() => setActiveTab(tab.index)}
+                          sx={{
+                            flex: '1 1 auto',
+                            minWidth: 'fit-content',
+                            minHeight: 38,
+                            py: 0.6,
+                            px: { xs: 1, sm: 1.25, md: 1.4 },
+                            borderRadius: 1.5,
+                            border: '1.5px solid',
+                            borderColor: activeTab === tab.index ? '#38BDF8' : '#E2E8F0',
+                            bgcolor: activeTab === tab.index ? '#F0F9FF' : '#F8FAFC',
+                            color: activeTab === tab.index ? '#0284C7' : '#475569',
+                            boxShadow: activeTab === tab.index ? '0 1px 4px rgba(2, 132, 199, 0.12)' : 'none',
+                            transition: 'all 0.15s ease-in-out',
+                            '&:hover': {
+                              color: activeTab === tab.index ? '#0284C7' : '#0F3C64',
+                              bgcolor: activeTab === tab.index ? '#E0F2FE' : '#F1F5F9',
+                              borderColor: activeTab === tab.index ? '#0284C7' : '#CBD5E1'
                             }
-                            arrow
-                            placement="bottom"
-                            enterDelay={150}
-                            leaveDelay={100}
+                          }}
+                        >
+                          <Box
+                            sx={{
+                              width: '100%',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              gap: 0.6,
+                              whiteSpace: 'nowrap'
+                            }}
                           >
+                            <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', flexShrink: 0 }}>
+                              {tab.icon}
+                            </Box>
                             <Box
+                              component="span"
                               sx={{
-                                width: '100%',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                gap: 0.6,
-                                whiteSpace: 'nowrap'
+                                whiteSpace: 'nowrap',
+                                fontWeight: activeTab === tab.index ? 800 : 700,
+                                fontSize: { xs: '0.73rem', sm: '0.75rem', xl: '0.78rem' }
                               }}
                             >
-                              <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', flexShrink: 0 }}>
-                                {tab.icon}
-                              </Box>
-                              <Box component="span" sx={{ whiteSpace: 'nowrap', fontWeight: activeTab === tab.index ? 800 : 700 }}>
-                                {tab.shortCaption}
-                              </Box>
-                              {tab.badgeCount !== undefined && (
-                                <Chip
-                                  label={tab.badgeCount}
-                                  size="small"
-                                  sx={{
-                                    height: 18,
-                                    minWidth: 18,
-                                    fontSize: '0.64rem',
-                                    fontWeight: 800,
-                                    px: 0.3,
-                                    flexShrink: 0,
-                                    bgcolor: activeTab === tab.index ? '#0284C7' : '#E2E8F0',
-                                    color: activeTab === tab.index ? '#FFFFFF' : '#475569',
-                                    transition: 'all 0.15s ease',
-                                    '& .MuiChip-label': {
-                                      px: 0.5,
-                                      overflow: 'visible'
-                                    }
-                                  }}
-                                />
-                              )}
+                              {tab.shortCaption}
                             </Box>
-                          </Tooltip>
-                        }
-                      />
+                            {tab.badgeCount !== undefined && (
+                              <Chip
+                                label={tab.badgeCount}
+                                size="small"
+                                sx={{
+                                  height: 18,
+                                  minWidth: 18,
+                                  fontSize: '0.64rem',
+                                  fontWeight: 800,
+                                  px: 0.3,
+                                  flexShrink: 0,
+                                  bgcolor: activeTab === tab.index ? '#0284C7' : '#E2E8F0',
+                                  color: activeTab === tab.index ? '#FFFFFF' : '#475569',
+                                  transition: 'all 0.15s ease',
+                                  '& .MuiChip-label': {
+                                    px: 0.5,
+                                    overflow: 'visible'
+                                  }
+                                }}
+                              />
+                            )}
+                          </Box>
+                        </ButtonBase>
+                      </Tooltip>
                     ))}
-                  </Tabs>
+                  </Box>
                 </Box>
 
                 {/* TAB 0: Complaints, Anamnesis & Objective */}
