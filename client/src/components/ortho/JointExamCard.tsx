@@ -42,6 +42,7 @@ export interface JointExamState {
   effusion: number; // 0, 1, 2, 3
   rom: RomValues;
   tests: Record<string, 'negative' | 'positive' | 'positive_medial' | 'positive_lateral' | string>;
+  palpationPoints?: string[];
   isNormPreset?: boolean;
 }
 

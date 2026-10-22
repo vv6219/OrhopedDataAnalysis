@@ -30,6 +30,7 @@ export interface FiscalZReportData {
     actualCash?: number;
     cashDifference?: number;
   };
+  receivedBy?: string;
   notes?: string;
 }
 
@@ -58,6 +59,7 @@ export const FiscalZReportPrintTemplate = React.forwardRef<HTMLDivElement, Fisca
       orgInn = '450107060083',
       orgAddress = 'г. Сочи, ул. Транспортная 65',
       totals,
+      receivedBy,
       notes
     } = data;
 
@@ -423,7 +425,7 @@ export const FiscalZReportPrintTemplate = React.forwardRef<HTMLDivElement, Fisca
             <Box sx={{ borderBottom: '1px solid #000000', mb: 0.5 }} />
             <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
               <Typography variant="caption" sx={{ color: '#64748B' }}>Подпись</Typography>
-              <Typography variant="caption" sx={{ fontWeight: 600 }}>/ Добрушкин А.М. /</Typography>
+              <Typography variant="caption" sx={{ fontWeight: 600 }}>/ {receivedBy || 'Главный бухгалтер'} /</Typography>
             </Box>
           </Box>
         </Box>

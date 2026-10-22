@@ -29,6 +29,7 @@ export interface ServicesBiReportData {
   }>;
   generatedDate: string;
   filterPeriod: string;
+  chiefDoctorName?: string;
 }
 
 export const ServicesBiReportTemplate = React.forwardRef<HTMLDivElement, { data: ServicesBiReportData | null }>(
@@ -167,7 +168,7 @@ export const ServicesBiReportTemplate = React.forwardRef<HTMLDivElement, { data:
           <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 4 }}>
             <Box>
               <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                Главный врач: ____________________ / Добрушкин А. М. /
+                Главный врач: ____________________ / {data.chiefDoctorName || 'Главный врач'} /
               </Typography>
             </Box>
             <Box>

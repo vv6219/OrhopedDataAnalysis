@@ -339,7 +339,7 @@ export default function DoctorQueueHub({
   const activeDoctorName = useMemo(() => {
     if (selectedDoctorId === 'all') return 'Все врачи клиники (Сводная очередь)';
     const d = doctorsList.find((doc) => String(doc.id) === String(selectedDoctorId));
-    return d ? d.full_name : 'Добрушкин Александр Моисеевич';
+    return d ? d.full_name : (doctorsList[0]?.full_name || 'Врач клиники');
   }, [selectedDoctorId, doctorsList]);
 
   // Рендер отдельной карточки приема

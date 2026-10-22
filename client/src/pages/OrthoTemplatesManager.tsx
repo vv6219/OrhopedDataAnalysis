@@ -8050,7 +8050,7 @@ export default function OrthoTemplatesManager() {
                             Врач травматолог-ортопед:
                           </Typography>
                           <Typography sx={{ fontSize: '0.9rem', fontWeight: 800, color: '#0F172A' }}>
-                            {currentTemplate.author_doctor_name || 'Добрушкин А.М.'}
+                            {currentTemplate.author_doctor_name || 'Врач травматолог-ортопед'}
                           </Typography>
                         </Box>
 

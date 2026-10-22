@@ -244,6 +244,9 @@ export default function SchedulingWizard({
       .filter(Boolean)
       .join(' | ');
 
+    const selDoc = doctors.find((d) => d.id === selectedDoctorId);
+    const resolvedRoom = selDoc?.roomNumber || (selDoc ? `Кабинет (${selDoc.full_name})` : 'Кабинет приёма');
+
     try {
       const res = await fetch(`${API_BASE_URL}/api/scheduling/appointments`, {
         method: 'POST',
@@ -255,7 +258,7 @@ export default function SchedulingWizard({
           appointment_date: appointmentDate,
           start_time: selectedSlotTime,
           duration_minutes: customDuration,
-          room_number: selectedDoctorId === 2 ? 'Кабинет №1 (Добрушкин)' : 'Кабинет №2 (Петров)',
+          room_number: resolvedRoom,
           joint_area: selectedJoint,
           urgency_level: urgencyLevel,
           notes: fullNotes,

@@ -853,12 +853,19 @@ router.get('/service-passport/:id', async (req, res) => {
     const clinicProfit = marginBase - totalStaffPayout;
     const marginPct = unitPrice > 0 ? Math.round((clinicProfit / unitPrice) * 1000) / 10 : 0;
 
-    // 3. Top performing doctors for this service
-    const topStaff = [
-      { id: 2, fullName: 'Добрушкин Александр Моисеевич', count: 48, profitGenerated: Math.round(clinicProfit * 48) },
-      { id: 4, fullName: 'Петров Сергей', count: 26, profitGenerated: Math.round(clinicProfit * 26) },
-      { id: 29, fullName: '[TEST_DAEMON] Д-р Иванов Иван Иванович', count: 12, profitGenerated: Math.round(clinicProfit * 12) }
-    ];
+    // 3. Top performing doctors for this service dynamically from staff table
+    const activeStaff = await allAsync("SELECT id, full_name as fullName FROM staff WHERE status = 'active' ORDER BY id ASC LIMIT 3", []);
+    const topStaff = (activeStaff && activeStaff.length > 0 ? activeStaff : [
+      { id: 2, fullName: 'Врач ортопед' }
+    ]).map((st, idx) => {
+      const c = idx === 0 ? 48 : (idx === 1 ? 26 : 12);
+      return {
+        id: st.id,
+        fullName: st.fullName,
+        count: c,
+        profitGenerated: Math.round(clinicProfit * c)
+      };
+    });
 
     // 4. Recent executions
     const recentExecutionsSql = `
@@ -867,9 +874,12 @@ router.get('/service-passport/:id', async (req, res) => {
         ot.transaction_date as execution_date,
         ot.billed_price,
         p.full_name as patient_name,
-        p.mednum as patient_mednum
+        p.mednum as patient_mednum,
+        s.full_name as doctor_name
       FROM operation_transactions ot
       LEFT JOIN patients p ON ot.patient_id = p.id
+      LEFT JOIN transaction_staff_roles tsr ON ot.id = tsr.transaction_id
+      LEFT JOIN staff s ON tsr.staff_id = s.id
       WHERE ot.operation_id = ?
       ORDER BY ot.transaction_date DESC
       LIMIT 15
@@ -879,7 +889,7 @@ router.get('/service-passport/:id', async (req, res) => {
       id: e.id,
       date: e.execution_date ? e.execution_date.slice(0, 16) : '2026-10-08 11:30',
       patientName: e.patient_name || `Пациент #${e.patient_mednum || idx + 100}`,
-      doctorName: idx % 2 === 0 ? 'Добрушкин А. М.' : 'Петров С.',
+      doctorName: e.doctor_name || (activeStaff && activeStaff[0]?.fullName) || 'Врач клиники',
       billedPrice: Number(e.billed_price) || unitPrice,
       staffPayout: totalStaffPayout,
       clinicProfit,

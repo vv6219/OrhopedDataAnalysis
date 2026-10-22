@@ -239,9 +239,9 @@ router.get('/doctors', (req, res) => {
       return res.status(500).json({ success: false, error: err.message });
     }
     // Enrich with default clinic rooms
-    const doctors = rows.map((doc) => ({
+    const doctors = rows.map((doc, idx) => ({
       ...doc,
-      roomNumber: doc.id === 2 ? 'Кабинет №1 (Добрушкин)' : 'Кабинет №2 (Петров)'
+      roomNumber: doc.room_number || `Кабинет №${idx + 1} (${doc.full_name})`
     }));
     res.json({ success: true, doctors });
   });
@@ -478,7 +478,7 @@ router.post('/appointments', (req, res) => {
   }
 
   const end_time = calculateEndTime(start_time, duration_minutes);
-  const targetRoom = room_number || (Number(doctor_id) === 2 ? 'Кабинет №1 (Добрушкин)' : 'Кабинет №2 (Петров)');
+  const targetRoom = room_number || 'Кабинет приёма';
 
   // Check collision for the doctor
   const collisionQuery = `

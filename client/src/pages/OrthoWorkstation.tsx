@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Box,
@@ -36,8 +36,10 @@ import {
   Switch,
   FormControlLabel,
   Badge,
-  Stack
+  Stack,
+  LinearProgress
 } from '@mui/material';
+import UndoIcon from '@mui/icons-material/Undo';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import MedicalServicesIcon from '@mui/icons-material/MedicalServices';
 import SaveIcon from '@mui/icons-material/Save';
@@ -48,9 +50,13 @@ import PhotoCameraIcon from '@mui/icons-material/PhotoCamera';
 import HistoryIcon from '@mui/icons-material/History';
 import ArticleIcon from '@mui/icons-material/Article';
 import DescriptionIcon from '@mui/icons-material/Description';
+import EditNoteIcon from '@mui/icons-material/EditNote';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
+import ErrorIcon from '@mui/icons-material/Error';
+import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import PersonSearchIcon from '@mui/icons-material/PersonSearch';
 import PersonIcon from '@mui/icons-material/Person';
@@ -84,9 +90,12 @@ import OrthoProtocolPreview from '../components/ortho/OrthoProtocolPreview';
 import IssueReferralModal from '../components/ortho/IssueReferralModal';
 import DoctorQueueHub, { type QueueItem } from '../components/ortho/DoctorQueueHub';
 import FullPatientSearchModal from '../components/ortho/FullPatientSearchModal';
+import ClinicalGuidanceModal, { type ClinicalGuideSection } from '../components/ortho/ClinicalGuidanceModal';
+import { evaluateProtocolIntegrity, type ProtocolIntegrityReport } from '../utils/protocolIntegrityChecker';
 import type { OrthoProtocolData, OrthoPrescriptionItem } from '../components/reports/OrthoProtocolPrintTemplate';
 import { parseProtocolContent } from '../utils/protocolXmlParser';
 import { getWeightBearingBadge } from './OrthoTemplatesManager';
+import { useAuth } from '../context/AuthContext';
 
 export interface MasterCluster {
   id: string;
@@ -264,6 +273,7 @@ export const createLfkPrescriptionItem = (phaseNum: number, lfkList: any[] = [])
 export default function OrthoWorkstation() {
   const { appointmentId } = useParams<{ appointmentId?: string }>();
   const [searchParams] = useSearchParams();
+  const { currentUser } = useAuth();
   const queryProtocolId = searchParams.get('protocolId');
   const queryPatientId = searchParams.get('patientId');
   const queryAppointmentId = searchParams.get('appointmentId');
@@ -327,48 +337,56 @@ export default function OrthoWorkstation() {
   });
   const [templateLfkData, setTemplateLfkData] = useState<any[]>([]);
 
-  // 8 Clinical Domains Accordion Expanded state (Active/Chosen/Data present = Expanded, physiological norm/unselected = Collapsed)
+  // 2-Side Synchronization, Highlighting & Autosave Draft State
+  const [highlightedPartition, setHighlightedPartition] = useState<number | null>(null);
+  const highlightTimerRef = useRef<any>(null);
+  const autosaveTimerRef = useRef<any>(null);
+  const [autosaveStatus, setAutosaveStatus] = useState<'saved' | 'saving' | 'dirty' | null>(null);
+  const [lastAutosavedAt, setLastAutosavedAt] = useState<string | null>(null);
+  const [returnToDraftModalOpen, setReturnToDraftModalOpen] = useState(false);
+
+  // 10 Clinical Domains Accordion Expanded state (1-to-1 sync with protocol partitions)
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
     domain1_complaints: true,
+    domain2_ortho_status: true,
+    domain3_rom: true,
+    domain4_tests: true,
+    domain5_diagnostics: true,
+    domain6_diagnosis: true,
+    domain7_manipulations: true,
+    domain8_physiotherapy: true,
+    domain9_orthotics: true,
+    domain10_lfk: true,
+    // Legacy aliases
     domain2_rom: true,
     domain3_tests: true,
     domain4_diagnostics: true,
     domain5_manipulations: true,
     domain6_physiotherapy: true,
     domain7_orthotics: true,
-    domain8_lfk: true,
-    complaints: true,
-    anamnesis_morbi: true,
-    anamnesis_vitae: true,
-    objective_status: true,
-    status_localis: true,
-    functional_tests: true,
-    special_studies: true,
-    diagnosis: true,
-    performed_manipulations: true,
-    recommendations: true
+    domain8_lfk: true
   });
 
-  // 8 Clinical Domains Active / Selective print filter state
+  // 10 Clinical Domains Active / Selective print filter state
   const [activeSections, setActiveSections] = useState<Record<string, boolean>>({
     domain1_complaints: true,
+    domain2_ortho_status: true,
+    domain3_rom: true,
+    domain4_tests: true,
+    domain5_diagnostics: true,
+    domain6_diagnosis: true,
+    domain7_manipulations: true,
+    domain8_physiotherapy: true,
+    domain9_orthotics: true,
+    domain10_lfk: true,
+    // Legacy aliases
     domain2_rom: true,
     domain3_tests: true,
     domain4_diagnostics: true,
     domain5_manipulations: true,
     domain6_physiotherapy: true,
     domain7_orthotics: true,
-    domain8_lfk: true,
-    complaints: true,
-    anamnesis_morbi: true,
-    anamnesis_vitae: true,
-    objective_status: true,
-    status_localis: true,
-    functional_tests: true,
-    special_studies: true,
-    diagnosis: true,
-    performed_manipulations: true,
-    recommendations: true
+    domain8_lfk: true
   });
 
   const handleToggleExpand = (secKey: string) => {
@@ -378,51 +396,49 @@ export default function OrthoWorkstation() {
   const handleExpandAll = () => {
     setExpandedSections({
       domain1_complaints: true,
+      domain2_ortho_status: true,
+      domain3_rom: true,
+      domain4_tests: true,
+      domain5_diagnostics: true,
+      domain6_diagnosis: true,
+      domain7_manipulations: true,
+      domain8_physiotherapy: true,
+      domain9_orthotics: true,
+      domain10_lfk: true,
       domain2_rom: true,
       domain3_tests: true,
       domain4_diagnostics: true,
       domain5_manipulations: true,
       domain6_physiotherapy: true,
       domain7_orthotics: true,
-      domain8_lfk: true,
-      complaints: true,
-      anamnesis_morbi: true,
-      anamnesis_vitae: true,
-      objective_status: true,
-      status_localis: true,
-      functional_tests: true,
-      special_studies: true,
-      diagnosis: true,
-      performed_manipulations: true,
-      recommendations: true
+      domain8_lfk: true
     });
   };
 
   const handleCollapseAll = () => {
     setExpandedSections({
       domain1_complaints: false,
+      domain2_ortho_status: false,
+      domain3_rom: false,
+      domain4_tests: false,
+      domain5_diagnostics: false,
+      domain6_diagnosis: false,
+      domain7_manipulations: false,
+      domain8_physiotherapy: false,
+      domain9_orthotics: false,
+      domain10_lfk: false,
       domain2_rom: false,
       domain3_tests: false,
       domain4_diagnostics: false,
       domain5_manipulations: false,
       domain6_physiotherapy: false,
       domain7_orthotics: false,
-      domain8_lfk: false,
-      complaints: false,
-      anamnesis_morbi: false,
-      anamnesis_vitae: false,
-      objective_status: false,
-      status_localis: false,
-      functional_tests: false,
-      special_studies: false,
-      diagnosis: false,
-      performed_manipulations: false,
-      recommendations: false
+      domain8_lfk: false
     });
   };
 
   const handleSmartFocus = () => {
-    const hasDomain1 = Boolean(complaints.trim() || anamnesis.trim() || clinicalDiagnosis.trim() || vasScore > 0);
+    const hasDomain1 = Boolean(complaints.trim() || anamnesis.trim() || vasScore > 0 || objectiveStatus.trim());
     const romDeficit = currentJointState.rom?.extension_deficit || 0;
     const effusion = currentJointState.effusion || 0;
     const isRomPathology = romDeficit > 0 || effusion > 0 || (currentJointState.rom?.flexion_active !== undefined && currentJointState.rom.flexion_active < 130);
@@ -434,6 +450,7 @@ export default function OrthoWorkstation() {
       specialStudies.trim() ||
       prescriptions.some((p) => p.category === 'diagnostic' || p.category === 'Диагностика')
     );
+    const hasDiagnosis = Boolean(selectedMkb || clinicalDiagnosis.trim());
     const hasManipulations = Boolean(
       performedManipulations.trim() ||
       prescriptions.some((p) => p.category === 'manipulation')
@@ -451,50 +468,80 @@ export default function OrthoWorkstation() {
 
     setExpandedSections({
       domain1_complaints: hasDomain1,
+      domain2_ortho_status: true,
+      domain3_rom: isRomPathology,
+      domain4_tests: hasPositiveTest,
+      domain5_diagnostics: hasDiagnostics,
+      domain6_diagnosis: hasDiagnosis,
+      domain7_manipulations: hasManipulations,
+      domain8_physiotherapy: hasPhysio,
+      domain9_orthotics: hasOrthotics,
+      domain10_lfk: hasLfk,
       domain2_rom: isRomPathology,
       domain3_tests: hasPositiveTest,
       domain4_diagnostics: hasDiagnostics,
       domain5_manipulations: hasManipulations,
       domain6_physiotherapy: hasPhysio,
       domain7_orthotics: hasOrthotics,
-      domain8_lfk: hasLfk,
-      complaints: hasDomain1,
-      anamnesis_morbi: hasDomain1,
-      anamnesis_vitae: hasDomain1,
-      objective_status: hasDomain1,
-      status_localis: hasDomain1,
-      functional_tests: isRomPathology || hasPositiveTest,
-      special_studies: hasDiagnostics,
-      diagnosis: hasDomain1,
-      performed_manipulations: hasManipulations,
-      recommendations: hasLfk || hasPhysio || hasOrthotics
+      domain8_lfk: hasLfk
     });
     setToastMessage('Режим Smart Focus: развернуты только активные разделы с данными');
   };
 
   const handleToggleActive = (secKey: string, active: boolean) => {
-    setActiveSections((prev) => {
-      const updated = { ...prev, [secKey]: active };
-      if (secKey === 'domain1_complaints') {
-        updated.complaints = active;
-        updated.anamnesis_morbi = active;
-        updated.anamnesis_vitae = active;
-        updated.objective_status = active;
-        updated.status_localis = active;
-        updated.diagnosis = active;
-      } else if (secKey === 'domain2_rom') {
-        updated.functional_tests = active || Boolean(prev.domain3_tests);
-      } else if (secKey === 'domain3_tests') {
-        updated.functional_tests = active || Boolean(prev.domain2_rom);
-      } else if (secKey === 'domain4_diagnostics') {
-        updated.special_studies = active;
-      } else if (secKey === 'domain5_manipulations') {
-        updated.performed_manipulations = active;
-      } else if (secKey === 'domain6_physiotherapy' || secKey === 'domain7_orthotics' || secKey === 'domain8_lfk') {
-        updated.recommendations = active || Boolean(prev.domain6_physiotherapy) || Boolean(prev.domain7_orthotics) || Boolean(prev.domain8_lfk);
+    setActiveSections((prev) => ({
+      ...prev,
+      [secKey]: active
+    }));
+  };
+
+  // Primary 2-Side Synchronization: Scrolls Right Protocol Panel to Partition N & Highlights it, Logs Action and Triggers Autosave
+  const syncShablonAction = (partitionNum: number, actionName: string, actionDetails?: any) => {
+    // 1. Switch right tab to Protocol & Export (Tab 0) so the partition is visible
+    setRightPanelTab(0);
+
+    // 2. Smoothly scroll target partition into view
+    setTimeout(() => {
+      const targetEl = document.getElementById(`protocol-partition-${partitionNum}`);
+      if (targetEl) {
+        targetEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
       }
-      return updated;
-    });
+    }, 60);
+
+    // 3. Highlight target partition with animated glowing border / badge
+    setHighlightedPartition(partitionNum);
+    if (highlightTimerRef.current) {
+      clearTimeout(highlightTimerRef.current);
+    }
+    highlightTimerRef.current = setTimeout(() => {
+      setHighlightedPartition(null);
+    }, 1800);
+
+    // 4. Log action with Serilog to backend
+    fetch(`${API_BASE_URL}/api/ortho/log-action`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        actionName,
+        partition: partitionNum,
+        protocolId,
+        appointmentId: contextData?.appointment?.id,
+        patientId: contextData?.patient?.id,
+        doctorId: contextData?.appointment?.doctor_id || 1,
+        details: actionDetails
+      })
+    }).catch(() => {});
+
+    // 5. Autosave draft (debounced 1200ms) if protocol is in draft mode
+    if (!isSigned && contextData?.patient?.id) {
+      setAutosaveStatus('dirty');
+      if (autosaveTimerRef.current) {
+        clearTimeout(autosaveTimerRef.current);
+      }
+      autosaveTimerRef.current = setTimeout(() => {
+        handleSaveProtocol('draft', true);
+      }, 1200);
+    }
   };
 
   // Selected joint on Homunculus & Exam states per joint
@@ -547,6 +594,116 @@ export default function OrthoWorkstation() {
 
   // Referral Issuance Modal
   const [issueReferralModalOpen, setIssueReferralModalOpen] = useState(false);
+
+  // Clinical Guidance Modal State (Deep-linking per partition domain from DB)
+  const [guidanceModalOpen, setGuidanceModalOpen] = useState(false);
+  const [guidanceSection, setGuidanceSection] = useState<ClinicalGuideSection>('templates');
+
+  const handleOpenGuidance = (sec: ClinicalGuideSection) => {
+    setGuidanceSection(sec);
+    setGuidanceModalOpen(true);
+  };
+
+  // Integrity Details Drawer / Dialog
+  const [integrityDrawerOpen, setIntegrityDrawerOpen] = useState(false);
+
+  // Bidirectional 2-Side Scroll Synchronization
+  const isSyncScrollingRef = useRef(false);
+  const syncScrollTimeoutRef = useRef<any>(null);
+  const lastScrolledPartitionRef = useRef<number>(1);
+
+  const PARTITION_MAP = useMemo(() => [
+    { num: 1, leftId: 'domain1_complaints', rightId: 'protocol-partition-1', section: 'templates' as ClinicalGuideSection },
+    { num: 2, leftId: 'domain2_ortho_status', rightId: 'protocol-partition-2', section: 'rom' as ClinicalGuideSection },
+    { num: 3, leftId: 'domain3_rom', rightId: 'protocol-partition-3', section: 'rom' as ClinicalGuideSection },
+    { num: 4, leftId: 'domain4_tests', rightId: 'protocol-partition-4', section: 'tests' as ClinicalGuideSection },
+    { num: 5, leftId: 'domain5_diagnostics', rightId: 'protocol-partition-5', section: 'diagnostics' as ClinicalGuideSection },
+    { num: 6, leftId: 'domain6_diagnosis', rightId: 'protocol-partition-6', section: 'templates' as ClinicalGuideSection },
+    { num: 7, leftId: 'domain7_manipulations', rightId: 'protocol-partition-7', section: 'manipulations' as ClinicalGuideSection },
+    { num: 8, leftId: 'domain8_physiotherapy', rightId: 'protocol-partition-8', section: 'physiotherapy' as ClinicalGuideSection },
+    { num: 9, leftId: 'domain9_orthotics', rightId: 'protocol-partition-9', section: 'orthotics' as ClinicalGuideSection },
+    { num: 10, leftId: 'domain10_lfk', rightId: 'protocol-partition-10', section: 'lfk' as ClinicalGuideSection }
+  ], []);
+
+  // Synchronize Right Protocol when Left Shablon is scrolled
+  const handleLeftScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    if (isSyncScrollingRef.current) return;
+    if (rightPanelTab !== 0) return;
+
+    const container = e.currentTarget;
+    const containerTop = container.getBoundingClientRect().top;
+
+    let closestPartition = 1;
+    let minDistance = Infinity;
+
+    for (const item of PARTITION_MAP) {
+      const el = document.getElementById(item.leftId);
+      if (el) {
+        const rect = el.getBoundingClientRect();
+        const dist = Math.abs(rect.top - containerTop);
+        if (dist < minDistance) {
+          minDistance = dist;
+          closestPartition = item.num;
+        }
+      }
+    }
+
+    if (closestPartition !== lastScrolledPartitionRef.current) {
+      lastScrolledPartitionRef.current = closestPartition;
+      isSyncScrollingRef.current = true;
+      if (syncScrollTimeoutRef.current) clearTimeout(syncScrollTimeoutRef.current);
+
+      const targetEl = document.getElementById(`protocol-partition-${closestPartition}`);
+      if (targetEl) {
+        targetEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+
+      syncScrollTimeoutRef.current = setTimeout(() => {
+        isSyncScrollingRef.current = false;
+      }, 450);
+    }
+  };
+
+  // Synchronize Left Shablon when Right Protocol is scrolled
+  const handleRightScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    if (isSyncScrollingRef.current) return;
+
+    const container = e.currentTarget;
+    const containerTop = container.getBoundingClientRect().top;
+
+    let closestPartition = 1;
+    let minDistance = Infinity;
+
+    for (const item of PARTITION_MAP) {
+      const el = document.getElementById(item.rightId);
+      if (el) {
+        const rect = el.getBoundingClientRect();
+        const dist = Math.abs(rect.top - containerTop);
+        if (dist < minDistance) {
+          minDistance = dist;
+          closestPartition = item.num;
+        }
+      }
+    }
+
+    if (closestPartition !== lastScrolledPartitionRef.current) {
+      lastScrolledPartitionRef.current = closestPartition;
+      isSyncScrollingRef.current = true;
+      if (syncScrollTimeoutRef.current) clearTimeout(syncScrollTimeoutRef.current);
+
+      const targetLeftId = PARTITION_MAP.find(p => p.num === closestPartition)?.leftId;
+      if (targetLeftId) {
+        const targetEl = document.getElementById(targetLeftId);
+        if (targetEl) {
+          targetEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+      }
+
+      syncScrollTimeoutRef.current = setTimeout(() => {
+        isSyncScrollingRef.current = false;
+      }, 450);
+    }
+  };
 
   // Fast Patient Autocomplete search
   const handleSearchPatients = async (query: string) => {
@@ -650,14 +807,16 @@ export default function OrthoWorkstation() {
 
   const printSectionsCount = useMemo(() => {
     let count = 0;
-    if (activeSections.domain1_complaints && (complaints.trim() || anamnesis.trim() || clinicalDiagnosis.trim() || selectedMkb)) count++;
-    if (activeSections.domain2_rom) count++;
-    if (activeSections.domain3_tests) count++;
-    if (activeSections.domain4_diagnostics && (specialStudies.trim() || activeTemplateDiagnostics.length > 0 || prescriptions.some(p => p.category === 'diagnostic'))) count++;
-    if (activeSections.domain5_manipulations && (performedManipulations.trim() || prescriptions.some(p => p.category === 'manipulation'))) count++;
-    if (activeSections.domain6_physiotherapy && prescriptions.some(p => p.category === 'physio')) count++;
-    if (activeSections.domain7_orthotics && (prescriptions.some(p => p.category === 'orthotics') || weightBearingMode !== 'FWB')) count++;
-    if (activeSections.domain8_lfk && (recommendations.trim() || prescriptions.some(p => p.category === 'lfk'))) count++;
+    if (activeSections.domain1_complaints && (complaints.trim() || anamnesis.trim() || vasScore > 0 || objectiveStatus.trim())) count++;
+    if (activeSections.domain2_ortho_status) count++;
+    if (activeSections.domain3_rom || activeSections.domain2_rom) count++;
+    if (activeSections.domain4_tests || activeSections.domain3_tests) count++;
+    if ((activeSections.domain5_diagnostics || activeSections.domain4_diagnostics) && (specialStudies.trim() || activeTemplateDiagnostics.length > 0 || prescriptions.some(p => p.category === 'diagnostic'))) count++;
+    if (activeSections.domain6_diagnosis && (clinicalDiagnosis.trim() || selectedMkb)) count++;
+    if ((activeSections.domain7_manipulations || activeSections.domain5_manipulations) && (performedManipulations.trim() || prescriptions.some(p => p.category === 'manipulation'))) count++;
+    if ((activeSections.domain8_physiotherapy || activeSections.domain6_physiotherapy) && prescriptions.some(p => p.category === 'physio')) count++;
+    if ((activeSections.domain9_orthotics || activeSections.domain7_orthotics) && (prescriptions.some(p => p.category === 'orthotics') || weightBearingMode !== 'FWB')) count++;
+    if ((activeSections.domain10_lfk || activeSections.domain8_lfk) && (recommendations.trim() || prescriptions.some(p => p.category === 'lfk'))) count++;
     return count;
   }, [
     activeSections,
@@ -1082,7 +1241,7 @@ export default function OrthoWorkstation() {
     setCustomTplCategory('Кастомизированный шаблон');
     setCustomTplTags('custom, авторский');
 
-    const doctorName = contextData?.doctor?.full_name || contextData?.appointment?.doctor_name || 'Добрушкин Александр Моисеевич';
+    const doctorName = contextData?.doctor?.full_name || contextData?.appointment?.doctor_name || currentUser?.fullName || '';
     setCustomTplDoctorName(doctorName);
 
     setSaveCustomDialogOpen(true);
@@ -1329,6 +1488,7 @@ export default function OrthoWorkstation() {
 
     updateLfkRecommendations(newPhases, templateLfkData);
     const roman = phaseNum === 1 ? 'I' : phaseNum === 2 ? 'II' : 'III';
+    syncShablonAction(10, checked ? `Фаза ${roman} ЛФК включена в назначения` : `Фаза ${roman} ЛФК исключена из назначений`, { phaseNum, checked });
     setToastMessage(checked ? `Фаза ${roman} ЛФК включена в «Назначенные»` : `Фаза ${roman} ЛФК исключена из «Назначенных»`);
   };
 
@@ -1666,6 +1826,7 @@ export default function OrthoWorkstation() {
         }
       ]);
     }
+    syncShablonAction(10, `Добавлена услуга: ${pendingService.name}`, { serviceId: pendingService.id, price: pendingService.price });
     setPendingService(null);
   };
 
@@ -1692,7 +1853,9 @@ export default function OrthoWorkstation() {
     return {
       protocolNumber: protocolId || `DRAFT-${appt.id || 'NEW'}`,
       visitDate: appt.appointment_date || new Date().toISOString(),
-      doctorName: appt.doctor_name || contextData?.doctor?.full_name || 'Добрушкин Александр Моисеевич',
+      doctorName: appt.doctor_name || contextData?.doctor?.full_name || currentUser?.fullName || '',
+      doctorRole: contextData?.doctor?.role || '',
+      doctorSpecialization: contextData?.doctor?.specialization || '',
       patient: {
         id: pt.id,
         fullName: pt.full_name || 'Пациент не выбран',
@@ -1717,6 +1880,30 @@ export default function OrthoWorkstation() {
       clinicalDiagnosis,
       recommendations,
       prescriptions,
+      systemicStatus: objectiveStatus ? {
+        bloodPressure: '120/80',
+        heartRate: 72,
+        spo2: 98,
+        allergies: anamnesisVitae || 'Аллергоанамнез не отягощен'
+      } : undefined,
+      diagnosticsData: specialStudies || (activeTemplateDiagnostics.length > 0 ? activeTemplateDiagnostics.map(d => `${d.diagnostic_name || d.name || 'Исследование'} (${d.urgency || 'планово'})`).join('; ') : ''),
+      performedProcedures: performedManipulations ? [{ procedureName: performedManipulations, targetJoint: selectedJoint }] : [],
+      physioProtocol: prescriptions.filter(p => p.category === 'physio').map(p => ({
+        modality: p.name || (p as any).title,
+        targetZone: selectedJoint,
+        sessionsCount: 7,
+        parameters: 'EBM протокол'
+      })),
+      orthoticsPrescriptions: [
+        ...(weightBearingMode !== 'FWB' ? [{
+          deviceType: `Режим нагрузки: ${weightBearingMode} (${getWeightBearingBadge(weightBearingMode).label})`,
+          wearRegime: 'при ходьбе'
+        }] : []),
+        ...prescriptions.filter(p => p.category === 'orthotics').map(p => ({
+          deviceType: p.name || (p as any).title,
+          wearRegime: 'постоянно при нагрузке'
+        }))
+      ],
       isSigned,
       signedAt,
       signatureHash
@@ -1739,19 +1926,32 @@ export default function OrthoWorkstation() {
     clinicalDiagnosis,
     recommendations,
     prescriptions,
+    selectedJoint,
+    weightBearingMode,
+    activeTemplateDiagnostics,
     isSigned,
     signedAt,
     signatureHash
   ]);
 
-  // Save Protocol (Draft or Signed)
-  const handleSaveProtocol = async (status: 'draft' | 'signed') => {
+  // Online Protocol Integrity Evaluation (Real-time check on every update)
+  const integrityReport: ProtocolIntegrityReport = useMemo(() => {
+    return evaluateProtocolIntegrity(assembledProtocolData);
+  }, [assembledProtocolData]);
+
+  // Save Protocol (Draft or Signed) with optional silent autosave
+  const handleSaveProtocol = async (status: 'draft' | 'signed', isAutosave = false) => {
     if (!contextData?.patient?.id) {
-      setToastMessage('Ошибка: пациент не определен');
-      return;
+      if (!isAutosave) setToastMessage('Ошибка: пациент не определен');
+      return null;
     }
 
-    setSaving(true);
+    if (isAutosave) {
+      setAutosaveStatus('saving');
+    } else {
+      setSaving(true);
+    }
+
     try {
       const payload = {
         protocolId,
@@ -1818,14 +2018,66 @@ export default function OrthoWorkstation() {
         setIsSigned(true);
         setSignedAt(new Date().toLocaleString('ru-RU'));
         setSignatureHash(data.signatureHash);
+        setAutosaveStatus(null);
+        setToastMessage('✔ Протокол осмотра успешно подписан ЭЦП');
+      } else {
+        const timeStr = new Date().toLocaleTimeString('ru-RU');
+        setLastAutosavedAt(timeStr);
+        setAutosaveStatus('saved');
+        if (!isAutosave) {
+          setToastMessage('Черновик протокола сохранён');
+        }
       }
 
-      setToastMessage(status === 'signed' ? '✔ Протокол осмотра успешно подписан ЭЦП' : 'Черновик протокола сохранён');
       return data.protocolId;
     } catch (err: any) {
       console.error('Error saving protocol:', err);
-      setToastMessage(`Ошибка сохранения: ${err.message}`);
+      if (!isAutosave) {
+        setToastMessage(`Ошибка сохранения: ${err.message}`);
+      }
+      setAutosaveStatus('dirty');
       return null;
+    } finally {
+      if (!isAutosave) {
+        setSaving(false);
+      }
+    }
+  };
+
+  // Revoke E-Signature and Return Protocol to Draft
+  const handleConfirmReturnToDraft = async () => {
+    if (!protocolId) {
+      setToastMessage('Ошибка: идентификатор протокола отсутствует');
+      return;
+    }
+    setSaving(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/ortho/return-to-draft`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          protocolId,
+          appointmentId: contextData?.appointment?.id,
+          doctorId: contextData?.appointment?.doctor_id || 1,
+          reason: 'Врач вернул протокол в черновик для внесения правок'
+        })
+      });
+      const data = await res.json();
+      if (!data.success) {
+        throw new Error(data.error || 'Ошибка отзыва подписи');
+      }
+      setIsSigned(false);
+      setSignedAt(undefined);
+      setSignatureHash(undefined);
+      setReturnToDraftModalOpen(false);
+      setToastMessage('✔ Протокол возвращен в статус Черновик. ЭЦП отозвана, редактирование разблокировано.');
+      // Immediate draft autosave to persist new draft state
+      setTimeout(() => {
+        handleSaveProtocol('draft', true);
+      }, 500);
+    } catch (err: any) {
+      console.error('Return to draft error:', err);
+      setToastMessage(`Ошибка возврата в черновик: ${err.message}`);
     } finally {
       setSaving(false);
     }
@@ -2010,6 +2262,28 @@ export default function OrthoWorkstation() {
           <Button
             variant="outlined"
             size="small"
+            startIcon={<DescriptionIcon sx={{ fontSize: 16 }} />}
+            onClick={() => navigate('/protocols-registry')}
+            sx={{
+              fontWeight: 700,
+              fontSize: '0.8rem',
+              borderColor: '#CBD5E1',
+              color: '#0F3C64',
+              textTransform: 'none',
+              borderRadius: 2,
+              py: 0.6,
+              px: 1.4,
+              whiteSpace: 'nowrap',
+              boxShadow: 'none',
+              '&:hover': { borderColor: '#0284C7', bgcolor: '#F0F9FF' }
+            }}
+          >
+            ← В Реестр протоколов
+          </Button>
+
+          <Button
+            variant="outlined"
+            size="small"
             startIcon={<PersonSearchIcon sx={{ fontSize: 16 }} />}
             onClick={() => setFullPatientSearchOpen(true)}
             sx={{
@@ -2118,15 +2392,103 @@ export default function OrthoWorkstation() {
                 </Button>
               )}
 
-              {isSigned && (
+              {/* Live Autosave Draft Status */}
+              {autosaveStatus === 'saving' && (
                 <Chip
-                  icon={<CheckCircleIcon sx={{ fontSize: 16 }} />}
-                  label="Подписан ЭЦП"
+                  icon={<CircularProgress size={12} sx={{ color: '#0284C7' }} />}
+                  label="Автосохранение черновика..."
                   size="small"
-                  color="success"
-                  sx={{ fontWeight: 700 }}
+                  sx={{ fontWeight: 700, fontSize: '0.74rem', bgcolor: '#F0F9FF', color: '#0284C7', border: '1px solid #BAE6FD' }}
                 />
               )}
+              {autosaveStatus === 'saved' && (
+                <Chip
+                  icon={<CheckCircleIcon sx={{ fontSize: '14px !important', color: '#16A34A' }} />}
+                  label={`Черновик сохранен ${lastAutosavedAt || ''}`}
+                  size="small"
+                  sx={{ fontWeight: 700, fontSize: '0.74rem', bgcolor: '#F0FDF4', color: '#15803D', border: '1px solid #BBF7D0' }}
+                />
+              )}
+              {autosaveStatus === 'dirty' && (
+                <Chip
+                  label="● Изменения..."
+                  size="small"
+                  sx={{ fontWeight: 700, fontSize: '0.74rem', bgcolor: '#FFFBEB', color: '#D97706', border: '1px solid #FDE68A' }}
+                />
+              )}
+
+              {/* Online Protocol Integrity Status */}
+              <Tooltip title={`Целостность протокола: ${integrityReport.score}% (Критично: ${integrityReport.criticalErrors.length}, Замечания: ${integrityReport.warnings.length}). Нажмите для подробного аудита.`}>
+                <Chip
+                  icon={
+                    integrityReport.criticalErrors.length > 0 ? (
+                      <ErrorIcon sx={{ fontSize: '15px !important', color: '#DC2626' }} />
+                    ) : integrityReport.warnings.length > 0 ? (
+                      <WarningAmberIcon sx={{ fontSize: '15px !important', color: '#D97706' }} />
+                    ) : (
+                      <CheckCircleIcon sx={{ fontSize: '15px !important', color: '#16A34A' }} />
+                    )
+                  }
+                  label={
+                    integrityReport.criticalErrors.length > 0
+                      ? `Целостность: ${integrityReport.score}% (Критично: ${integrityReport.criticalErrors.length})`
+                      : integrityReport.warnings.length > 0
+                      ? `Целостность: ${integrityReport.score}% (Замечания: ${integrityReport.warnings.length})`
+                      : 'Целостность: 100% (Готов)'
+                  }
+                  size="small"
+                  onClick={() => setIntegrityDrawerOpen(true)}
+                  sx={{
+                    cursor: 'pointer',
+                    fontWeight: 800,
+                    fontSize: '0.74rem',
+                    bgcolor: integrityReport.criticalErrors.length > 0 ? '#FEF2F2' : integrityReport.warnings.length > 0 ? '#FFFBEB' : '#F0FDF4',
+                    color: integrityReport.criticalErrors.length > 0 ? '#B91C1C' : integrityReport.warnings.length > 0 ? '#B45309' : '#15803D',
+                    border: '1px solid',
+                    borderColor: integrityReport.criticalErrors.length > 0 ? '#FCA5A5' : integrityReport.warnings.length > 0 ? '#FCD34D' : '#86EFAC',
+                    '&:hover': {
+                      filter: 'brightness(0.96)',
+                      boxShadow: '0 1px 4px rgba(0,0,0,0.1)'
+                    }
+                  }}
+                />
+              </Tooltip>
+
+              {isSigned ? (
+                <>
+                  <Chip
+                    icon={<CheckCircleIcon sx={{ fontSize: 16 }} />}
+                    label="Подписан ЭЦП"
+                    size="small"
+                    color="success"
+                    sx={{ fontWeight: 700 }}
+                  />
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    color="warning"
+                    startIcon={<UndoIcon />}
+                    onClick={() => setReturnToDraftModalOpen(true)}
+                    disabled={saving}
+                    sx={{ fontWeight: 700, textTransform: 'none', py: 0.3, px: 1, fontSize: '0.76rem' }}
+                  >
+                    Вернуть в черновик
+                  </Button>
+                </>
+              ) : protocolId ? (
+                <Chip
+                  icon={<EditNoteIcon sx={{ fontSize: '15px !important', color: '#92400E !important' }} />}
+                  label={`Черновик протокола #${protocolId}`}
+                  size="small"
+                  sx={{
+                    bgcolor: '#FEF3C7',
+                    color: '#92400E',
+                    fontWeight: 800,
+                    fontSize: '0.74rem',
+                    border: '1px solid #FCD34D'
+                  }}
+                />
+              ) : null}
             </Box>
             <Typography variant="caption" sx={{ color: '#64748B', display: 'flex', gap: 2, mt: 0.2 }}>
               {contextData?.patient?.id ? (
@@ -2138,7 +2500,7 @@ export default function OrthoWorkstation() {
               ) : (
                 <span style={{ color: '#D97706', fontWeight: 600 }}>Новый визит: выберите пациента и клинический протокол для автоматического заполнения.</span>
               )}
-              <span>Врач: <b>{appointment.doctor_name || contextData?.doctor?.full_name || 'Добрушкин Александр Моисеевич'}</b></span>
+              <span>Врач: <b>{appointment.doctor_name || contextData?.doctor?.full_name || currentUser?.fullName || 'Врач не выбран'}</b></span>
             </Typography>
           </Box>
         </Box>
@@ -2271,21 +2633,21 @@ export default function OrthoWorkstation() {
             </Button>
           </Badge>
 
-          <Tooltip title="Открыть Реестр направлений (контроль 90 дней, аудит, повторная печать бланков)">
+          <Tooltip title="Открыть Реестр Протоколов и направлений пациентов (полнотекстовый поиск, аудит, пакетная печать)">
             <Button
               variant="outlined"
               size="small"
               startIcon={<DescriptionIcon />}
-              onClick={() => navigate(contextData?.patient?.id ? `/patient-referrals?patientId=${contextData.patient.id}` : '/patient-referrals')}
+              onClick={() => navigate(contextData?.patient?.id ? `/protocols-registry?patientId=${contextData.patient.id}` : '/protocols-registry')}
               sx={{
                 borderColor: '#CBD5E1',
-                color: '#475569',
+                color: '#0F3C64',
                 fontWeight: 700,
                 textTransform: 'none',
-                '&:hover': { bgcolor: '#F8FAFC' }
+                '&:hover': { bgcolor: '#F0F9FF', borderColor: '#0284C7' }
               }}
             >
-              Реестр
+              Реестр протоколов
             </Button>
           </Tooltip>
         </Box>
@@ -2294,7 +2656,11 @@ export default function OrthoWorkstation() {
       {/* WORKSTATION SPLIT SCREEN BODY */}
       <Box sx={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
         {/* LEFT COLUMN: INTERACTIVE CLINICAL EXAM (55% Width) */}
-        <Box sx={{ flex: '0 0 55%', overflowY: 'auto', p: 2, borderRight: '1px solid #CBD5E1' }}>
+        <Box
+          id="left-shablon-scroll-container"
+          onScroll={handleLeftScroll}
+          sx={{ flex: '0 0 55%', overflowY: 'auto', p: 2, borderRight: '1px solid #CBD5E1' }}
+        >
           {/* SANDWICH TOP TOOLBAR: EXPAND/COLLAPSE ALL + SMART FOCUS + PRINT STATUS BADGE */}
           <Box
             sx={{
@@ -2312,7 +2678,7 @@ export default function OrthoWorkstation() {
           >
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
               <Typography variant="caption" sx={{ fontWeight: 800, color: '#475569', mr: 0.5, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                Разделы приема (8 доменов):
+                Разделы приема (10 доменов):
               </Typography>
               <Button
                 size="small"
@@ -2355,7 +2721,7 @@ export default function OrthoWorkstation() {
             <Tooltip title="Разделы, отмеченные галочкой и содержащие данные, войдут в официальный протокол и распечатку. Деактивированные разделы не печатаются.">
               <Chip
                 icon={<PrintIcon sx={{ fontSize: '0.95rem !important' }} />}
-                label={`В печать: ${printSectionsCount} из 8 доменов`}
+                label={`В печать: ${printSectionsCount} из 10 доменов`}
                 size="small"
                 sx={{
                   fontWeight: 800,
@@ -2369,46 +2735,65 @@ export default function OrthoWorkstation() {
             </Tooltip>
           </Box>
 
-          {/* 1. ЖАЛОБЫ, АНАМНЕЗ И КЛИНИЧЕСКИЙ СТАТУС */}
+          {/* 1. ЖАЛОБЫ, АНАМНЕЗ И СОМАТИЧЕСКИЙ СТАТУС */}
           <OrthoSandwichCard
             id="domain1_complaints"
-            title="1. Жалобы, анамнез и клинический статус"
-            subtitle="Жалобы, интенсивность боли (ВАШ), Anamnesis morbi/vitae, Status praesens, 2D Гомункулус и диагноз МКБ-10"
+            title="1. Жалобы, анамнез и соматический статус"
+            subtitle="Жалобы, интенсивность боли (ВАШ), Anamnesis morbi/vitae, соматический статус (Status praesens)"
             icon={<ArticleIcon sx={{ fontSize: 20 }} />}
             accentColor="#0F3C64"
             expanded={Boolean(expandedSections.domain1_complaints ?? expandedSections.complaints)}
             onToggleExpand={() => handleToggleExpand('domain1_complaints')}
             isActive={Boolean(activeSections.domain1_complaints ?? activeSections.complaints)}
             onToggleActive={(act) => handleToggleActive('domain1_complaints', act)}
-            hasContent={Boolean(complaints.trim() || clinicalDiagnosis.trim() || anamnesis.trim() || selectedMkb)}
+            hasContent={Boolean(complaints.trim() || anamnesis.trim() || anamnesisVitae.trim() || objectiveStatus.trim())}
             previewSnippet={
-              (selectedMkb?.code ? `[${selectedMkb.code}] ` : '') +
-              (complaints.trim() ? complaints.slice(0, 80) : 'Жалобы и статус внесены') +
+              (complaints.trim() ? complaints.slice(0, 80) : 'Жалобы и анамнез внесены') +
               (complaints.length > 80 ? '...' : '')
             }
             headerActions={
-              <Button
-                size="small"
-                variant="outlined"
-                startIcon={<AssignmentIcon sx={{ fontSize: 15 }} />}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (selectedJoint && JOINT_TO_CLUSTER[selectedJoint]) {
-                    setSelectedClusterId(JOINT_TO_CLUSTER[selectedJoint].clusterId);
-                  }
-                  setProtocolDialogOpen(true);
-                }}
-                sx={{
-                  fontSize: '0.74rem',
-                  fontWeight: 700,
-                  borderColor: '#0284C7',
-                  color: '#0284C7',
-                  textTransform: 'none',
-                  py: 0.2
-                }}
-              >
-                Протоколы ({filteredTemplates.length})
-              </Button>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
+                <Tooltip title="Справочник стандартов сбора анамнеза и протоколов осмотра (EBM)">
+                  <IconButton
+                    size="small"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleOpenGuidance('templates');
+                    }}
+                    sx={{
+                      color: '#0F3C64',
+                      bgcolor: '#F0F9FF',
+                      p: 0.4,
+                      border: '1px solid #BAE6FD',
+                      '&:hover': { bgcolor: '#E0F2FE' }
+                    }}
+                  >
+                    <InfoOutlinedIcon sx={{ fontSize: 16 }} />
+                  </IconButton>
+                </Tooltip>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  startIcon={<AssignmentIcon sx={{ fontSize: 15 }} />}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (selectedJoint && JOINT_TO_CLUSTER[selectedJoint]) {
+                      setSelectedClusterId(JOINT_TO_CLUSTER[selectedJoint].clusterId);
+                    }
+                    setProtocolDialogOpen(true);
+                  }}
+                  sx={{
+                    fontSize: '0.74rem',
+                    fontWeight: 700,
+                    borderColor: '#0284C7',
+                    color: '#0284C7',
+                    textTransform: 'none',
+                    py: 0.2
+                  }}
+                >
+                  Протоколы ({filteredTemplates.length})
+                </Button>
+              </Box>
             }
           >
             {/* 1.1 Complaints & VAS */}
@@ -2424,7 +2809,10 @@ export default function OrthoWorkstation() {
                   multiline
                   minRows={2}
                   value={complaints}
-                  onChange={(e) => setComplaints(e.target.value)}
+                  onChange={(e) => {
+                    setComplaints(e.target.value);
+                    syncShablonAction(1, 'Жалобы обновлены', { length: e.target.value.length });
+                  }}
                   placeholder="Боль, ограничение движений, отек, хруст, ощущение нестабильности..."
                 />
               </Grid>
@@ -2451,7 +2839,10 @@ export default function OrthoWorkstation() {
                     step={1}
                     marks
                     valueLabelDisplay="auto"
-                    onChange={(_, val) => setVasScore(val as number)}
+                    onChange={(_, val) => {
+                      setVasScore(val as number);
+                      syncShablonAction(1, 'Интенсивность боли ВАШ изменена', { vasScore: val });
+                    }}
                     sx={{
                       color: vasScore >= 7 ? '#DC2626' : vasScore >= 4 ? '#D97706' : '#16A34A',
                       height: 6
@@ -2474,7 +2865,10 @@ export default function OrthoWorkstation() {
                   multiline
                   minRows={2}
                   value={anamnesis}
-                  onChange={(e) => setAnamnesis(e.target.value)}
+                  onChange={(e) => {
+                    setAnamnesis(e.target.value);
+                    syncShablonAction(1, 'Анамнез заболевания изменен');
+                  }}
                   placeholder="Длительность заболевания, связь с травмой, проводимое ранее консервативное лечение..."
                 />
               </Grid>
@@ -2483,19 +2877,28 @@ export default function OrthoWorkstation() {
                   <Chip
                     size="small"
                     label="+ Аллергоанамнез не отягощен"
-                    onClick={() => setAnamnesisVitae((prev) => (prev ? `${prev} Аллергоанамнез не отягощен.` : 'Аллергоанамнез не отягощен.'))}
+                    onClick={() => {
+                      setAnamnesisVitae((prev) => (prev ? `${prev} Аллергоанамнез не отягощен.` : 'Аллергоанамнез не отягощен.'));
+                      syncShablonAction(1, 'Добавлен аллергоанамнез');
+                    }}
                     sx={{ cursor: 'pointer', fontSize: '0.74rem' }}
                   />
                   <Chip
                     size="small"
                     label="+ Хронические соматические отрицает"
-                    onClick={() => setAnamnesisVitae((prev) => (prev ? `${prev} Хронические заболевания отрицает.` : 'Хронические соматические заболевания отрицает.'))}
+                    onClick={() => {
+                      setAnamnesisVitae((prev) => (prev ? `${prev} Хронические заболевания отрицает.` : 'Хронические соматические заболевания отрицает.'));
+                      syncShablonAction(1, 'Добавлены данные соматики');
+                    }}
                     sx={{ cursor: 'pointer', fontSize: '0.74rem' }}
                   />
                   <Chip
                     size="small"
                     label="+ Операций на суставах не было"
-                    onClick={() => setAnamnesisVitae((prev) => (prev ? `${prev} Операций на опорно-двигательном аппарате в анамнезе нет.` : 'Операций на опорно-двигательном аппарате в анамнезе нет.'))}
+                    onClick={() => {
+                      setAnamnesisVitae((prev) => (prev ? `${prev} Операций на опорно-двигательном аппарате в анамнезе нет.` : 'Операций на опорно-двигательном аппарате в анамнезе нет.'));
+                      syncShablonAction(1, 'Добавлены данные об операциях');
+                    }}
                     sx={{ cursor: 'pointer', fontSize: '0.74rem' }}
                   />
                 </Box>
@@ -2506,57 +2909,135 @@ export default function OrthoWorkstation() {
                   multiline
                   minRows={2}
                   value={anamnesisVitae}
-                  onChange={(e) => setAnamnesisVitae(e.target.value)}
+                  onChange={(e) => {
+                    setAnamnesisVitae(e.target.value);
+                    syncShablonAction(1, 'Анамнез жизни изменен');
+                  }}
                   placeholder="Аллергологический статус, сопутствующие соматические патологии..."
                 />
               </Grid>
             </Grid>
 
-            {/* 1.3 Objective status & 2D Homunculus */}
+            {/* 1.3 Somatic Status (Status Praesens) */}
             <Typography variant="caption" sx={{ fontWeight: 800, color: '#0F3C64', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'block', mb: 1 }}>
-              1.3. Общий и локальный ортопедический статус (2D Гомункулус)
+              1.3. Соматический статус (Status praesens)
             </Typography>
             <Box sx={{ mb: 1.5 }}>
               <Box sx={{ display: 'flex', gap: 0.8, mb: 1, flexWrap: 'wrap' }}>
                 <Chip
                   size="small"
                   label="+ Состояние удовл., нормостеник"
-                  onClick={() => setObjectiveStatus((prev) => (prev ? `${prev} Состояние удовлетворительное. Нормостеник.` : 'Общее состояние удовлетворительное. Нормостенического телосложения.'))}
+                  onClick={() => {
+                    setObjectiveStatus((prev) => (prev ? `${prev} Состояние удовлетворительное. Нормостеник.` : 'Общее состояние удовлетворительное. Нормостенического телосложения.'));
+                    syncShablonAction(1, 'Соматический статус: нормостеник');
+                  }}
                   sx={{ cursor: 'pointer', fontSize: '0.74rem' }}
                 />
                 <Chip
                   size="small"
                   label="+ Кожные покровы физиологические, чистые"
-                  onClick={() => setObjectiveStatus((prev) => (prev ? `${prev} Кожные покровы физиологической окраски, чистые.` : 'Кожные покровы физиологической окраски, чистые.'))}
+                  onClick={() => {
+                    setObjectiveStatus((prev) => (prev ? `${prev} Кожные покровы физиологической окраски, чистые.` : 'Кожные покровы физиологической окраски, чистые.'));
+                    syncShablonAction(1, 'Соматический статус: кожные покровы');
+                  }}
                   sx={{ cursor: 'pointer', fontSize: '0.74rem' }}
                 />
                 <Chip
                   size="small"
                   label="+ Периферических отеков нет"
-                  onClick={() => setObjectiveStatus((prev) => (prev ? `${prev} Периферических отеков нет.` : 'Периферических отеков нет.'))}
+                  onClick={() => {
+                    setObjectiveStatus((prev) => (prev ? `${prev} Периферических отеков нет.` : 'Периферических отеков нет.'));
+                    syncShablonAction(1, 'Соматический статус: отеков нет');
+                  }}
                   sx={{ cursor: 'pointer', fontSize: '0.74rem' }}
                 />
               </Box>
               <TextField
                 fullWidth
                 size="small"
-                label="Общий объективный статус (Status praesens)"
+                label="Общий соматический статус (Status praesens: АД, пульс, дыхание)"
                 multiline
                 minRows={2}
                 value={objectiveStatus}
-                onChange={(e) => setObjectiveStatus(e.target.value)}
-                placeholder="Общее самочувствие, телосложение, гемодинамика, кожные покровы..."
-                sx={{ mb: 2 }}
+                onChange={(e) => {
+                  setObjectiveStatus(e.target.value);
+                  syncShablonAction(1, 'Соматический статус изменен');
+                }}
+                placeholder="Общее самочувствие, гемодинамика (АД 120/80, ЧСС 72 уд/мин), кожные покровы..."
+              />
+            </Box>
+          </OrthoSandwichCard>
+
+          {/* 2. ОРТОПЕДИЧЕСКИЙ СТАТУС (STATUS LOCALIS И 2D ГОМУНКУЛУС) */}
+          <OrthoSandwichCard
+            id="domain2_ortho_status"
+            title="2. Ортопедический статус (Status Localis и 2D-гомункулус)"
+            subtitle="Походка, осанка, анатомическая интерактивная карта (2D Гомункулус), пальпация суставов"
+            icon={<PersonIcon sx={{ fontSize: 20 }} />}
+            accentColor="#0284C7"
+            expanded={Boolean(expandedSections.domain2_ortho_status ?? true)}
+            onToggleExpand={() => handleToggleExpand('domain2_ortho_status')}
+            isActive={Boolean(activeSections.domain2_ortho_status ?? true)}
+            onToggleActive={(act) => handleToggleActive('domain2_ortho_status', act)}
+            hasContent={Boolean(selectedJoint || currentJointState.palpationPoints?.length || gait || posture)}
+            previewSnippet={`Сустав: ${selectedJoint} (${currentJointState.side}) • Походка: ${gait || 'свободная'}`}
+            headerActions={
+              <Tooltip title="Справочник: Анатомия суставов, гомункулус и оценка походки/осанки">
+                <IconButton
+                  size="small"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleOpenGuidance('rom');
+                  }}
+                  sx={{
+                    color: '#0284C7',
+                    bgcolor: '#F0F9FF',
+                    p: 0.4,
+                    border: '1px solid #BAE6FD',
+                    '&:hover': { bgcolor: '#E0F2FE' }
+                  }}
+                >
+                  <InfoOutlinedIcon sx={{ fontSize: 16 }} />
+                </IconButton>
+              </Tooltip>
+            }
+          >
+            {/* 2.1 Gait & Posture */}
+            <Typography variant="caption" sx={{ fontWeight: 800, color: '#0F3C64', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'block', mb: 1 }}>
+              2.1. Биомеханика походки и осанка
+            </Typography>
+            <Box sx={{ display: 'flex', gap: 0.8, mb: 1.5, flexWrap: 'wrap' }}>
+              <Chip
+                size="small"
+                label="✓ Походка свободная, без хромоты"
+                onClick={() => syncShablonAction(2, 'Походка: норма')}
+                sx={{ cursor: 'pointer', fontSize: '0.74rem', bgcolor: '#ECFDF5', color: '#047857', border: '1px solid #A7F3D0' }}
+              />
+              <Chip
+                size="small"
+                label="⚠ Анталгическая походка (хромота, разгрузка сустава)"
+                onClick={() => syncShablonAction(2, 'Походка: анталгическая')}
+                sx={{ cursor: 'pointer', fontSize: '0.74rem', bgcolor: '#FEF3C7', color: '#92400E', border: '1px solid #FCD34D' }}
+              />
+              <Chip
+                size="small"
+                label="✓ Осанка физиологическая"
+                onClick={() => syncShablonAction(2, 'Осанка: норма')}
+                sx={{ cursor: 'pointer', fontSize: '0.74rem', bgcolor: '#ECFDF5', color: '#047857', border: '1px solid #A7F3D0' }}
               />
             </Box>
 
-            <Paper variant="outlined" sx={{ p: 1.5, mb: 2, borderRadius: 2, bgcolor: '#FAFBFD', borderColor: '#E2E8F0' }}>
-              <Typography variant="caption" sx={{ fontWeight: 700, color: '#475569', display: 'block', mb: 1 }}>
-                Анатомическая интерактивная карта (2D Гомункулус):
-              </Typography>
+            {/* 2.2 2D Homunculus */}
+            <Typography variant="caption" sx={{ fontWeight: 800, color: '#0F3C64', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'block', mb: 1 }}>
+              2.2. Анатомическая интерактивная карта (2D Гомункулус)
+            </Typography>
+            <Paper variant="outlined" sx={{ p: 1.5, mb: 1.5, borderRadius: 2, bgcolor: '#FAFBFD', borderColor: '#E2E8F0' }}>
               <BodyHomunculus
                 selectedJoint={selectedJoint}
-                onSelectJoint={(j) => setSelectedJoint(j)}
+                onSelectJoint={(j) => {
+                  setSelectedJoint(j);
+                  syncShablonAction(2, 'Выбран анатомический сустав', { joint: j });
+                }}
                 examData={homunculusExamSummary}
                 selectedClusterId={selectedClusterId}
                 onSelectCluster={(clusterId, side) => {
@@ -2573,70 +3054,76 @@ export default function OrthoWorkstation() {
                       };
                     });
                   }
+                  syncShablonAction(2, 'Выбран кластер на гомункулусе', { clusterId, side });
                 }}
                 showClusterQuickFilters={true}
               />
             </Paper>
 
-            {/* 1.4 Clinical Diagnosis */}
+            {/* 2.3 Palpation points */}
             <Typography variant="caption" sx={{ fontWeight: 800, color: '#0F3C64', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'block', mb: 1 }}>
-              1.4. Клинический диагноз (МКБ-10)
+              2.3. Пальпация и анатомические ориентиры
             </Typography>
-            <Grid container spacing={1.5}>
-              <Grid size={{ xs: 12 }}>
-                <Autocomplete
-                  size="small"
-                  options={COMMON_MKB10}
-                  getOptionLabel={(o) => `${o.code} — ${o.name}`}
-                  value={selectedMkb}
-                  onChange={(_, val) => {
-                    setSelectedMkb(val);
-                    if (val) {
-                      const code = val.code;
-                      if (code.startsWith('M77.1') || code.startsWith('M77.0') || code.startsWith('M70.2') || code.startsWith('G56.2') || code.startsWith('S53')) {
-                        setSelectedJoint((prev) => (prev.startsWith('elbow') ? prev : 'elbow_r'));
-                      } else if (code.startsWith('M17') || code.startsWith('M23') || code.startsWith('S83')) {
-                        setSelectedJoint((prev) => (prev.startsWith('knee') ? prev : 'knee_r'));
-                      } else if (code.startsWith('M75')) {
-                        setSelectedJoint((prev) => (prev.startsWith('shoulder') ? prev : 'shoulder_r'));
-                      } else if (code.startsWith('M16')) {
-                        setSelectedJoint((prev) => (prev.startsWith('hip') ? prev : 'hip_r'));
-                      } else if (code.startsWith('M77.3') || code.startsWith('M20.1')) {
-                        setSelectedJoint((prev) => (prev.startsWith('foot') ? prev : 'foot_r'));
-                      } else if (code.startsWith('M54')) {
-                        setSelectedJoint((prev) => (prev.startsWith('spine') ? prev : 'spine_l'));
-                      }
-                    }
-                  }}
-                  renderInput={(params) => <TextField {...params} label="Код по МКБ-10" />}
-                />
-              </Grid>
-              <Grid size={{ xs: 12 }}>
-                <TextField
-                  fullWidth
-                  size="small"
-                  label="Развернутый клинический диагноз"
-                  multiline
-                  minRows={2}
-                  value={clinicalDiagnosis}
-                  onChange={(e) => setClinicalDiagnosis(e.target.value)}
-                  placeholder="Стадия, сопутствующие деформации, функциональный класс..."
-                />
-              </Grid>
-            </Grid>
+            <Box sx={{ display: 'flex', gap: 0.8, flexWrap: 'wrap' }}>
+              <Chip
+                size="small"
+                label="Болезненность суставной щели (+)"
+                onClick={() => {
+                  setJointExamsMap((prev) => {
+                    const cur = prev[selectedJoint] || currentJointState;
+                    const pts = cur.palpationPoints || [];
+                    const newPts = pts.includes('суставная щель') ? pts.filter((p: string) => p !== 'суставная щель') : [...pts, 'суставная щель'];
+                    return { ...prev, [selectedJoint]: { ...cur, palpationPoints: newPts } };
+                  });
+                  syncShablonAction(2, 'Пальпация: суставная щель');
+                }}
+                color={currentJointState.palpationPoints?.includes('суставная щель') ? 'error' : 'default'}
+                sx={{ cursor: 'pointer', fontSize: '0.74rem' }}
+              />
+              <Chip
+                size="small"
+                label="Пальпация связочного аппарата (+)"
+                onClick={() => {
+                  setJointExamsMap((prev) => {
+                    const cur = prev[selectedJoint] || currentJointState;
+                    const pts = cur.palpationPoints || [];
+                    const newPts = pts.includes('связочный аппарат') ? pts.filter((p: string) => p !== 'связочный аппарат') : [...pts, 'связочный аппарат'];
+                    return { ...prev, [selectedJoint]: { ...cur, palpationPoints: newPts } };
+                  });
+                  syncShablonAction(2, 'Пальпация: связки');
+                }}
+                color={currentJointState.palpationPoints?.includes('связочный аппарат') ? 'error' : 'default'}
+                sx={{ cursor: 'pointer', fontSize: '0.74rem' }}
+              />
+              <Chip
+                size="small"
+                label="Болезненность энтезисов (+)"
+                onClick={() => {
+                  setJointExamsMap((prev) => {
+                    const cur = prev[selectedJoint] || currentJointState;
+                    const pts = cur.palpationPoints || [];
+                    const newPts = pts.includes('энтезисы') ? pts.filter((p: string) => p !== 'энтезисы') : [...pts, 'энтезисы'];
+                    return { ...prev, [selectedJoint]: { ...cur, palpationPoints: newPts } };
+                  });
+                  syncShablonAction(2, 'Пальпация: энтезисы');
+                }}
+                color={currentJointState.palpationPoints?.includes('энтезисы') ? 'error' : 'default'}
+                sx={{ cursor: 'pointer', fontSize: '0.74rem' }}
+              />
+            </Box>
           </OrthoSandwichCard>
 
-          {/* 2. ROM (ГОНИОМЕТРИЯ SFTR NEUTRAL-0) */}
+          {/* 3. ROM (ГОНИОМЕТРИЯ SFTR NEUTRAL-0) */}
           <OrthoSandwichCard
-            id="domain2_rom"
-            title="2. ROM (Гониометрия объёма движений SFTR Neutral-0)"
+            id="domain3_rom"
+            title="3. Амплитуда движений (SFTR Neutral-0 ROM)"
             subtitle="Амплитуда движений по системе Neutral-0, ось конечности, выпот и синовит сустава"
             icon={<StraightenIcon sx={{ fontSize: 20 }} />}
             accentColor="#0369A1"
-            expanded={Boolean(expandedSections.domain2_rom ?? expandedSections.functional_tests)}
-            onToggleExpand={() => handleToggleExpand('domain2_rom')}
-            isActive={Boolean(activeSections.domain2_rom ?? activeSections.functional_tests)}
-            onToggleActive={(act) => handleToggleActive('domain2_rom', act)}
+            expanded={Boolean(expandedSections.domain3_rom ?? expandedSections.domain2_rom ?? expandedSections.functional_tests)}
+            onToggleExpand={() => handleToggleExpand('domain3_rom')}
+            isActive={Boolean(activeSections.domain3_rom ?? activeSections.domain2_rom ?? activeSections.functional_tests)}
+            onToggleActive={(act) => handleToggleActive('domain3_rom', act)}
             hasContent={true}
             badge={
               (currentJointState.rom?.extension_deficit || 0) > 0 || (currentJointState.effusion || 0) > 0 ? (
@@ -2658,11 +3145,34 @@ export default function OrthoWorkstation() {
                 ? `Сгибание: ${currentJointState.rom.flexion_active}°, Дефицит: ${currentJointState.rom.extension_deficit || 0}°, Выпот: ${currentJointState.effusion || 0}`
                 : 'Данные гониометрии'
             }
+            headerActions={
+              <Tooltip title="Клинический справочник: Стандарты SFTR Neutral-0, нормы ROM, контрактуры">
+                <IconButton
+                  size="small"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleOpenGuidance('rom');
+                  }}
+                  sx={{
+                    color: '#0369A1',
+                    bgcolor: '#F0F9FF',
+                    p: 0.4,
+                    border: '1px solid #BAE6FD',
+                    '&:hover': { bgcolor: '#E0F2FE' }
+                  }}
+                >
+                  <InfoOutlinedIcon sx={{ fontSize: 16 }} />
+                </IconButton>
+              </Tooltip>
+            }
           >
             <JointExamCard
               jointArea={selectedJoint}
               state={currentJointState}
-              onChange={handleJointExamChange}
+              onChange={(s) => {
+                handleJointExamChange(s);
+                syncShablonAction(3, 'ROM SFTR изменен', { joint: selectedJoint, rom: s.rom });
+              }}
               mode="rom_only"
               previousVisitDelta={
                 contextData?.lastProtocol
@@ -2676,17 +3186,17 @@ export default function OrthoWorkstation() {
             />
           </OrthoSandwichCard>
 
-          {/* 3. РЕЕСТР СПЕЦИАЛЬНЫХ ОРТОПЕДИЧЕСКИХ ТЕСТОВ */}
+          {/* 4. ПАНЕЛЬ ВАЛИДИРОВАННЫХ ОРТОПЕДИЧЕСКИХ ТЕСТОВ */}
           <OrthoSandwichCard
-            id="domain3_tests"
-            title="3. Реестр специальных ортопедических тестов ($Sn$, $Sp$, $LR+$)"
+            id="domain4_tests"
+            title="4. Панель валидированных ортопедических тестов ($Sn$, $Sp$, $LR+$)"
             subtitle="Клинические провокационные пробы: Tier 1 ($Sn \ge 95\%$), Tier 2 ($Sp \ge 90\%$), Tier 3 ($LR+ > 5.0$)"
             icon={<HealingIcon sx={{ fontSize: 20 }} />}
             accentColor="#15803D"
-            expanded={Boolean(expandedSections.domain3_tests ?? expandedSections.functional_tests)}
-            onToggleExpand={() => handleToggleExpand('domain3_tests')}
-            isActive={Boolean(activeSections.domain3_tests ?? activeSections.functional_tests)}
-            onToggleActive={(act) => handleToggleActive('domain3_tests', act)}
+            expanded={Boolean(expandedSections.domain4_tests ?? expandedSections.domain3_tests ?? expandedSections.functional_tests)}
+            onToggleExpand={() => handleToggleExpand('domain4_tests')}
+            isActive={Boolean(activeSections.domain4_tests ?? activeSections.domain3_tests ?? activeSections.functional_tests)}
+            onToggleActive={(act) => handleToggleActive('domain4_tests', act)}
             hasContent={true}
             badge={
               (() => {
@@ -2711,26 +3221,49 @@ export default function OrthoWorkstation() {
             previewSnippet={
               `${Object.values(currentJointState.tests || {}).filter(v => v !== 'negative').length} полож. (+) из ${Object.keys(currentJointState.tests || {}).length} тестов`
             }
+            headerActions={
+              <Tooltip title="Клинический справочник: 1377 валидированных тестов (Se, Sp, LR+)">
+                <IconButton
+                  size="small"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleOpenGuidance('tests');
+                  }}
+                  sx={{
+                    color: '#15803D',
+                    bgcolor: '#F0FDF4',
+                    p: 0.4,
+                    border: '1px solid #BBF7D0',
+                    '&:hover': { bgcolor: '#DCFCE7' }
+                  }}
+                >
+                  <InfoOutlinedIcon sx={{ fontSize: 16 }} />
+                </IconButton>
+              </Tooltip>
+            }
           >
             <JointExamCard
               jointArea={selectedJoint}
               state={currentJointState}
-              onChange={handleJointExamChange}
+              onChange={(s) => {
+                handleJointExamChange(s);
+                syncShablonAction(4, 'Тесты сустава изменены', { joint: selectedJoint, tests: s.tests });
+              }}
               mode="tests_only"
             />
           </OrthoSandwichCard>
 
-          {/* 4. ИНСТРУМЕНТАЛЬНАЯ И ЛАБОРАТОРНАЯ ДИАГНОСТИКА */}
+          {/* 5. ИНСТРУМЕНТАЛЬНАЯ И ЛАБОРАТОРНАЯ ДИАГНОСТИКА */}
           <OrthoSandwichCard
-            id="domain4_diagnostics"
-            title="4. Инструментальная и лабораторная диагностика"
+            id="domain5_diagnostics"
+            title="5. Инструментальная и лабораторная диагностика"
             subtitle="Рентгенография, МРТ ($B_0 \ge 1.5\text{ Тл}$), КТ ($3\text{D}$), УЗИ суставов, лабораторные анализы ($[CRP] < 5\text{ мг/л}$), ЭНМГ"
             icon={<BiotechIcon sx={{ fontSize: 20 }} />}
             accentColor="#0284C7"
-            expanded={Boolean(expandedSections.domain4_diagnostics ?? expandedSections.special_studies)}
-            onToggleExpand={() => handleToggleExpand('domain4_diagnostics')}
-            isActive={Boolean(activeSections.domain4_diagnostics ?? activeSections.special_studies)}
-            onToggleActive={(act) => handleToggleActive('domain4_diagnostics', act)}
+            expanded={Boolean(expandedSections.domain5_diagnostics ?? expandedSections.domain4_diagnostics ?? expandedSections.special_studies)}
+            onToggleExpand={() => handleToggleExpand('domain5_diagnostics')}
+            isActive={Boolean(activeSections.domain5_diagnostics ?? activeSections.domain4_diagnostics ?? activeSections.special_studies)}
+            onToggleActive={(act) => handleToggleActive('domain5_diagnostics', act)}
             hasContent={Boolean(specialStudies.trim() || activeTemplateDiagnostics.length > 0)}
             badge={
               activeTemplateDiagnostics.length > 0 ? (
@@ -2746,6 +3279,26 @@ export default function OrthoWorkstation() {
                 ? specialStudies.slice(0, 90) + (specialStudies.length > 90 ? '...' : '')
                 : `${activeTemplateDiagnostics.length} исследований назначено`
             }
+            headerActions={
+              <Tooltip title="Клинический справочник: 381 метод инструментальной и лабораторной диагностики">
+                <IconButton
+                  size="small"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleOpenGuidance('diagnostics');
+                  }}
+                  sx={{
+                    color: '#0284C7',
+                    bgcolor: '#F0F9FF',
+                    p: 0.4,
+                    border: '1px solid #BAE6FD',
+                    '&:hover': { bgcolor: '#E0F2FE' }
+                  }}
+                >
+                  <InfoOutlinedIcon sx={{ fontSize: 16 }} />
+                </IconButton>
+              </Tooltip>
+            }
           >
             <Box sx={{ mb: 2 }}>
               <TextField
@@ -2755,7 +3308,10 @@ export default function OrthoWorkstation() {
                 multiline
                 minRows={3}
                 value={specialStudies}
-                onChange={(e) => setSpecialStudies(e.target.value)}
+                onChange={(e) => {
+                  setSpecialStudies(e.target.value);
+                  syncShablonAction(5, 'Данные исследований изменены');
+                }}
                 placeholder="Результаты рентгенографии, МРТ сустава, сонографии, клинических и биохимических анализов..."
               />
             </Box>
@@ -2795,6 +3351,7 @@ export default function OrthoWorkstation() {
                     }
                   ]);
                 }
+                syncShablonAction(5, 'Добавлено диагностическое исследование', { title: newPresc.title });
                 setToastMessage(`Добавлено в назначения: ${newPresc.title} (${newPresc.unit_price} ₽)`);
               }}
               onAppendRecommendationText={(phrase) => {
@@ -2802,22 +3359,108 @@ export default function OrthoWorkstation() {
                   if (prev.includes(phrase)) return prev;
                   return prev ? `${prev}\n• ${phrase}` : `• ${phrase}`;
                 });
+                syncShablonAction(5, 'Назначение исследования внесено в текст', { phrase });
                 setToastMessage('Назначение исследования добавлено в протокол');
               }}
             />
           </OrthoSandwichCard>
 
-          {/* 5. ЛЕЧЕБНЫЕ МАНИПУЛЯЦИИ И ИНЪЕКЦИОННАЯ ТЕРАПИЯ */}
+          {/* 6. КЛИНИЧЕСКИЙ ДИАГНОЗ И МКБ-10 */}
           <OrthoSandwichCard
-            id="domain5_manipulations"
-            title="5. Лечебные манипуляции и инъекционная терапия"
+            id="domain6_diagnosis"
+            title="6. Клинический диагноз и МКБ-10"
+            subtitle="Основное заболевание по МКБ-10, стадия, клиническая форма, сопутствующие патологии"
+            icon={<ArticleIcon sx={{ fontSize: 20 }} />}
+            accentColor="#0F3C64"
+            expanded={Boolean(expandedSections.domain6_diagnosis ?? expandedSections.diagnosis ?? true)}
+            onToggleExpand={() => handleToggleExpand('domain6_diagnosis')}
+            isActive={Boolean(activeSections.domain6_diagnosis ?? activeSections.diagnosis ?? true)}
+            onToggleActive={(act) => handleToggleActive('domain6_diagnosis', act)}
+            hasContent={Boolean(selectedMkb?.code || clinicalDiagnosis.trim())}
+            previewSnippet={
+              (selectedMkb?.code ? `[${selectedMkb.code}] ` : '') +
+              (clinicalDiagnosis.trim() ? clinicalDiagnosis.slice(0, 90) : 'Диагноз уточняется')
+            }
+            headerActions={
+              <Tooltip title="Справочник МКБ-10 и стандарты формулировки клинического диагноза">
+                <IconButton
+                  size="small"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleOpenGuidance('templates');
+                  }}
+                  sx={{
+                    color: '#0F3C64',
+                    bgcolor: '#F0F9FF',
+                    p: 0.4,
+                    border: '1px solid #BAE6FD',
+                    '&:hover': { bgcolor: '#E0F2FE' }
+                  }}
+                >
+                  <InfoOutlinedIcon sx={{ fontSize: 16 }} />
+                </IconButton>
+              </Tooltip>
+            }
+          >
+            <Grid container spacing={1.5}>
+              <Grid size={{ xs: 12 }}>
+                <Autocomplete
+                  size="small"
+                  options={COMMON_MKB10}
+                  getOptionLabel={(o) => `${o.code} — ${o.name}`}
+                  value={selectedMkb}
+                  onChange={(_, val) => {
+                    setSelectedMkb(val);
+                    if (val) {
+                      const code = val.code;
+                      if (code.startsWith('M77.1') || code.startsWith('M77.0') || code.startsWith('M70.2') || code.startsWith('G56.2') || code.startsWith('S53')) {
+                        setSelectedJoint((prev) => (prev.startsWith('elbow') ? prev : 'elbow_r'));
+                      } else if (code.startsWith('M17') || code.startsWith('M23') || code.startsWith('S83')) {
+                        setSelectedJoint((prev) => (prev.startsWith('knee') ? prev : 'knee_r'));
+                      } else if (code.startsWith('M75')) {
+                        setSelectedJoint((prev) => (prev.startsWith('shoulder') ? prev : 'shoulder_r'));
+                      } else if (code.startsWith('M16')) {
+                        setSelectedJoint((prev) => (prev.startsWith('hip') ? prev : 'hip_r'));
+                      } else if (code.startsWith('M77.3') || code.startsWith('M20.1')) {
+                        setSelectedJoint((prev) => (prev.startsWith('foot') ? prev : 'foot_r'));
+                      } else if (code.startsWith('M54')) {
+                        setSelectedJoint((prev) => (prev.startsWith('spine') ? prev : 'spine_l'));
+                      }
+                    }
+                    syncShablonAction(6, 'Выбран код диагноза МКБ-10', { mkb: val?.code });
+                  }}
+                  renderInput={(params) => <TextField {...params} label="Код по МКБ-10" />}
+                />
+              </Grid>
+              <Grid size={{ xs: 12 }}>
+                <TextField
+                  fullWidth
+                  size="small"
+                  label="Развернутый клинический диагноз"
+                  multiline
+                  minRows={2}
+                  value={clinicalDiagnosis}
+                  onChange={(e) => {
+                    setClinicalDiagnosis(e.target.value);
+                    syncShablonAction(6, 'Развернутый клинический диагноз обновлен');
+                  }}
+                  placeholder="Стадия, сопутствующие деформации, функциональный класс..."
+                />
+              </Grid>
+            </Grid>
+          </OrthoSandwichCard>
+
+          {/* 7. ЛЕЧЕБНЫЕ МАНИПУЛЯЦИИ И ИНЪЕКЦИОННАЯ ТЕРАПИЯ */}
+          <OrthoSandwichCard
+            id="domain7_manipulations"
+            title="7. Лечебные манипуляции и инъекционная терапия"
             subtitle="Внутрисуставные блокады ($0.5\%$), пункции ($V = 2\text{–}40\text{ мл}$), гиалуронат ($MW \ge 2.4\text{–}3.0\text{ МДа}$), PRP ($[PLT] \ge 1.0 \times 10^6/\mu\text{л}$)"
             icon={<MedicalServicesIcon sx={{ fontSize: 20 }} />}
             accentColor="#0F766E"
-            expanded={Boolean(expandedSections.domain5_manipulations ?? expandedSections.performed_manipulations)}
-            onToggleExpand={() => handleToggleExpand('domain5_manipulations')}
-            isActive={Boolean(activeSections.domain5_manipulations ?? activeSections.performed_manipulations)}
-            onToggleActive={(act) => handleToggleActive('domain5_manipulations', act)}
+            expanded={Boolean(expandedSections.domain7_manipulations ?? expandedSections.domain5_manipulations ?? expandedSections.performed_manipulations)}
+            onToggleExpand={() => handleToggleExpand('domain7_manipulations')}
+            isActive={Boolean(activeSections.domain7_manipulations ?? activeSections.domain5_manipulations ?? activeSections.performed_manipulations)}
+            onToggleActive={(act) => handleToggleActive('domain7_manipulations', act)}
             hasContent={Boolean(performedManipulations.trim() || prescriptions.some((p) => p.category === 'manipulation'))}
             badge={
               prescriptions.filter((p) => p.category === 'manipulation').length > 0 ? (
@@ -2833,30 +3476,62 @@ export default function OrthoWorkstation() {
                 ? performedManipulations.slice(0, 90) + (performedManipulations.length > 90 ? '...' : '')
                 : 'Манипуляции не выполнялись'
             }
+            headerActions={
+              <Tooltip title="Клинический справочник: Блокады, пункции, гиалуронат, PRP, Red Flags">
+                <IconButton
+                  size="small"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleOpenGuidance('manipulations');
+                  }}
+                  sx={{
+                    color: '#0D9488',
+                    bgcolor: '#F0FDFA',
+                    p: 0.4,
+                    border: '1px solid #99F6E4',
+                    '&:hover': { bgcolor: '#CCFBF1' }
+                  }}
+                >
+                  <InfoOutlinedIcon sx={{ fontSize: 16 }} />
+                </IconButton>
+              </Tooltip>
+            }
           >
             <Box sx={{ display: 'flex', gap: 0.8, mb: 1.5, flexWrap: 'wrap' }}>
               <Chip
                 size="small"
                 label={<LatexText text="+ Пункция сустава ($V = 5\text{–}40\text{ мл}$)" />}
-                onClick={() => setPerformedManipulations((prev) => (prev ? `${prev}\n• Выполнена пункция сустава, эвакуация синовиального выпота.` : 'Выполнена пункция сустава, эвакуация синовиального выпота.'))}
+                onClick={() => {
+                  setPerformedManipulations((prev) => (prev ? `${prev}\n• Выполнена пункция сустава, эвакуация синовиального выпота.` : 'Выполнена пункция сустава, эвакуация синовиального выпота.'));
+                  syncShablonAction(7, 'Выполнена пункция сустава');
+                }}
                 sx={{ cursor: 'pointer', fontSize: '0.74rem' }}
               />
               <Chip
                 size="small"
                 label={<LatexText text="+ Внутрисуставная блокада ГКС ($0.5\%\text{ р-р}$)" />}
-                onClick={() => setPerformedManipulations((prev) => (prev ? `${prev}\n• Внутрисуставное введение раствора пролонгированного ГКС с местным анестетиком.` : 'Внутрисуставное введение раствора пролонгированного ГКС с местным анестетиком.'))}
+                onClick={() => {
+                  setPerformedManipulations((prev) => (prev ? `${prev}\n• Внутрисуставное введение раствора пролонгированного ГКС с местным анестетиком.` : 'Внутрисуставное введение раствора пролонгированного ГКС с местным анестетиком.'));
+                  syncShablonAction(7, 'Внутрисуставная блокада ГКС');
+                }}
                 sx={{ cursor: 'pointer', fontSize: '0.74rem' }}
               />
               <Chip
                 size="small"
                 label={<LatexText text="+ Введение гиалуроната ($MW \ge 2.4\text{–}3.0\text{ МДа}$)" />}
-                onClick={() => setPerformedManipulations((prev) => (prev ? `${prev}\n• Внутрисуставное введение препарата высокомолекулярного гиалуроната натрия.` : 'Внутрисуставное введение препарата высокомолекулярного гиалуроната натрия.'))}
+                onClick={() => {
+                  setPerformedManipulations((prev) => (prev ? `${prev}\n• Внутрисуставное введение препарата высокомолекулярного гиалуроната натрия.` : 'Внутрисуставное введение препарата высокомолекулярного гиалуроната натрия.'));
+                  syncShablonAction(7, 'Введение гиалуроната натрия');
+                }}
                 sx={{ cursor: 'pointer', fontSize: '0.74rem' }}
               />
               <Chip
                 size="small"
                 label={<LatexText text="+ PRP-терапия ($[PLT] \ge 1.0 \times 10^6/\mu\text{л}$)" />}
-                onClick={() => setPerformedManipulations((prev) => (prev ? `${prev}\n• Внутрисуставное введение аутологичной обогащенной тромбоцитами плазмы (PRP).` : 'Внутрисуставное введение аутологичной обогащенной тромбоцитами плазмы (PRP).'))}
+                onClick={() => {
+                  setPerformedManipulations((prev) => (prev ? `${prev}\n• Внутрисуставное введение аутологичной обогащенной тромбоцитами плазмы (PRP).` : 'Внутрисуставное введение аутологичной обогащенной тромбоцитами плазмы (PRP).'));
+                  syncShablonAction(7, 'PRP-терапия сустава');
+                }}
                 sx={{ cursor: 'pointer', fontSize: '0.74rem' }}
               />
             </Box>
@@ -2867,7 +3542,10 @@ export default function OrthoWorkstation() {
               multiline
               minRows={2}
               value={performedManipulations}
-              onChange={(e) => setPerformedManipulations(e.target.value)}
+              onChange={(e) => {
+                setPerformedManipulations(e.target.value);
+                syncShablonAction(7, 'Протокол манипуляций обновлен');
+              }}
               placeholder="Протокол пункции, объем эвакуированной жидкости, введенный препарат, дозировка, переносимость..."
               sx={{ mb: 2 }}
             />
@@ -2889,7 +3567,10 @@ export default function OrthoWorkstation() {
                         color="success"
                         onDelete={() => {
                           const idx = prescriptions.findIndex((x) => x.id === p.id);
-                          if (idx >= 0) handleRemovePrescription(idx);
+                          if (idx >= 0) {
+                            handleRemovePrescription(idx);
+                            syncShablonAction(7, 'Манипуляция удалена из плана', { title: p.name || (p as any).title });
+                          }
                         }}
                         sx={{ fontWeight: 700, fontSize: '0.75rem' }}
                       />
@@ -2899,17 +3580,17 @@ export default function OrthoWorkstation() {
             )}
           </OrthoSandwichCard>
 
-          {/* 6. ФИЗИОТЕРАПИЯ И АППАРАТНОЕ ВОССТАНОВИТЕЛЬНОЕ ЛЕЧЕНИЕ */}
+          {/* 8. ФИЗИОТЕРАПИЯ И АППАРАТНОЕ ВОССТАНОВИТЕЛЬНОЕ ЛЕЧЕНИЕ */}
           <OrthoSandwichCard
-            id="domain6_physiotherapy"
-            title="6. Физиотерапия и аппаратное восстановительное лечение"
+            id="domain8_physiotherapy"
+            title="8. Физиотерапия и аппаратное восстановительное лечение"
             subtitle="1-я линия EBM: HILT ($E = 2.5\text{–}4.0\text{ Дж/см}^2$), УВТ ($P = 2.0\text{–}3.5\text{ бар}$, $f = 10\text{–}15\text{ Гц}$), SIS ($B \ge 2.5\text{ Тл}$), TECAR ($f = 448\text{ кГц}$), Крио ($T = -30^\circ\text{C}$)"
             icon={<FitnessIcon sx={{ fontSize: 20 }} />}
             accentColor="#1D4ED8"
-            expanded={Boolean(expandedSections.domain6_physiotherapy)}
-            onToggleExpand={() => handleToggleExpand('domain6_physiotherapy')}
-            isActive={Boolean(activeSections.domain6_physiotherapy)}
-            onToggleActive={(act) => handleToggleActive('domain6_physiotherapy', act)}
+            expanded={Boolean(expandedSections.domain8_physiotherapy ?? expandedSections.domain6_physiotherapy)}
+            onToggleExpand={() => handleToggleExpand('domain8_physiotherapy')}
+            isActive={Boolean(activeSections.domain8_physiotherapy ?? activeSections.domain6_physiotherapy)}
+            onToggleActive={(act) => handleToggleActive('domain8_physiotherapy', act)}
             hasContent={prescriptions.some((p) => p.category === 'physio')}
             badge={
               prescriptions.filter((p) => p.category === 'physio').length > 0 ? (
@@ -2927,6 +3608,26 @@ export default function OrthoWorkstation() {
                     .map((p) => p.name || (p as any).title)
                     .join(' • ')
                 : 'Аппаратная физиотерапия не назначена'
+            }
+            headerActions={
+              <Tooltip title="Клинический справочник: Аппаратная физиотерапия EBM (HILT, УВТ, SIS, TECAR)">
+                <IconButton
+                  size="small"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleOpenGuidance('physiotherapy');
+                  }}
+                  sx={{
+                    color: '#1D4ED8',
+                    bgcolor: '#EFF6FF',
+                    p: 0.4,
+                    border: '1px solid #BFDBFE',
+                    '&:hover': { bgcolor: '#DBEAFE' }
+                  }}
+                >
+                  <InfoOutlinedIcon sx={{ fontSize: 16 }} />
+                </IconButton>
+              </Tooltip>
             }
           >
             <Typography variant="caption" sx={{ fontWeight: 700, color: '#475569', display: 'block', mb: 1 }}>
@@ -2963,6 +3664,7 @@ export default function OrthoWorkstation() {
                       if (prev.includes(item.rawTitle)) return prev;
                       return prev ? `${prev}\n• Физиотерапия: ${item.rawTitle}.` : `• Физиотерапия: ${item.rawTitle}.`;
                     });
+                    syncShablonAction(8, `Назначен курс: ${item.rawTitle}`, { price: item.price });
                     setToastMessage(`Назначен курс: ${item.rawTitle}`);
                   }}
                   sx={{ cursor: 'pointer', fontSize: '0.74rem', bgcolor: '#EFF6FF', borderColor: '#BFDBFE', border: '1px solid' }}
@@ -2986,7 +3688,10 @@ export default function OrthoWorkstation() {
                         color="primary"
                         onDelete={() => {
                           const idx = prescriptions.findIndex((x) => x.id === p.id);
-                          if (idx >= 0) handleRemovePrescription(idx);
+                          if (idx >= 0) {
+                            handleRemovePrescription(idx);
+                            syncShablonAction(8, 'Курс физиотерапии удален', { title: p.name || (p as any).title });
+                          }
                         }}
                         sx={{ fontWeight: 700, fontSize: '0.75rem' }}
                       />
@@ -2996,17 +3701,17 @@ export default function OrthoWorkstation() {
             )}
           </OrthoSandwichCard>
 
-          {/* 7. ОРТЕЗИРОВАНИЕ (ОРТОПЕДИЧЕСКИЕ ИЗДЕЛИЯ И РАЗГРУЗКА) */}
+          {/* 9. ОРТЕЗИРОВАНИЕ (ОРТОПЕДИЧЕСКИЕ ИЗДЕЛИЯ И РАЗГРУЗКА) */}
           <OrthoSandwichCard
-            id="domain7_orthotics"
-            title="7. Ортопедические изделия и средства разгрузки"
+            id="domain9_orthotics"
+            title="9. Ортопедические изделия и средства разгрузки"
             subtitle="Шарнирные ортезы ($\text{Flex} \le 90^\circ$, $\text{Ext} = 0^\circ$), туторы, режимы осевой нагрузки ($NWB = 0\%$, $TTWB = 5\text{–}10\%$, $PWB = 20\text{–}50\%$, $FWB = 100\%$)"
             icon={<ShieldIcon sx={{ fontSize: 20 }} />}
             accentColor="#7C3AED"
-            expanded={Boolean(expandedSections.domain7_orthotics)}
-            onToggleExpand={() => handleToggleExpand('domain7_orthotics')}
-            isActive={Boolean(activeSections.domain7_orthotics)}
-            onToggleActive={(act) => handleToggleActive('domain7_orthotics', act)}
+            expanded={Boolean(expandedSections.domain9_orthotics ?? expandedSections.domain7_orthotics)}
+            onToggleExpand={() => handleToggleExpand('domain9_orthotics')}
+            isActive={Boolean(activeSections.domain9_orthotics ?? activeSections.domain7_orthotics)}
+            onToggleActive={(act) => handleToggleActive('domain9_orthotics', act)}
             hasContent={Boolean(prescriptions.some((p) => p.category === 'orthotics') || weightBearingMode !== 'FWB')}
             badge={
               (() => {
@@ -3030,6 +3735,26 @@ export default function OrthoWorkstation() {
                   : 'Без ортеза'
               }`
             }
+            headerActions={
+              <Tooltip title="Клинический справочник: Ортезирование ISO, режимы осевой нагрузки (NWB–FWB)">
+                <IconButton
+                  size="small"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleOpenGuidance('orthotics');
+                  }}
+                  sx={{
+                    color: '#7C3AED',
+                    bgcolor: '#F5F3FF',
+                    p: 0.4,
+                    border: '1px solid #DDD6FE',
+                    '&:hover': { bgcolor: '#EDE9FE' }
+                  }}
+                >
+                  <InfoOutlinedIcon sx={{ fontSize: 16 }} />
+                </IconButton>
+              </Tooltip>
+            }
           >
             {/* Weight Bearing Mode Selector */}
             <Box sx={{ mb: 2 }}>
@@ -3039,7 +3764,12 @@ export default function OrthoWorkstation() {
               <ToggleButtonGroup
                 value={weightBearingMode}
                 exclusive
-                onChange={(_e, val: string | null) => val && setWeightBearingMode(val)}
+                onChange={(_e, val: string | null) => {
+                  if (val) {
+                    setWeightBearingMode(val);
+                    syncShablonAction(9, `Режим осевой нагрузки изменен: ${val}`, { weightBearingMode: val });
+                  }
+                }}
                 size="small"
                 fullWidth
               >
@@ -3099,6 +3829,7 @@ export default function OrthoWorkstation() {
                       if (prev.includes(item.rawTitle)) return prev;
                       return prev ? `${prev}\n• Ортезирование: ${item.rawTitle}.` : `• Ортезирование: ${item.rawTitle}.`;
                     });
+                    syncShablonAction(9, `Назначено изделие: ${item.rawTitle}`, { price: item.price });
                     setToastMessage(`Назначено ортопедическое изделие: ${item.rawTitle}`);
                   }}
                   sx={{ cursor: 'pointer', fontSize: '0.74rem', bgcolor: '#F5F3FF', borderColor: '#DDD6FE', border: '1px solid' }}
@@ -3122,7 +3853,10 @@ export default function OrthoWorkstation() {
                         sx={{ bgcolor: '#EDE9FE', color: '#6D28D9', fontWeight: 700, fontSize: '0.75rem', border: '1px solid #C4B5FD' }}
                         onDelete={() => {
                           const idx = prescriptions.findIndex((x) => x.id === p.id);
-                          if (idx >= 0) handleRemovePrescription(idx);
+                          if (idx >= 0) {
+                            handleRemovePrescription(idx);
+                            syncShablonAction(9, 'Ортопедическое изделие удалено', { title: p.name || (p as any).title });
+                          }
                         }}
                       />
                     ))}
@@ -3131,17 +3865,17 @@ export default function OrthoWorkstation() {
             )}
           </OrthoSandwichCard>
 
-          {/* 8. ЛЕЧЕБНАЯ ФИЗКУЛЬТУРА (ЛФК) И КИНЕЗИОТЕРАПИЯ */}
+          {/* 10. ЛЕЧЕБНАЯ ФИЗКУЛЬТУРА (ЛФК) И КИНЕЗИОТЕРАПИЯ */}
           <OrthoSandwichCard
-            id="domain8_lfk"
-            title="8. Лечебная физкультура (ЛФК) и кинезиотерапия"
+            id="domain10_lfk"
+            title="10. Лечебная физкультура (ЛФК), реабилитация и рекомендации"
             subtitle="Поэтапные комплексы (Фазы I–III), биомеханические цели, мониторинг боли по Silbernagel ($\text{ВАШ} \le 2$, $3 \le \text{ВАШ} \le 5$, $\text{ВАШ} \ge 6$)"
             icon={<DirectionsRunIcon sx={{ fontSize: 20 }} />}
             accentColor="#047857"
-            expanded={Boolean(expandedSections.domain8_lfk ?? expandedSections.recommendations)}
-            onToggleExpand={() => handleToggleExpand('domain8_lfk')}
-            isActive={Boolean(activeSections.domain8_lfk ?? activeSections.recommendations)}
-            onToggleActive={(act) => handleToggleActive('domain8_lfk', act)}
+            expanded={Boolean(expandedSections.domain10_lfk ?? expandedSections.domain8_lfk ?? expandedSections.recommendations)}
+            onToggleExpand={() => handleToggleExpand('domain10_lfk')}
+            isActive={Boolean(activeSections.domain10_lfk ?? activeSections.domain8_lfk ?? activeSections.recommendations)}
+            onToggleActive={(act) => handleToggleActive('domain10_lfk', act)}
             hasContent={Boolean(recommendations.trim() || prescriptions.length > 0)}
             badge={
               (() => {
@@ -3166,6 +3900,26 @@ export default function OrthoWorkstation() {
               })()
             }
             previewSnippet={`${recommendations.slice(0, 60)}... (${prescriptions.length} назначений всего)`}
+            headerActions={
+              <Tooltip title="Клинический справочник: Кинезиотерапия, упражнения Фазы I–III, шкала Silbernagel">
+                <IconButton
+                  size="small"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleOpenGuidance('lfk');
+                  }}
+                  sx={{
+                    color: '#047857',
+                    bgcolor: '#F0FDF4',
+                    p: 0.4,
+                    border: '1px solid #BBF7D0',
+                    '&:hover': { bgcolor: '#DCFCE7' }
+                  }}
+                >
+                  <InfoOutlinedIcon sx={{ fontSize: 16 }} />
+                </IconButton>
+              </Tooltip>
+            }
           >
             {/* Silbernagel Pain Scale Monitoring Bar */}
             <Box sx={{ p: 1.5, mb: 2, bgcolor: '#F8FAFC', borderRadius: 2, border: '1px solid #E2E8F0' }}>
@@ -3418,7 +4172,10 @@ export default function OrthoWorkstation() {
               multiline
               minRows={3}
               value={recommendations}
-              onChange={(e) => setRecommendations(e.target.value)}
+              onChange={(e) => {
+                setRecommendations(e.target.value);
+                syncShablonAction(10, 'Рекомендации и режим обновлены');
+              }}
               sx={{ mb: 2 }}
             />
 
@@ -3506,7 +4263,11 @@ export default function OrthoWorkstation() {
                             )}
                           </TableCell>
                           <TableCell align="center">
-                            <IconButton size="small" color="error" onClick={() => handleRemovePrescription(idx)}>
+                            <IconButton size="small" color="error" onClick={() => {
+                              const pItem = prescriptions[idx];
+                              handleRemovePrescription(idx);
+                              syncShablonAction(10, 'Назначение удалено из плана', { title: pItem?.name || (pItem as any)?.title });
+                            }}>
                               <DeleteIcon sx={{ fontSize: 18 }} />
                             </IconButton>
                           </TableCell>
@@ -3566,9 +4327,23 @@ export default function OrthoWorkstation() {
             <Box sx={{ flex: 1, overflow: 'hidden' }}>
               <OrthoProtocolPreview
                 data={assembledProtocolData}
+                highlightedPartition={highlightedPartition}
+                onReturnToDraft={() => setReturnToDraftModalOpen(true)}
                 onSign={() => handleSaveProtocol('signed')}
                 onTransferToCashier={handleTransferToCashier}
                 isSubmitting={saving}
+                integrityReport={integrityReport}
+                onJumpToPartition={(pNum) => {
+                  syncShablonAction(pNum, `Переход к разделу ${pNum} из аудита целостности`);
+                  const leftCardId = PARTITION_MAP.find(c => c.num === pNum)?.leftId;
+                  if (leftCardId) {
+                    const leftCard = document.getElementById(leftCardId);
+                    if (leftCard) {
+                      leftCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }
+                  }
+                }}
+                onScroll={handleRightScroll}
               />
             </Box>
           )}
@@ -4170,7 +4945,7 @@ export default function OrthoWorkstation() {
         }
         protocolId={protocolId}
         appointmentId={appointmentId}
-        doctorName="Добрушкин А.М"
+        doctorName={contextData?.doctor?.full_name || contextData?.appointment?.doctor_name || currentUser?.fullName || ''}
         defaultMkbCode={selectedMkb?.code || ''}
         defaultDiagnosis={clinicalDiagnosis || selectedMkb?.name || ''}
         targetJoint={selectedJoint ? selectedJoint.replace('_r', ' (правый)').replace('_l', ' (левый)') : ''}
@@ -4183,6 +4958,44 @@ export default function OrthoWorkstation() {
         }}
       />
 
+      {/* Модальное окно подтверждения отзыва подписи и возврата в черновик */}
+      <Dialog
+        open={returnToDraftModalOpen}
+        onClose={() => !saving && setReturnToDraftModalOpen(false)}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle sx={{ fontWeight: 800, color: '#0F3C64', display: 'flex', alignItems: 'center', gap: 1 }}>
+          <UndoIcon sx={{ color: '#D97706' }} /> Вернуть протокол в черновик?
+        </DialogTitle>
+        <DialogContent dividers>
+          <Typography variant="body2" sx={{ color: '#334155', mb: 1.5 }}>
+            Протокол имеет статус <strong>«Подписан ЭЦП»</strong>. При возврате в черновик:
+          </Typography>
+          <Box component="ul" sx={{ pl: 2, m: 0, '& li': { fontSize: '0.82rem', color: '#475569', mb: 0.5 } }}>
+            <li>Цифровая подпись (ЭЦП) и хэш целостности будут отозваны</li>
+            <li>Статус протокола изменится на <strong>«Черновик»</strong></li>
+            <li>Редактирование полей шаблона будет вновь разблокировано</li>
+            <li>Действие регистрируется в аудит-журнале Serilog (хранение 6 месяцев)</li>
+          </Box>
+        </DialogContent>
+        <DialogActions sx={{ px: 2.5, py: 1.5 }}>
+          <Button onClick={() => setReturnToDraftModalOpen(false)} disabled={saving}>
+            Отмена
+          </Button>
+          <Button
+            variant="contained"
+            color="warning"
+            startIcon={saving ? <CircularProgress size={16} color="inherit" /> : <UndoIcon />}
+            onClick={handleConfirmReturnToDraft}
+            disabled={saving}
+            sx={{ fontWeight: 800, bgcolor: '#D97706', '&:hover': { bgcolor: '#B45309' } }}
+          >
+            {saving ? 'Отзыв подписи...' : 'Отозвать ЭЦП и вернуть'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
       {/* Модальное окно поиска любого пациента из общей картотеки */}
       <FullPatientSearchModal
         open={fullPatientSearchOpen}
@@ -4192,6 +5005,271 @@ export default function OrthoWorkstation() {
           navigate(`/ortho-workstation?patientId=${pt.id}`);
         }}
       />
+
+      {/* Клинический справочник рекомендаций EBM с прямой привязкой к разделам */}
+      <ClinicalGuidanceModal
+        open={guidanceModalOpen}
+        onClose={() => setGuidanceModalOpen(false)}
+        initialSection={guidanceSection}
+        jointCategory={selectedJoint}
+      />
+
+      {/* Модальное окно онлайн-проверки целостности и полноты протокола */}
+      <Dialog
+        open={integrityDrawerOpen}
+        onClose={() => setIntegrityDrawerOpen(false)}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle
+          sx={{
+            fontWeight: 800,
+            color: '#0F3C64',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            bgcolor: '#F8FAFC',
+            borderBottom: '1px solid #E2E8F0',
+            py: 1.5,
+            px: 3
+          }}
+        >
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.2 }}>
+            <ShieldIcon sx={{ fontSize: 24, color: integrityReport.criticalErrors.length === 0 ? '#16A34A' : '#DC2626' }} />
+            <Typography variant="h6" sx={{ fontWeight: 800, color: '#0F3C64', fontSize: '1.1rem' }}>
+              Аудит клинической целостности протокола
+            </Typography>
+          </Box>
+          <Chip
+            label={`Готовность: ${integrityReport.score}%`}
+            size="small"
+            sx={{
+              fontWeight: 800,
+              fontSize: '0.82rem',
+              bgcolor: integrityReport.criticalErrors.length === 0 ? '#DCFCE7' : '#FEE2E2',
+              color: integrityReport.criticalErrors.length === 0 ? '#166534' : '#991B1B',
+              border: '1px solid currentColor',
+              px: 0.5
+            }}
+          />
+        </DialogTitle>
+        <DialogContent sx={{ p: 3 }}>
+          <Box sx={{ mb: 3 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.8 }}>
+              <Typography variant="subtitle2" sx={{ fontWeight: 700, color: '#334155' }}>
+                Полнота заполнения карты: {integrityReport.score}%
+              </Typography>
+              <Typography variant="caption" sx={{ color: integrityReport.criticalErrors.length === 0 ? '#16A34A' : '#DC2626', fontWeight: 600 }}>
+                {integrityReport.criticalErrors.length === 0 ? 'Все обязательные поля заполнены ✓' : 'Требуется устранить критические замечания'}
+              </Typography>
+            </Box>
+            <LinearProgress
+              variant="determinate"
+              value={integrityReport.score}
+              sx={{
+                height: 10,
+                borderRadius: 5,
+                bgcolor: '#E2E8F0',
+                '& .MuiLinearProgress-bar': {
+                  borderRadius: 5,
+                  bgcolor: integrityReport.criticalErrors.length === 0 ? '#16A34A' : integrityReport.score >= 50 ? '#D97706' : '#DC2626'
+                }
+              }}
+            />
+          </Box>
+
+          {/* Critical Errors */}
+          {integrityReport.criticalErrors.length > 0 && (
+            <Box sx={{ mb: 3 }}>
+              <Typography variant="subtitle2" sx={{ fontWeight: 800, color: '#B91C1C', mb: 1.2, display: 'flex', alignItems: 'center', gap: 0.8 }}>
+                <ErrorIcon sx={{ fontSize: 18 }} />
+                Критические ошибки (необходимы для подписания ЭЦП): {integrityReport.criticalErrors.length}
+              </Typography>
+              <Box sx={{ bgcolor: '#FEF2F2', borderRadius: 2.5, border: '1px solid #FECACA', overflow: 'hidden' }}>
+                {integrityReport.criticalErrors.map((err, i) => (
+                  <Box
+                    key={err.id || i}
+                    sx={{
+                      display: 'flex',
+                      flexDirection: { xs: 'column', sm: 'row' },
+                      alignItems: { xs: 'flex-start', sm: 'center' },
+                      justifyContent: 'space-between',
+                      gap: 2,
+                      p: 1.8,
+                      borderBottom: i < integrityReport.criticalErrors.length - 1 ? '1px solid #FEE2E2' : 'none',
+                      transition: 'background-color 0.15s ease',
+                      '&:hover': { bgcolor: 'rgba(220, 38, 38, 0.04)' }
+                    }}
+                  >
+                    <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5, flex: 1, minWidth: 0 }}>
+                      <ErrorIcon sx={{ color: '#DC2626', fontSize: 20, mt: 0.2, flexShrink: 0 }} />
+                      <Box sx={{ minWidth: 0, flex: 1 }}>
+                        <Typography variant="body2" sx={{ fontWeight: 700, color: '#991B1B', lineHeight: 1.3 }}>
+                          Раздел {err.partition}. {err.title}
+                        </Typography>
+                        <Typography variant="body2" sx={{ color: '#7F1D1D', fontSize: '0.82rem', mt: 0.4, lineHeight: 1.45 }}>
+                          {err.message}
+                        </Typography>
+                      </Box>
+                    </Box>
+                    <Button
+                      size="small"
+                      variant="contained"
+                      onClick={() => {
+                        setIntegrityDrawerOpen(false);
+                        syncShablonAction(err.partition, `Переход к разделу ${err.partition}`);
+                        const leftCardId = PARTITION_MAP.find(c => c.num === err.partition)?.leftId;
+                        if (leftCardId) {
+                          const leftCard = document.getElementById(leftCardId);
+                          if (leftCard) leftCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        }
+                      }}
+                      sx={{
+                        flexShrink: 0,
+                        whiteSpace: 'nowrap',
+                        fontSize: '0.78rem',
+                        fontWeight: 700,
+                        bgcolor: '#DC2626',
+                        '&:hover': { bgcolor: '#B91C1C' },
+                        textTransform: 'none',
+                        px: 2,
+                        py: 0.6,
+                        borderRadius: 2,
+                        alignSelf: { xs: 'stretch', sm: 'center' },
+                        textAlign: 'center',
+                        boxShadow: 'none'
+                      }}
+                    >
+                      {err.actionText} →
+                    </Button>
+                  </Box>
+                ))}
+              </Box>
+            </Box>
+          )}
+
+          {/* Warnings */}
+          {integrityReport.warnings.length > 0 && (
+            <Box sx={{ mb: 3 }}>
+              <Typography variant="subtitle2" sx={{ fontWeight: 800, color: '#B45309', mb: 1.2, display: 'flex', alignItems: 'center', gap: 0.8 }}>
+                <WarningAmberIcon sx={{ fontSize: 18 }} />
+                Рекомендации и клинические замечания (EBM): {integrityReport.warnings.length}
+              </Typography>
+              <Box sx={{ bgcolor: '#FFFBEB', borderRadius: 2.5, border: '1px solid #FDE68A', overflow: 'hidden' }}>
+                {integrityReport.warnings.map((warn, i) => (
+                  <Box
+                    key={warn.id || i}
+                    sx={{
+                      display: 'flex',
+                      flexDirection: { xs: 'column', sm: 'row' },
+                      alignItems: { xs: 'flex-start', sm: 'center' },
+                      justifyContent: 'space-between',
+                      gap: 2,
+                      p: 1.8,
+                      borderBottom: i < integrityReport.warnings.length - 1 ? '1px solid #FEF3C7' : 'none',
+                      transition: 'background-color 0.15s ease',
+                      '&:hover': { bgcolor: 'rgba(245, 158, 11, 0.08)' }
+                    }}
+                  >
+                    <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5, flex: 1, minWidth: 0 }}>
+                      <WarningAmberIcon sx={{ color: '#D97706', fontSize: 20, mt: 0.2, flexShrink: 0 }} />
+                      <Box sx={{ minWidth: 0, flex: 1 }}>
+                        <Typography variant="body2" sx={{ fontWeight: 700, color: '#92400E', lineHeight: 1.3 }}>
+                          Раздел {warn.partition}. {warn.title}
+                        </Typography>
+                        <Typography variant="body2" sx={{ color: '#78350F', fontSize: '0.82rem', mt: 0.4, lineHeight: 1.45 }}>
+                          {warn.message}
+                        </Typography>
+                      </Box>
+                    </Box>
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      color="warning"
+                      onClick={() => {
+                        setIntegrityDrawerOpen(false);
+                        syncShablonAction(warn.partition, `Переход к разделу ${warn.partition}`);
+                        const leftCardId = PARTITION_MAP.find(c => c.num === warn.partition)?.leftId;
+                        if (leftCardId) {
+                          const leftCard = document.getElementById(leftCardId);
+                          if (leftCard) leftCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        }
+                      }}
+                      sx={{
+                        flexShrink: 0,
+                        whiteSpace: 'nowrap',
+                        fontSize: '0.78rem',
+                        fontWeight: 700,
+                        textTransform: 'none',
+                        px: 2,
+                        py: 0.6,
+                        borderRadius: 2,
+                        alignSelf: { xs: 'stretch', sm: 'center' },
+                        textAlign: 'center',
+                        bgcolor: '#FFFFFF',
+                        borderWidth: '1.5px',
+                        borderColor: '#F59E0B',
+                        color: '#B45309',
+                        '&:hover': { borderWidth: '1.5px', bgcolor: '#FEF3C7', borderColor: '#D97706' }
+                      }}
+                    >
+                      {warn.actionText} →
+                    </Button>
+                  </Box>
+                ))}
+              </Box>
+            </Box>
+          )}
+
+          {/* Completed validated items */}
+          {integrityReport.passedChecks.length > 0 && (
+            <Box sx={{ bgcolor: '#F8FAFC', p: 2, borderRadius: 2.5, border: '1px solid #E2E8F0' }}>
+              <Typography variant="subtitle2" sx={{ fontWeight: 800, color: '#15803D', mb: 1.2, display: 'flex', alignItems: 'center', gap: 0.8 }}>
+                <CheckCircleIcon sx={{ fontSize: 18 }} />
+                Корректно заполненные разделы: {integrityReport.passedChecks.length}
+              </Typography>
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.8 }}>
+                {integrityReport.passedChecks.map((check) => (
+                  <Chip
+                    key={check.id}
+                    icon={<CheckCircleIcon sx={{ fontSize: '14px !important', color: '#16A34A' }} />}
+                    label={check.title}
+                    size="small"
+                    sx={{
+                      bgcolor: '#F0FDF4',
+                      color: '#166534',
+                      border: '1px solid #BBF7D0',
+                      fontSize: '0.75rem',
+                      fontWeight: 600,
+                      py: 0.5
+                    }}
+                  />
+                ))}
+              </Box>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ px: 3, py: 1.8, borderTop: '1px solid #E2E8F0', bgcolor: '#F8FAFC', justifyContent: 'space-between' }}>
+          <Typography variant="caption" sx={{ color: '#64748B', fontSize: '0.8rem' }}>
+            Обновляется автоматически в реальном времени при любом изменении шаблона.
+          </Typography>
+          <Button
+            variant="contained"
+            onClick={() => setIntegrityDrawerOpen(false)}
+            sx={{
+              fontWeight: 700,
+              bgcolor: '#0F3C64',
+              color: 'white',
+              px: 3,
+              borderRadius: 2,
+              textTransform: 'none',
+              '&:hover': { bgcolor: '#0A2540' }
+            }}
+          >
+            Закрыть
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }

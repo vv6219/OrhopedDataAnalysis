@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Box,
   Typography,
@@ -20,7 +20,12 @@ import {
   DialogActions,
   Alert,
   Snackbar,
-  InputAdornment
+  InputAdornment,
+  Tabs,
+  Tab,
+  Menu,
+  Checkbox,
+  FormControlLabel
 } from '@mui/material';
 import {
   DataGrid,
@@ -42,10 +47,17 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import MedicalServicesIcon from '@mui/icons-material/MedicalServices';
 import AssignmentIcon from '@mui/icons-material/Assignment';
 import CloseIcon from '@mui/icons-material/Close';
+import PersonAddAlt1Icon from '@mui/icons-material/PersonAddAlt1';
+import LockIcon from '@mui/icons-material/Lock';
+import UndoIcon from '@mui/icons-material/Undo';
+import DeleteIcon from '@mui/icons-material/Delete';
+import DescriptionIcon from '@mui/icons-material/Description';
 import { useReactToPrint } from 'react-to-print';
 import { API_BASE_URL } from '../config/apiConfig';
+import { useAuth } from '../context/AuthContext';
 import OrthoProtocolPrintTemplate from '../components/reports/OrthoProtocolPrintTemplate';
 import type { OrthoProtocolData } from '../components/reports/OrthoProtocolPrintTemplate';
+import OrthoReferralPrintTemplate, { type OrthoReferralData } from '../components/reports/OrthoReferralPrintTemplate';
 import IssueReferralModal from '../components/ortho/IssueReferralModal';
 import { parseProtocolContent, stripProtocolXml } from '../utils/protocolXmlParser';
 
@@ -75,6 +87,15 @@ export interface ProtocolRow {
   mkb_name?: string;
   prescriptions_count?: number;
   total_prescriptions_amount?: number;
+  referrals_count?: number;
+  granted_doctors?: string;
+  granted_doctor_ids?: string;
+  is_owner?: boolean;
+  is_granted?: boolean;
+  can_edit?: boolean;
+  can_delete?: boolean;
+  can_return_to_draft?: boolean;
+  can_grant_access?: boolean;
 }
 
 // Module-level stable Custom Toolbar (per grid-improvements skill)
@@ -98,13 +119,17 @@ function ProtocolsCustomFooter({
   signedCount,
   draftCount,
   revokedCount,
-  totalPrescriptionsSum
+  totalPrescriptionsSum,
+  selectedStatus,
+  onFilterDrafts
 }: {
   totalCount: number;
   signedCount: number;
   draftCount: number;
   revokedCount: number;
   totalPrescriptionsSum: number;
+  selectedStatus?: string;
+  onFilterDrafts?: () => void;
 }) {
   return (
     <Box
@@ -128,11 +153,25 @@ function ProtocolsCustomFooter({
           label={`Подписано ЭЦП: ${signedCount}`}
           sx={{ bgcolor: '#DCFCE7', color: '#166534', fontWeight: 700 }}
         />
-        <Chip
-          size="small"
-          label={`Черновиков: ${draftCount}`}
-          sx={{ bgcolor: '#FEF3C7', color: '#92400E', fontWeight: 700 }}
-        />
+        <Tooltip title="Нажмите, чтобы отфильтровать только черновики для завершения приема">
+          <Chip
+            size="small"
+            clickable={Boolean(onFilterDrafts)}
+            onClick={onFilterDrafts}
+            icon={<MedicalServicesIcon sx={{ fontSize: '13px !important', color: selectedStatus === 'draft' ? '#FFFFFF !important' : '#92400E !important' }} />}
+            label={`Черновиков: ${draftCount}`}
+            sx={{
+              bgcolor: selectedStatus === 'draft' ? '#D97706' : '#FEF3C7',
+              color: selectedStatus === 'draft' ? '#FFFFFF' : '#92400E',
+              fontWeight: 800,
+              cursor: onFilterDrafts ? 'pointer' : 'default',
+              border: '1px solid',
+              borderColor: selectedStatus === 'draft' ? '#B45309' : '#FCD34D',
+              boxShadow: selectedStatus === 'draft' ? '0 2px 5px rgba(217, 119, 6, 0.3)' : 'none',
+              '&:hover': onFilterDrafts ? { bgcolor: selectedStatus === 'draft' ? '#B45309' : '#FDE68A' } : {}
+            }}
+          />
+        </Tooltip>
         {revokedCount > 0 && (
           <Chip
             size="small"
@@ -155,6 +194,11 @@ function ProtocolsCustomFooter({
 
 export default function ProtocolsRegistry() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { currentUser, hasPermission } = useAuth();
+
+  const isSysadmin = hasPermission('sysadmin') || currentUser?.role === 'sysadmin';
+  const isAdministrator = hasPermission('administrator') || currentUser?.role === 'admin' || currentUser?.role === 'administrator';
 
   // Registry state
   const [rows, setRows] = useState<ProtocolRow[]>([]);
@@ -164,10 +208,15 @@ export default function ProtocolsRegistry() {
   const [pageSize, setPageSize] = useState(25);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
+  // Doctors list for filtering and access grant
+  const [doctorsList, setDoctorsList] = useState<Array<{ id: number; full_name: string; specialization?: string }>>([]);
+  const [selectedDoctorId, setSelectedDoctorId] = useState<string>('');
+
   // Search & Filter State
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, setSearchTerm] = useState(searchParams.get('search') || '');
   const [selectedJoint, setSelectedJoint] = useState('');
-  const [selectedStatus, setSelectedStatus] = useState('');
+  const [selectedStatus, setSelectedStatus] = useState(searchParams.get('status') || '');
+  const [patientIdFilter, setPatientIdFilter] = useState(searchParams.get('patientId') || '');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
 
@@ -175,6 +224,38 @@ export default function ProtocolsRegistry() {
   const [selectedProtocol, setSelectedProtocol] = useState<ProtocolRow | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerPrescriptions, setDrawerPrescriptions] = useState<any[]>([]);
+
+  // Grant Access Dialog State (Administrator / Sysadmin)
+  const [grantModalOpen, setGrantModalOpen] = useState(false);
+  const [grantProtocol, setGrantProtocol] = useState<ProtocolRow | null>(null);
+  const [targetDoctorId, setTargetDoctorId] = useState<number | ''>('');
+  const [grantReason, setGrantReason] = useState('');
+  const [grantConfirmed, setGrantConfirmed] = useState(false);
+  const [grantLoading, setGrantLoading] = useState(false);
+
+  // Return to Draft Dialog State (Sysadmin only)
+  const [returnDraftModalOpen, setReturnDraftModalOpen] = useState(false);
+  const [protocolToReturn, setProtocolToReturn] = useState<ProtocolRow | null>(null);
+  const [returnDraftReason, setReturnDraftReason] = useState('Исправление клинических данных');
+  const [returnDraftLoading, setReturnDraftLoading] = useState(false);
+
+  // Print Menu & Bundled Referrals State
+  const [printMenuAnchor, setPrintMenuAnchor] = useState<null | HTMLElement>(null);
+  const [printTargetRow, setPrintTargetRow] = useState<ProtocolRow | null>(null);
+  const [bundledReferrals, setBundledReferrals] = useState<OrthoReferralData[]>([]);
+  const [printWithReferrals, setPrintWithReferrals] = useState(false);
+
+  // Load doctors catalog for filters & grant
+  useEffect(() => {
+    fetch(`${API_BASE_URL}/api/ortho/doctors`)
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.success && Array.isArray(d.doctors)) {
+          setDoctorsList(d.doctors);
+        }
+      })
+      .catch((err) => console.error('Error fetching doctors:', err));
+  }, []);
 
   useEffect(() => {
     if (!selectedProtocol) {
@@ -264,7 +345,7 @@ export default function ProtocolsRegistry() {
     }
   };
 
-  // Print ref for Drawer Preview
+  // Print ref for Drawer & Direct Print
   const printRef = useRef<HTMLDivElement>(null);
   const handlePrintTrigger = useReactToPrint({
     contentRef: printRef,
@@ -283,7 +364,7 @@ export default function ProtocolsRegistry() {
     `
   });
 
-  // Fetch Protocols with FTS5 and Filters
+  // Fetch Protocols with FTS5, Filters, and RBAC
   const fetchProtocols = useCallback(async () => {
     setLoading(true);
     try {
@@ -297,6 +378,8 @@ export default function ProtocolsRegistry() {
       if (searchTerm.trim()) params.append('search', searchTerm.trim());
       if (selectedJoint) params.append('joint', selectedJoint);
       if (selectedStatus) params.append('status', selectedStatus);
+      if (selectedDoctorId) params.append('doctorId', selectedDoctorId);
+      if (patientIdFilter) params.append('patientId', patientIdFilter);
       if (startDate) params.append('startDate', startDate);
       if (endDate) params.append('endDate', endDate);
 
@@ -314,7 +397,7 @@ export default function ProtocolsRegistry() {
     } finally {
       setLoading(false);
     }
-  }, [page, pageSize, searchTerm, selectedJoint, selectedStatus, startDate, endDate]);
+  }, [page, pageSize, searchTerm, selectedJoint, selectedStatus, selectedDoctorId, patientIdFilter, startDate, endDate]);
 
   useEffect(() => {
     fetchProtocols();
@@ -324,23 +407,21 @@ export default function ProtocolsRegistry() {
     setSearchTerm('');
     setSelectedJoint('');
     setSelectedStatus('');
+    setSelectedDoctorId('');
+    setPatientIdFilter('');
     setStartDate('');
     setEndDate('');
     setPage(0);
+    setSearchParams({});
   };
 
-  // Revoke protocol action
+  // Revoke / Delete protocol action
   const handleConfirmRevoke = async () => {
     if (!protocolToRevoke) return;
     setRevoking(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/api/ortho/revoke`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          protocolId: protocolToRevoke.id,
-          reason: revocationReason.trim() || 'Аннулировано врачом'
-        })
+      const res = await fetch(`${API_BASE_URL}/api/ortho/protocols/${protocolToRevoke.id}`, {
+        method: 'DELETE'
       });
       const data = await res.json();
       if (!data.success) throw new Error(data.error);
@@ -355,6 +436,146 @@ export default function ProtocolsRegistry() {
     } finally {
       setRevoking(false);
     }
+  };
+
+  // Grant Access action (Admin / Sysadmin)
+  const handleConfirmGrantAccess = async () => {
+    if (!grantProtocol || !targetDoctorId || !grantReason.trim() || !grantConfirmed) return;
+    setGrantLoading(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/ortho/protocols/${grantProtocol.id}/grant-access`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          doctorId: targetDoctorId,
+          reason: grantReason.trim()
+        })
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error);
+
+      setToastMessage(data.message || 'Доступ врачу успешно предоставлен');
+      setGrantModalOpen(false);
+      setGrantProtocol(null);
+      setTargetDoctorId('');
+      setGrantReason('');
+      setGrantConfirmed(false);
+      fetchProtocols();
+    } catch (err: any) {
+      setToastMessage(`Ошибка: ${err.message}`);
+    } finally {
+      setGrantLoading(false);
+    }
+  };
+
+  // Return to Draft action (Sysadmin only)
+  const handleConfirmReturnToDraft = async () => {
+    if (!protocolToReturn) return;
+    setReturnDraftLoading(true);
+    try {
+      const token = localStorage.getItem('ortho_auth_token');
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
+      const res = await fetch(`${API_BASE_URL}/api/ortho/return-to-draft`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          protocolId: protocolToReturn.id,
+          reason: returnDraftReason.trim() || 'Возврат для редактирования системным администратором'
+        })
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.success) {
+        throw new Error(data?.error || `Ошибка сервера (${res.status})`);
+      }
+
+      setToastMessage(data.message || 'Протокол успешно возвращен в статус «Черновик»');
+      setReturnDraftModalOpen(false);
+      setProtocolToReturn(null);
+      setReturnDraftReason('Исправление клинических данных');
+      fetchProtocols();
+    } catch (err: any) {
+      setToastMessage(`Ошибка: ${err.message}`);
+    } finally {
+      setReturnDraftLoading(false);
+    }
+  };
+
+  // Print Protocol Only
+  const handlePrintProtocolOnly = (row: ProtocolRow) => {
+    setPrintMenuAnchor(null);
+    setPrintWithReferrals(false);
+    setSelectedProtocol(row);
+    setBundledReferrals([]);
+    setTimeout(() => {
+      handlePrintTrigger();
+      fetch(`${API_BASE_URL}/api/ortho/protocols/${row.id}/log-print`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ withReferrals: false })
+      }).catch(() => {});
+    }, 150);
+  };
+
+  // Print Protocol with bundled Referrals
+  const handlePrintProtocolWithReferrals = async (row: ProtocolRow) => {
+    setPrintMenuAnchor(null);
+    setSelectedProtocol(row);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/ortho/protocols/${row.id}/referrals`);
+      const data = await res.json();
+      if (data.success && Array.isArray(data.rows) && data.rows.length > 0) {
+        setBundledReferrals(
+          data.rows.map((r: any) => ({
+            id: r.id,
+            referral_number: r.referral_number,
+            issue_date: r.issue_date,
+            valid_days: r.valid_days,
+            expires_at: r.expires_at,
+            doctor_name: r.doctor_name,
+            performer_id: r.performer_id,
+            performer_name: r.performer_name,
+            performer_is_internal: r.performer_is_internal,
+            performer_address: r.performer_address,
+            patient: {
+              id: r.patient_id,
+              fullName: r.patient_name || row.patient_name,
+              birthDate: r.patient_birth_date || row.patient_bdate,
+              phone: r.patient_phone || row.patient_phone,
+              cardNum: String(row.patient_mednum || '')
+            },
+            icd10_code: r.icd10_code,
+            icd10_name: r.icd10_name,
+            clinical_diagnosis: r.clinical_diagnosis,
+            target_joint: r.target_joint,
+            target_side: r.target_side,
+            anamnesis_summary: r.anamnesis_summary,
+            preparation_instructions: r.preparation_instructions,
+            special_notes: r.special_notes,
+            items: r.items || []
+          }))
+        );
+        setPrintWithReferrals(true);
+      } else {
+        setBundledReferrals([]);
+        setPrintWithReferrals(false);
+        setToastMessage('У данного протокола нет прикрепленных направлений. Печатается стандартный протокол.');
+      }
+    } catch {
+      setBundledReferrals([]);
+      setPrintWithReferrals(false);
+    }
+    setTimeout(() => {
+      handlePrintTrigger();
+      fetch(`${API_BASE_URL}/api/ortho/protocols/${row.id}/log-print`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ withReferrals: true })
+      }).catch(() => {});
+    }, 200);
   };
 
   // Format Assembled Print Data for Drawer
@@ -373,7 +594,9 @@ export default function ProtocolsRegistry() {
     return {
       protocolNumber: selectedProtocol.id,
       visitDate: selectedProtocol.vdate,
-      doctorName: selectedProtocol.doctor_name || 'Добрушкин Александр Моисеевич',
+      doctorName: selectedProtocol.doctor_name || '',
+      doctorRole: (selectedProtocol as any).doctor_role,
+      doctorSpecialization: (selectedProtocol as any).doctor_specialization,
       patient: {
         id: selectedProtocol.pt_id,
         fullName: selectedProtocol.patient_name,
@@ -461,6 +684,77 @@ export default function ProtocolsRegistry() {
               {row.patient_phone ? `• Тел: ${row.patient_phone}` : ''}
               {row.patient_mednum ? ` • Карта: #${row.patient_mednum}` : ''}
             </Typography>
+            {row.status === 'draft' && (
+              <Tooltip title={`Нажмите для перехода в АРМ врача: ${row.patient_name} (протокол #${row.id})`}>
+                <Chip
+                  icon={<MedicalServicesIcon sx={{ fontSize: '12px !important', color: '#92400E !important' }} />}
+                  label="Черновик приема • В АРМ"
+                  size="small"
+                  clickable
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    navigate(`/ortho-workstation?protocolId=${row.id}&patientId=${row.pt_id}`);
+                  }}
+                  sx={{
+                    mt: 0.5,
+                    height: 20,
+                    fontSize: '0.68rem',
+                    fontWeight: 800,
+                    bgcolor: '#FEF3C7',
+                    color: '#92400E',
+                    border: '1px solid #FCD34D',
+                    cursor: 'pointer',
+                    '&:hover': {
+                      bgcolor: '#FDE68A',
+                      borderColor: '#F59E0B',
+                      boxShadow: '0 2px 4px rgba(245, 158, 11, 0.25)'
+                    }
+                  }}
+                />
+              </Tooltip>
+            )}
+          </Box>
+        );
+      }
+    },
+    {
+      field: 'doctor_name',
+      headerName: 'Врач / Доступ',
+      flex: 1.4,
+      minWidth: 160,
+      renderCell: (params) => {
+        const row = params.row as ProtocolRow;
+        const grantedList = row.granted_doctors ? row.granted_doctors.split('|||').filter(Boolean) : [];
+        return (
+          <Box sx={{ whiteSpace: 'normal', wordBreak: 'break-word', lineHeight: 1.35, py: 1 }}>
+            <Typography variant="body2" sx={{ fontWeight: 700, color: '#0F3C64' }}>
+              {row.doctor_name || 'Врач клиники'}
+            </Typography>
+            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.3 }}>
+              {row.is_owner && (
+                <Chip
+                  size="small"
+                  label="Автор"
+                  sx={{ bgcolor: '#EFF6FF', color: '#1D4ED8', fontSize: '0.68rem', height: 18, fontWeight: 700 }}
+                />
+              )}
+              {row.is_granted && (
+                <Chip
+                  size="small"
+                  label="Вам открыт доступ"
+                  sx={{ bgcolor: '#DCFCE7', color: '#15803D', fontSize: '0.68rem', height: 18, fontWeight: 700 }}
+                />
+              )}
+              {grantedList.length > 0 && (
+                <Tooltip title={`Доступ предоставлен врачам: ${grantedList.join(', ')}`}>
+                  <Chip
+                    size="small"
+                    label={`+${grantedList.length} врачам доступ`}
+                    sx={{ bgcolor: '#F1F5F9', color: '#475569', fontSize: '0.68rem', height: 18 }}
+                  />
+                </Tooltip>
+              )}
+            </Box>
           </Box>
         );
       }
@@ -546,11 +840,12 @@ export default function ProtocolsRegistry() {
     {
       field: 'status',
       headerName: 'Статус',
-      width: 140,
+      width: 155,
       align: 'center',
       headerAlign: 'center',
       renderCell: (params) => {
         const st = params.value;
+        const row = params.row as ProtocolRow;
         if (st === 'signed') {
           return (
             <Chip
@@ -574,11 +869,33 @@ export default function ProtocolsRegistry() {
           );
         }
         return (
-          <Chip
-            label="Черновик"
-            size="small"
-            sx={{ bgcolor: '#FEF3C7', color: '#92400E', fontWeight: 700, fontSize: '0.72rem' }}
-          />
+          <Tooltip title={`Перейти в АРМ врача и продолжить оформление черновика (${row.patient_name || 'Пациент'})`}>
+            <Chip
+              icon={<MedicalServicesIcon sx={{ fontSize: '14px !important', color: '#92400E !important' }} />}
+              label="Черновик • В АРМ"
+              size="small"
+              clickable
+              onClick={(e) => {
+                e.stopPropagation();
+                navigate(`/ortho-workstation?protocolId=${row.id}&patientId=${row.pt_id}`);
+              }}
+              sx={{
+                bgcolor: '#FEF3C7',
+                color: '#92400E',
+                fontWeight: 800,
+                fontSize: '0.72rem',
+                border: '1px solid #FCD34D',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+                '&:hover': {
+                  bgcolor: '#FDE68A',
+                  borderColor: '#F59E0B',
+                  boxShadow: '0 2px 6px rgba(245, 158, 11, 0.25)',
+                  transform: 'translateY(-1px)'
+                }
+              }}
+            />
+          </Tooltip>
         );
       }
     },
@@ -608,7 +925,7 @@ export default function ProtocolsRegistry() {
     {
       field: 'actions',
       headerName: 'Действия',
-      width: 200,
+      width: 290,
       sortable: false,
       filterable: false,
       align: 'center',
@@ -616,17 +933,58 @@ export default function ProtocolsRegistry() {
       renderCell: (params) => {
         const row = params.row as ProtocolRow;
         return (
-          <Box sx={{ display: 'flex', gap: 0.5, py: 1 }}>
-            <Tooltip title="Открыть в АРМ Врача">
-              <IconButton
-                size="small"
-                onClick={() => navigate(`/ortho-workstation?protocolId=${row.id}&patientId=${row.pt_id}`)}
-                sx={{ color: '#0F3C64' }}
-              >
-                <EditNoteIcon fontSize="small" />
-              </IconButton>
-            </Tooltip>
-            <Tooltip title="Быстрый просмотр и печать протокола">
+          <Box sx={{ display: 'flex', gap: 0.5, py: 1, alignItems: 'center', justifyContent: 'center' }}>
+            {/* Direct button to ARM Workstation for Drafts */}
+            {row.status === 'draft' ? (
+              <Tooltip title={`Продолжить прием в АРМ Врача: ${row.patient_name} (Протокол #${row.id})`}>
+                <Button
+                  size="small"
+                  variant="contained"
+                  startIcon={<MedicalServicesIcon sx={{ fontSize: '15px !important' }} />}
+                  onClick={() => navigate(`/ortho-workstation?protocolId=${row.id}&patientId=${row.pt_id}`)}
+                  sx={{
+                    bgcolor: '#0F3C64',
+                    color: '#FFFFFF',
+                    fontSize: '0.72rem',
+                    fontWeight: 800,
+                    py: 0.35,
+                    px: 1.1,
+                    minWidth: 'auto',
+                    textTransform: 'none',
+                    borderRadius: 1.5,
+                    whiteSpace: 'nowrap',
+                    boxShadow: '0 1px 3px rgba(15, 60, 100, 0.25)',
+                    '&:hover': {
+                      bgcolor: '#0284C7',
+                      boxShadow: '0 2px 6px rgba(2, 132, 199, 0.35)'
+                    }
+                  }}
+                >
+                  В АРМ
+                </Button>
+              </Tooltip>
+            ) : row.can_edit ? (
+              <Tooltip title="Редактировать подписанный протокол (права sysadmin)">
+                <IconButton
+                  size="small"
+                  onClick={() => navigate(`/ortho-workstation?protocolId=${row.id}&patientId=${row.pt_id}`)}
+                  sx={{ color: '#7C3AED' }}
+                >
+                  <EditNoteIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            ) : (
+              <Tooltip title="Протокол подписан ЭЦП (readonly). Изменения разрешены только системному администратору (sysadmin)">
+                <span>
+                  <IconButton size="small" disabled sx={{ color: '#94A3B8' }}>
+                    <LockIcon fontSize="small" />
+                  </IconButton>
+                </span>
+              </Tooltip>
+            )}
+
+            {/* Quick view */}
+            <Tooltip title="Быстрый просмотр протокола">
               <IconButton
                 size="small"
                 onClick={() => {
@@ -638,6 +996,22 @@ export default function ProtocolsRegistry() {
                 <VisibilityIcon fontSize="small" />
               </IconButton>
             </Tooltip>
+
+            {/* Print Menu Trigger */}
+            <Tooltip title="Печать протокола / Печать с направлениями">
+              <IconButton
+                size="small"
+                onClick={(e) => {
+                  setPrintTargetRow(row);
+                  setPrintMenuAnchor(e.currentTarget);
+                }}
+                sx={{ color: '#059669' }}
+              >
+                <PrintIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+
+            {/* Issue Referral */}
             <Tooltip title="Выписать / Печать Направления для пациента (на бланке Центра, 90 дней)">
               <IconButton
                 size="small"
@@ -647,17 +1021,55 @@ export default function ProtocolsRegistry() {
                 <AssignmentIcon fontSize="small" />
               </IconButton>
             </Tooltip>
-            {row.status === 'signed' && (
-              <Tooltip title="Аннулировать протокол">
+
+            {/* Grant Access (Admin / Sysadmin) */}
+            {row.can_grant_access && (
+              <Tooltip title="Предоставить доступ врачу к этому протоколу">
+                <IconButton
+                  size="small"
+                  onClick={() => {
+                    setGrantProtocol(row);
+                    setTargetDoctorId('');
+                    setGrantReason('Клинический консилиум / совместное ведение');
+                    setGrantConfirmed(false);
+                    setGrantModalOpen(true);
+                  }}
+                  sx={{ color: '#D97706' }}
+                >
+                  <PersonAddAlt1Icon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            )}
+
+            {/* Return to Draft (Sysadmin only for signed) */}
+            {isSysadmin && row.status === 'signed' && (
+              <Tooltip title="Снять подпись ЭЦП и вернуть в Черновик (права sysadmin)">
+                <IconButton
+                  size="small"
+                  onClick={() => {
+                    setProtocolToReturn(row);
+                    setReturnDraftReason('Исправление клинических данных системным администратором');
+                    setReturnDraftModalOpen(true);
+                  }}
+                  sx={{ color: '#DC2626' }}
+                >
+                  <UndoIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            )}
+
+            {/* Delete / Revoke */}
+            {row.can_delete && (
+              <Tooltip title={row.status === 'signed' ? 'Аннулировать подписанный протокол (sysadmin)' : 'Удалить черновик протокола'}>
                 <IconButton
                   size="small"
                   onClick={() => {
                     setProtocolToRevoke(row);
                     setRevokeDialogOpen(true);
                   }}
-                  sx={{ color: '#DC2626' }}
+                  sx={{ color: '#EF4444' }}
                 >
-                  <BlockIcon fontSize="small" />
+                  <DeleteIcon fontSize="small" />
                 </IconButton>
               </Tooltip>
             )}
@@ -665,37 +1077,22 @@ export default function ProtocolsRegistry() {
         );
       }
     }
-  ], [navigate]);
+  ], [navigate, isSysadmin]);
 
   return (
     <Box sx={{ p: { xs: 2, sm: 3 }, bgcolor: '#F8FAFC', minHeight: '100vh' }}>
       {/* HEADER BANNER */}
-      <Box sx={{ mb: 2.5, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 2 }}>
+      <Box sx={{ mb: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 2 }}>
         <Box>
           <Typography variant="h5" sx={{ fontWeight: 800, color: '#0F3C64', letterSpacing: '-0.3px' }}>
-            Реестр протоколов осмотра травматолога-ортопеда
+            Реестр Протоколов и направлений пациентов
           </Typography>
           <Typography variant="body2" sx={{ color: '#64748B', mt: 0.3 }}>
-            Полнотекстовый поиск FTS5 по 32 881 историческим протоколам, клиническая аналитика и управление ЭЦП
+            Полнотекстовый поиск FTS5 по 32 881 историческим протоколам, клиническая аналитика, RBAC и управление ЭЦП
           </Typography>
         </Box>
 
         <Box sx={{ display: 'flex', gap: 1.5 }}>
-          <Button
-            variant="outlined"
-            startIcon={<AssignmentIcon />}
-            onClick={() => navigate('/patient-referrals')}
-            sx={{
-              borderColor: '#0F3C64',
-              color: '#0F3C64',
-              fontWeight: 700,
-              textTransform: 'none',
-              bgcolor: '#FFFFFF',
-              '&:hover': { bgcolor: '#F0F9FF' }
-            }}
-          >
-            Реестр направлений (90 дней)
-          </Button>
           <Button
             variant="contained"
             startIcon={<MedicalServicesIcon />}
@@ -707,9 +1104,44 @@ export default function ProtocolsRegistry() {
         </Box>
       </Box>
 
+      {/* DUAL NAVIGATION TABS */}
+      <Paper elevation={0} sx={{ mb: 2.5, bgcolor: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 2, px: 2, pt: 1 }}>
+        <Tabs
+          value={0}
+          onChange={(_, val) => {
+            if (val === 1) navigate('/patient-referrals');
+          }}
+          textColor="primary"
+          indicatorColor="primary"
+        >
+          <Tab
+            label="1. Протоколы приёмов (АРМ Врача)"
+            icon={<DescriptionIcon />}
+            iconPosition="start"
+            sx={{ fontWeight: 700, textTransform: 'none', fontSize: '0.95rem' }}
+          />
+          <Tab
+            label="2. Направления пациентов (90 дней)"
+            icon={<AssignmentIcon />}
+            iconPosition="start"
+            sx={{ fontWeight: 700, textTransform: 'none', fontSize: '0.95rem' }}
+          />
+        </Tabs>
+      </Paper>
+
       {/* QUICK FILTER BAR */}
       <Paper sx={{ p: 2, mb: 2.5, borderRadius: 2, border: '1px solid #E2E8F0' }}>
-        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '2fr 1fr 1fr 1fr 1fr auto' }, gap: 1.5, alignItems: 'center' }}>
+        <Box
+          sx={{
+            display: 'grid',
+            gridTemplateColumns: {
+              xs: '1fr',
+              sm: isAdministrator || isSysadmin ? '2fr 1fr 1fr 1fr 1fr 1fr auto' : '2fr 1fr 1fr 1fr 1fr auto'
+            },
+            gap: 1.5,
+            alignItems: 'center'
+          }}
+        >
           <TextField
             size="small"
             placeholder="Полнотекстовый поиск FTS5 (ФИО, диагноз, жалобы, мениск, связка)..."
@@ -725,6 +1157,27 @@ export default function ProtocolsRegistry() {
               }
             }}
           />
+
+          {(isAdministrator || isSysadmin) && (
+            <FormControl size="small">
+              <InputLabel>Врач-автор</InputLabel>
+              <Select
+                label="Врач-автор"
+                value={selectedDoctorId}
+                onChange={(e) => {
+                  setSelectedDoctorId(e.target.value);
+                  setPage(0);
+                }}
+              >
+                <MenuItem value="">Все врачи</MenuItem>
+                {doctorsList.map((doc) => (
+                  <MenuItem key={doc.id} value={String(doc.id)}>
+                    {doc.full_name}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          )}
 
           <FormControl size="small">
             <InputLabel>Локализация</InputLabel>
@@ -773,6 +1226,43 @@ export default function ProtocolsRegistry() {
             value={endDate}
             onChange={(e) => setEndDate(e.target.value)}
           />
+
+          <Button
+            variant={selectedStatus === 'draft' ? 'contained' : 'outlined'}
+            size="small"
+            startIcon={<MedicalServicesIcon sx={{ fontSize: '16px !important' }} />}
+            onClick={() => {
+              setSelectedStatus((prev) => (prev === 'draft' ? '' : 'draft'));
+              setPage(0);
+            }}
+            sx={{
+              fontWeight: 800,
+              color: selectedStatus === 'draft' ? '#FFFFFF' : '#92400E',
+              bgcolor: selectedStatus === 'draft' ? '#D97706' : '#FEF3C7',
+              borderColor: '#FCD34D',
+              height: 40,
+              textTransform: 'none',
+              boxShadow: selectedStatus === 'draft' ? '0 2px 6px rgba(217, 119, 6, 0.3)' : 'none',
+              '&:hover': {
+                bgcolor: selectedStatus === 'draft' ? '#B45309' : '#FDE68A',
+                borderColor: '#F59E0B'
+              }
+            }}
+          >
+            Черновики {totals.draftCount > 0 ? `(${totals.draftCount})` : ''}
+          </Button>
+
+          {patientIdFilter && (
+            <Chip
+              label={`Пациент ID: ${patientIdFilter}`}
+              size="small"
+              onDelete={() => {
+                setPatientIdFilter('');
+                setPage(0);
+              }}
+              sx={{ bgcolor: '#E0F2FE', color: '#0369A1', fontWeight: 700 }}
+            />
+          )}
 
           <Button
             variant="outlined"
@@ -824,6 +1314,11 @@ export default function ProtocolsRegistry() {
                 draftCount={totals.draftCount}
                 revokedCount={totals.revokedCount}
                 totalPrescriptionsSum={totals.totalPrescriptionsSum}
+                selectedStatus={selectedStatus}
+                onFilterDrafts={() => {
+                  setSelectedStatus((prev) => (prev === 'draft' ? '' : 'draft'));
+                  setPage(0);
+                }}
               />
             )
           }}
@@ -844,6 +1339,9 @@ export default function ProtocolsRegistry() {
               alignItems: 'flex-start',
               borderBottom: '1px solid #F1F5F9'
             },
+            '& .MuiDataGrid-row': {
+              cursor: 'pointer'
+            },
             '& .MuiDataGrid-row:hover': {
               bgcolor: '#F8FAFC'
             }
@@ -862,7 +1360,7 @@ export default function ProtocolsRegistry() {
           }
         }}
       >
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, pb: 1, borderBottom: '1px solid #E2E8F0' }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, pb: 1, borderBottom: '1px solid #E2E8F0', flexWrap: 'wrap', gap: 1 }}>
           <Box>
             <Typography variant="h6" sx={{ fontWeight: 800, color: '#0F3C64' }}>
               Протокол осмотра #{selectedProtocol?.id}
@@ -871,7 +1369,29 @@ export default function ProtocolsRegistry() {
               Пациент: {selectedProtocol?.patient_name} • Дата: {selectedProtocol?.vdate}
             </Typography>
           </Box>
-          <Box sx={{ display: 'flex', gap: 1 }}>
+          <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
+            {selectedProtocol && (
+              <Button
+                variant="contained"
+                size="small"
+                startIcon={<MedicalServicesIcon />}
+                onClick={() => {
+                  navigate(`/ortho-workstation?protocolId=${selectedProtocol.id}&patientId=${selectedProtocol.pt_id}`);
+                }}
+                sx={{
+                  bgcolor: selectedProtocol.status === 'draft' ? '#D97706' : '#0F3C64',
+                  color: '#FFFFFF',
+                  fontWeight: 800,
+                  textTransform: 'none',
+                  boxShadow: selectedProtocol.status === 'draft' ? '0 2px 6px rgba(217, 119, 6, 0.3)' : 'none',
+                  '&:hover': {
+                    bgcolor: selectedProtocol.status === 'draft' ? '#B45309' : '#0284C7'
+                  }
+                }}
+              >
+                {selectedProtocol.status === 'draft' ? 'Продолжить в АРМ врача' : 'Открыть в АРМ врача'}
+              </Button>
+            )}
             <Button
               variant="outlined"
               size="small"
@@ -907,12 +1427,160 @@ export default function ProtocolsRegistry() {
           </Box>
         </Box>
 
+        {selectedProtocol?.status === 'draft' && (
+          <Alert
+            severity="warning"
+            icon={<EditNoteIcon sx={{ fontSize: 22 }} />}
+            action={
+              <Button
+                color="inherit"
+                size="small"
+                variant="outlined"
+                onClick={() => navigate(`/ortho-workstation?protocolId=${selectedProtocol.id}&patientId=${selectedProtocol.pt_id}`)}
+                sx={{ fontWeight: 800, textTransform: 'none', borderColor: '#D97706', bgcolor: '#FEF3C7' }}
+              >
+                Перейти в АРМ врача →
+              </Button>
+            }
+            sx={{ mb: 2, borderRadius: 2, fontWeight: 600, border: '1px solid #FCD34D' }}
+          >
+            Данный протокол сохранен в статусе <b>«Черновик»</b>. Пациент: <b>{selectedProtocol.patient_name}</b>. Нажмите для перехода в АРМ врача с автоматическим позиционированием на пациенте.
+          </Alert>
+        )}
+
         {assembledDrawerData && (
           <Paper sx={{ p: 2, bgcolor: '#FFFFFF', borderRadius: 2 }}>
-            <OrthoProtocolPrintTemplate ref={printRef} data={assembledDrawerData} />
+            <OrthoProtocolPrintTemplate data={assembledDrawerData} />
           </Paper>
         )}
       </Drawer>
+
+      {/* PRINT MENU */}
+      <Menu
+        anchorEl={printMenuAnchor}
+        open={Boolean(printMenuAnchor)}
+        onClose={() => setPrintMenuAnchor(null)}
+      >
+        <MenuItem
+          onClick={() => {
+            if (printTargetRow) handlePrintProtocolOnly(printTargetRow);
+          }}
+        >
+          <PrintIcon fontSize="small" sx={{ mr: 1.5, color: '#0F3C64' }} />
+          Печать протокола (A4)
+        </MenuItem>
+        <MenuItem
+          onClick={() => {
+            if (printTargetRow) handlePrintProtocolWithReferrals(printTargetRow);
+          }}
+        >
+          <AssignmentIcon fontSize="small" sx={{ mr: 1.5, color: '#0F766E' }} />
+          Печать протокола с направлениями (пакет)
+        </MenuItem>
+      </Menu>
+
+      {/* GRANT ACCESS DIALOG (Administrator / Sysadmin) */}
+      <Dialog open={grantModalOpen} onClose={() => setGrantModalOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle sx={{ fontWeight: 800, color: '#0F3C64' }}>
+          Предоставление доступа к протоколу #{grantProtocol?.id}
+        </DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" sx={{ color: '#64748B', mb: 2 }}>
+            Пациент: <b>{grantProtocol?.patient_name}</b> • Автор: <b>{grantProtocol?.doctor_name || 'Врач клиники'}</b>
+          </Typography>
+          <Alert severity="info" sx={{ mb: 2 }}>
+            Предоставление доступа позволяет коллеге-врачу открывать данный протокол в АРМ и знакомиться с историей пациента. Действие строго фиксируется в журнале аудита Serilog в соответствии с 323-ФЗ.
+          </Alert>
+          <FormControl fullWidth size="small" sx={{ mb: 2 }}>
+            <InputLabel>Выберите врача-коллегу</InputLabel>
+            <Select
+              label="Выберите врача-коллегу"
+              value={targetDoctorId}
+              onChange={(e) => setTargetDoctorId(Number(e.target.value))}
+            >
+              {doctorsList
+                .filter((d) => d.id !== grantProtocol?.docn)
+                .map((d) => (
+                  <MenuItem key={d.id} value={d.id}>
+                    {d.full_name} {d.specialization ? `(${d.specialization})` : ''}
+                  </MenuItem>
+                ))}
+            </Select>
+          </FormControl>
+          <TextField
+            fullWidth
+            size="small"
+            label="Клиническое обоснование предоставления доступа"
+            placeholder="Клинический консилиум, совместное ведение, замена лечащего врача..."
+            value={grantReason}
+            onChange={(e) => setGrantReason(e.target.value)}
+            sx={{ mb: 2 }}
+          />
+          <FormControlLabel
+            control={
+              <Checkbox
+                checked={grantConfirmed}
+                onChange={(e) => setGrantConfirmed(e.target.checked)}
+                color="primary"
+              />
+            }
+            label={
+              <Typography variant="body2" sx={{ fontWeight: 600, color: '#1E293B' }}>
+                Подтверждаю предоставление доступа в рамках 323-ФЗ и клинической необходимости
+              </Typography>
+            }
+          />
+        </DialogContent>
+        <DialogActions sx={{ p: 2 }}>
+          <Button onClick={() => setGrantModalOpen(false)} disabled={grantLoading}>
+            Отмена
+          </Button>
+          <Button
+            variant="contained"
+            onClick={handleConfirmGrantAccess}
+            disabled={grantLoading || !targetDoctorId || !grantReason.trim() || !grantConfirmed}
+            sx={{ bgcolor: '#0F3C64', fontWeight: 700 }}
+          >
+            {grantLoading ? 'Сохранение...' : 'Предоставить доступ'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* RETURN TO DRAFT DIALOG (Sysadmin only) */}
+      <Dialog open={returnDraftModalOpen} onClose={() => setReturnDraftModalOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle sx={{ fontWeight: 800, color: '#DC2626' }}>
+          Снятие ЭЦП и возврат в «Черновик» протокола #{protocolToReturn?.id}
+        </DialogTitle>
+        <DialogContent>
+          <Alert severity="error" sx={{ mb: 2 }}>
+            <b>Внимание!</b> Протокол был подписан усиленной ЭЦП. Снятие статуса подписи и возвращение протокола в редактируемый черновик разрешено исключительно <b>системному администратору (sysadmin)</b>. Это действие будет занесено в защищённый журнал аудита Serilog.
+          </Alert>
+          <TextField
+            fullWidth
+            size="small"
+            label="Обоснование снятия ЭЦП и возврата в черновик"
+            placeholder="Исправление ошибочных клинических данных системным администратором..."
+            multiline
+            minRows={2}
+            value={returnDraftReason}
+            onChange={(e) => setReturnDraftReason(e.target.value)}
+          />
+        </DialogContent>
+        <DialogActions sx={{ p: 2 }}>
+          <Button onClick={() => setReturnDraftModalOpen(false)} disabled={returnDraftLoading}>
+            Отмена
+          </Button>
+          <Button
+            variant="contained"
+            color="error"
+            onClick={handleConfirmReturnToDraft}
+            disabled={returnDraftLoading || !returnDraftReason.trim()}
+            sx={{ fontWeight: 700 }}
+          >
+            {returnDraftLoading ? 'Возврат...' : 'Снять ЭЦП и вернуть в черновик'}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       {/* REVOCATION DIALOG */}
       <Dialog open={revokeDialogOpen} onClose={() => setRevokeDialogOpen(false)} maxWidth="sm" fullWidth>
@@ -966,7 +1634,7 @@ export default function ProtocolsRegistry() {
             cardNum: String(referralModalProtocol.patient_mednum || '')
           }}
           protocolId={referralModalProtocol.id}
-          doctorName={referralModalProtocol.doctor_name || 'Добрушкин А.М'}
+          doctorName={referralModalProtocol.doctor_name || ''}
           defaultMkbCode={referralModalProtocol.mkb_code || 'M17.1'}
           defaultDiagnosis={referralModalProtocol.mkb_name || referralModalProtocol.title || ''}
           targetJoint={referralModalProtocol.primary_joint || ''}
@@ -978,6 +1646,20 @@ export default function ProtocolsRegistry() {
           }}
         />
       )}
+
+      {/* HIDDEN PRINT CONTAINER (Protocol + Bundled Referrals) */}
+      <div style={{ display: 'none' }}>
+        <div ref={printRef}>
+          {assembledDrawerData && (
+            <OrthoProtocolPrintTemplate data={assembledDrawerData} />
+          )}
+          {printWithReferrals && bundledReferrals.length > 0 && bundledReferrals.map((ref) => (
+            <div key={ref.id} style={{ pageBreakBefore: 'always', marginTop: '24px' }}>
+              <OrthoReferralPrintTemplate data={ref} />
+            </div>
+          ))}
+        </div>
+      </div>
 
       {/* SNACKBAR */}
       <Snackbar

@@ -26,6 +26,16 @@ import {
   HeadingLevel,
   AlignmentType
 } from 'docx';
+import UndoIcon from '@mui/icons-material/Undo';
+import LinearProgress from '@mui/material/LinearProgress';
+import Chip from '@mui/material/Chip';
+import Collapse from '@mui/material/Collapse';
+import IconButton from '@mui/material/IconButton';
+import ErrorIcon from '@mui/icons-material/Error';
+import WarningAmberIcon from '@mui/icons-material/WarningAmber';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import ExpandLessIcon from '@mui/icons-material/ExpandLess';
+import type { ProtocolIntegrityReport } from '../../utils/protocolIntegrityChecker';
 import OrthoProtocolPrintTemplate from '../reports/OrthoProtocolPrintTemplate';
 import type { OrthoProtocolData } from '../reports/OrthoProtocolPrintTemplate';
 import { cleanLatexText } from './LatexText';
@@ -35,16 +45,27 @@ interface OrthoProtocolPreviewProps {
   data: OrthoProtocolData;
   onSign?: () => void;
   onTransferToCashier?: () => void;
+  onReturnToDraft?: () => void;
+  highlightedPartition?: number | null;
   isSubmitting?: boolean;
+  integrityReport?: ProtocolIntegrityReport;
+  onJumpToPartition?: (partitionNum: number) => void;
+  onScroll?: (e: React.UIEvent<HTMLDivElement>) => void;
 }
 
 export default function OrthoProtocolPreview({
   data,
   onSign,
   onTransferToCashier,
-  isSubmitting = false
+  onReturnToDraft,
+  highlightedPartition = null,
+  isSubmitting = false,
+  integrityReport,
+  onJumpToPartition,
+  onScroll
 }: OrthoProtocolPreviewProps) {
   const [activeTab, setActiveTab] = useState(0);
+  const [integrityDetailsOpen, setIntegrityDetailsOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const printRef = useRef<HTMLDivElement>(null);
 
@@ -69,56 +90,102 @@ export default function OrthoProtocolPreview({
     lines.push(`Пациент: ${data.patient.fullName}`);
     if (data.patient.birthDate) lines.push(`Дата рождения: ${data.patient.birthDate} (${data.patient.gender || ''})`);
     if (data.patient.phone) lines.push(`Телефон: ${data.patient.phone}`);
-    lines.push(`Лечащий врач: ${data.doctorName || 'Добрушкин Александр Моисеевич'}`);
+    lines.push(`Лечащий врач: ${data.doctorName || 'Врач травматолог-ортопед'}`);
     lines.push('----------------------------------------------------------------');
-    lines.push('1. ЖАЛОБЫ:');
-    lines.push(data.complaints || 'Жалоб активно не предъявляет.');
+    lines.push('1. ЖАЛОБЫ, АНАМНЕЗ И СОМАТИЧЕСКИЙ СТАТУС:');
+    lines.push(`Жалобы: ${data.complaints || 'Жалоб активно не предъявляет.'}`);
+    lines.push(`Интенсивность боли по ВАШ (0-10): ${data.vasScore || 0}/10`);
+    lines.push(`Анамнез заболевания (Anamnesis morbi): ${data.anamnesis || 'Без особенностей.'}`);
+    if (data.systemicStatus) {
+      lines.push(`Соматический статус: АД ${data.systemicStatus.bloodPressure || '120/80'} мм рт.ст., ЧСС ${data.systemicStatus.heartRate || 72} уд/мин, SpO2 ${data.systemicStatus.spo2 || 98}%, Аллергоанамнез: ${data.systemicStatus.allergies || 'не отягощен'}`);
+    }
     lines.push('');
-    lines.push('2. АНАМНЕЗ:');
-    lines.push(data.anamnesis || 'Без особенностей.');
-    lines.push(`Интенсивность боли по ВАШ: ${data.vasScore || 0}/10`);
-    lines.push('');
-    lines.push('3. СТАТУС ЛОКАЛИС (STATUS LOCALIS):');
-    lines.push(`Походка: ${data.gait || 'свободная, без дополнительной опоры'}`);
+    lines.push('2. ОРТОПЕДИЧЕСКИЙ СТАТУС (STATUS LOCALIS):');
+    lines.push(`Походка: ${data.gait || 'свободная, симметричная, без дополнительной опоры'}`);
     if (data.posture) lines.push(`Осанка: ${data.posture}`);
-    
     if (data.jointExams && data.jointExams.length > 0) {
       data.jointExams.forEach((j) => {
-        lines.push(`- Сустав: ${j.jointArea} (${j.side}), Ось: ${j.axis}, Синовит: ст. ${j.effusion}`);
-        lines.push(`  ROM: сгиб. акт. ${j.rom?.flexion_active || 140}°, пас. ${j.rom?.flexion_passive || 140}°, дефицит разг. ${j.rom?.extension_deficit || 0}°`);
-        if (j.tests && Object.keys(j.tests).length > 0) {
-          const testList = Object.entries(j.tests).map(([k, v]) => `${k}: ${v}`).join(', ');
-          lines.push(`  Тесты: ${testList}`);
+        lines.push(`- Сустав: ${j.jointArea} (${j.side}), Ось: ${j.axis || 'прямая'}, Выпот/синовит: ст. ${j.effusion}`);
+        if (j.palpationPoints && j.palpationPoints.length > 0) {
+          lines.push(`  Болезненность при пальпации: ${j.palpationPoints.join(', ')}`);
         }
       });
     } else {
-      lines.push('Суставы: контуры сохранены, без деформаций, движения в полном объеме.');
+      lines.push('Суставы: контуры сохранены, отечности/деформации нет.');
     }
-    
     lines.push('');
-    lines.push('4. КЛИНИЧЕСКИЙ ДИАГНОЗ:');
-    if (data.icdCode) lines.push(`МКБ-10: ${data.icdCode} (${data.icdName || ''})`);
-    lines.push(data.clinicalDiagnosis || 'Диагноз уточняется.');
+    lines.push('3. АМПЛИТУДА ДВИЖЕНИЙ (SFTR NEUTRAL-0 ROM):');
+    if (data.jointExams && data.jointExams.length > 0) {
+      data.jointExams.forEach((j) => {
+        lines.push(`- ${j.jointArea} (${j.side}): сгибание акт. ${j.rom?.flexion_active || 140}°, пас. ${j.rom?.flexion_passive || 140}°, дефицит разгибания: ${j.rom?.extension_deficit || 0}°`);
+      });
+    } else {
+      lines.push('Амплитуда движений в суставах полная, безболезненная.');
+    }
     lines.push('');
-    lines.push('5. РЕКОМЕНДАЦИИ И НАЗНАЧЕНИЯ:');
-    lines.push(data.recommendations || 'Охранительный режим.');
-    
+    lines.push('4. ПАНЕЛЬ ВАЛИДИРОВАННЫХ ОРТОПЕДИЧЕСКИХ ТЕСТОВ:');
+    let hasTests = false;
+    data.jointExams?.forEach(j => {
+      if (j.tests && Object.keys(j.tests).length > 0) {
+        hasTests = true;
+        const testList = Object.entries(j.tests).map(([k, v]) => `${k}: ${v}`).join(', ');
+        lines.push(`- ${j.jointArea} (${j.side}): ${testList}`);
+      }
+    });
+    if (!hasTests) {
+      lines.push('Специфические ортопедические тесты (менисковые, связочные, импинджмент) отрицательны.');
+    }
+    lines.push('');
+    lines.push('5. ИНСТРУМЕНТАЛЬНАЯ И ЛАБОРАТОРНАЯ ДИАГНОСТИКА:');
+    lines.push(data.diagnosticsData || 'Инструментальные данные сопоставлены с клинической картиной.');
+    lines.push('');
+    lines.push('6. КЛИНИЧЕСКИЙ ДИАГНОЗ И МКБ-10:');
+    if (data.icdCode) lines.push(`Код МКБ-10: ${data.icdCode} — ${data.icdName || ''}`);
+    lines.push(`Диагноз: ${data.clinicalDiagnosis || 'Диагноз уточняется.'}`);
+    lines.push('');
+    lines.push('7. ВЫПОЛНЕННЫЕ МАНИПУЛЯЦИИ И ИНЪЕКЦИОННАЯ ТЕРАПИЯ:');
+    if (data.performedProcedures && data.performedProcedures.length > 0) {
+      data.performedProcedures.forEach((p: any) => {
+        lines.push(`- ${p.procedureName} (${p.targetJoint || ''}): ${p.drug || ''} ${p.dose || ''} ${p.needleGauge ? `[игла ${p.needleGauge}]` : ''}`);
+      });
+    } else {
+      lines.push('Инвазивные манипуляции на текущем приеме не проводились.');
+    }
+    lines.push('');
+    lines.push('8. ФИЗИОТЕРАПИЯ И АППАРАТНАЯ БИОМЕХАНИЧЕСКАЯ ТЕРАПИЯ:');
+    if (data.physioProtocol && data.physioProtocol.length > 0) {
+      data.physioProtocol.forEach((f: any) => {
+        lines.push(`- ${f.modality}: ${f.targetZone}, ${f.sessionsCount} сеансов, параметры: ${f.parameters || 'стандарт'}`);
+      });
+    } else {
+      lines.push('Физиотерапевтическое лечение согласовано по индивидуальному графику.');
+    }
+    lines.push('');
+    lines.push('9. ОРТОПЕДИЧЕСКИЕ ИЗДЕЛИЯ И РАЗГРУЗКА СУСТАВОВ:');
+    if (data.orthoticsPrescriptions && data.orthoticsPrescriptions.length > 0) {
+      data.orthoticsPrescriptions.forEach((o: any) => {
+        lines.push(`- ${o.deviceType}: режим ношения: ${o.wearRegime || 'постоянно'}`);
+      });
+    } else {
+      lines.push('Рекомендована разгрузка сегмента, эластичное бинтование / ортез по показаниям.');
+    }
+    lines.push('');
+    lines.push('10. ЛЕЧЕБНАЯ ФИЗКУЛЬТУРА (ЛФК), РЕАБИЛИТАЦИЯ И РЕКОМЕНДАЦИИ:');
+    lines.push(data.recommendations || 'Охранительный двигательный режим, исключение осевых пиковых нагрузок.');
     if (data.prescriptions && data.prescriptions.length > 0) {
       lines.push('');
       lines.push('Назначенные манипуляции и услуги:');
       data.prescriptions.forEach((p, idx) => {
-        lines.push(`  ${idx + 1}. ${p.name || (p as any).title || 'Медицинская услуга'} - ${p.quantity || 1} шт. (${p.price ?? (p as any).unitPrice ?? (p as any).unit_price ?? 0} руб.)`);
+        lines.push(`  ${idx + 1}. ${p.name || (p as any).title || 'Медицинская услуга'} — ${p.quantity || 1} шт. (${p.price ?? (p as any).unitPrice ?? (p as any).unit_price ?? 0} руб.)`);
       });
     }
-    
     if (data.nextVisitDate) {
       lines.push('');
-      lines.push(`Повторный осмотр: ${data.nextVisitDate}`);
+      lines.push(`Повторный прием: ${data.nextVisitDate}`);
     }
-    
     lines.push('');
     lines.push('----------------------------------------------------------------');
-    lines.push(`Врач травматолог-ортопед: ________________ / ${data.doctorName || 'Добрушкин Александр Моисеевич'} /`);
+    lines.push(`Врач травматолог-ортопед: ________________ / ${data.doctorName || 'Врач травматолог-ортопед'} /`);
     lines.push(`Пациент: ________________ / ${data.patient.fullName} /`);
     if (data.isSigned) {
       lines.push(`[ЭЦП валидна: ${data.signedAt || ''} | ${data.signatureHash || ''}]`);
@@ -192,7 +259,7 @@ export default function OrthoProtocolPreview({
               new Paragraph({
                 children: [
                   new TextRun({ text: 'Лечащий врач: ', bold: true }),
-                  new TextRun({ text: `${data.doctorName || 'Добрушкин Александр Моисеевич'}, к.м.н., врач травматолог-ортопед` })
+                  new TextRun({ text: `${data.doctorName || 'Врач клиники'}${data.doctorSpecialization ? `, ${data.doctorSpecialization}` : (data.doctorRole ? `, ${data.doctorRole}` : ', врач травматолог-ортопед')}` })
                 ],
                 spacing: { after: 200 }
               }),
@@ -275,7 +342,7 @@ export default function OrthoProtocolPreview({
               // Signatures
               new Paragraph({
                 children: [
-                  new TextRun({ text: `Врач травматолог-ортопед: _________________ / ${data.doctorName || 'Добрушкин Александр Моисеевич'} /`, bold: true })
+                  new TextRun({ text: `Врач травматолог-ортопед: _________________ / ${data.doctorName || 'Врач травматолог-ортопед'} /`, bold: true })
                 ],
                 spacing: { before: 300, after: 120 }
               }),
@@ -451,6 +518,21 @@ export default function OrthoProtocolPreview({
             </Button>
           )}
 
+          {/* Return to Draft if Signed */}
+          {data.isSigned && onReturnToDraft && (
+            <Button
+              variant="outlined"
+              size="small"
+              color="warning"
+              startIcon={<UndoIcon />}
+              onClick={onReturnToDraft}
+              disabled={isSubmitting}
+              sx={{ fontWeight: 700 }}
+            >
+              Вернуть в черновик
+            </Button>
+          )}
+
           {/* Electronic Signature */}
           {onSign && (
             <Button
@@ -468,10 +550,217 @@ export default function OrthoProtocolPreview({
       </Paper>
 
       {/* CONTENT AREA */}
-      <Box sx={{ flex: 1, overflowY: 'auto', p: 2 }}>
+      <Box
+        id="right-protocol-scroll-container"
+        onScroll={onScroll}
+        sx={{ flex: 1, overflowY: 'auto', p: 2 }}
+      >
         {/* TAB 0: PDF A4 PREVIEW */}
         {activeTab === 0 && (
-          <Box sx={{ display: 'flex', justifyContent: 'center' }}>
+          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+            {/* ONLINE INTEGRITY & COMPLETENESS BANNER */}
+            {integrityReport && (
+              <Paper
+                elevation={1}
+                sx={{
+                  width: '100%',
+                  maxWidth: '860px',
+                  borderRadius: 2,
+                  overflow: 'hidden',
+                  border: '1.5px solid',
+                  borderColor:
+                    integrityReport.status === 'critical'
+                      ? '#FCA5A5'
+                      : integrityReport.status === 'warning'
+                      ? '#FCD34D'
+                      : '#86EFAC',
+                  bgcolor:
+                    integrityReport.status === 'critical'
+                      ? '#FEF2F2'
+                      : integrityReport.status === 'warning'
+                      ? '#FFFBEB'
+                      : '#F0FDF4',
+                  p: 1.5
+                }}
+              >
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.8 }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    {integrityReport.status === 'critical' ? (
+                      <ErrorIcon sx={{ color: '#DC2626', fontSize: 20 }} />
+                    ) : integrityReport.status === 'warning' ? (
+                      <WarningAmberIcon sx={{ color: '#D97706', fontSize: 20 }} />
+                    ) : (
+                      <CheckCircleIcon sx={{ color: '#16A34A', fontSize: 20 }} />
+                    )}
+                    <Typography
+                      variant="subtitle2"
+                      sx={{
+                        fontWeight: 800,
+                        fontSize: '0.86rem',
+                        color:
+                          integrityReport.status === 'critical'
+                            ? '#991B1B'
+                            : integrityReport.status === 'warning'
+                            ? '#92400E'
+                            : '#166534'
+                      }}
+                    >
+                      Клиническая целостность и готовность протокола: {integrityReport.score}%
+                    </Typography>
+                    <Chip
+                      size="small"
+                      label={
+                        integrityReport.status === 'critical'
+                          ? `Критично (${integrityReport.criticalErrors.length})`
+                          : integrityReport.status === 'warning'
+                          ? `Замечания (${integrityReport.warnings.length})`
+                          : 'Полный комплект'
+                      }
+                      sx={{
+                        height: 20,
+                        fontSize: '0.68rem',
+                        fontWeight: 800,
+                        bgcolor:
+                          integrityReport.status === 'critical'
+                            ? '#FEE2E2'
+                            : integrityReport.status === 'warning'
+                            ? '#FEF3C7'
+                            : '#DCFCE7',
+                        color:
+                          integrityReport.status === 'critical'
+                            ? '#B91C1C'
+                            : integrityReport.status === 'warning'
+                            ? '#B45309'
+                            : '#15803D'
+                      }}
+                    />
+                  </Box>
+
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Typography variant="caption" sx={{ color: '#64748B', fontWeight: 600 }}>
+                      {integrityReport.summaryMessage}
+                    </Typography>
+                    {(integrityReport.criticalErrors.length > 0 || integrityReport.warnings.length > 0) && (
+                      <IconButton
+                        size="small"
+                        onClick={() => setIntegrityDetailsOpen((prev) => !prev)}
+                        sx={{ p: 0.5 }}
+                      >
+                        {integrityDetailsOpen ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
+                      </IconButton>
+                    )}
+                  </Box>
+                </Box>
+
+                <LinearProgress
+                  variant="determinate"
+                  value={integrityReport.score}
+                  sx={{
+                    height: 6,
+                    borderRadius: 3,
+                    bgcolor: 'rgba(0,0,0,0.06)',
+                    '& .MuiLinearProgress-bar': {
+                      borderRadius: 3,
+                      bgcolor:
+                        integrityReport.status === 'critical'
+                          ? '#EF4444'
+                          : integrityReport.status === 'warning'
+                          ? '#F59E0B'
+                          : '#10B981'
+                    }
+                  }}
+                />
+
+                <Collapse in={integrityDetailsOpen}>
+                  <Box sx={{ mt: 1.5, pt: 1.25, borderTop: '1px dashed rgba(0,0,0,0.1)', display: 'flex', flexDirection: 'column', gap: 0.8 }}>
+                    {integrityReport.criticalErrors.map((err) => (
+                      <Box
+                        key={err.id}
+                        sx={{
+                          p: 0.8,
+                          px: 1.25,
+                          bgcolor: '#FFFFFF',
+                          borderRadius: 1.5,
+                          border: '1px solid #FCA5A5',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          gap: 1
+                        }}
+                      >
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <ErrorIcon sx={{ color: '#DC2626', fontSize: 16 }} />
+                          <Typography variant="caption" sx={{ color: '#7F1D1D', fontWeight: 700, fontSize: '0.78rem' }}>
+                            <b>Раздел {err.partition}:</b> {err.message}
+                          </Typography>
+                        </Box>
+                        {onJumpToPartition && (
+                          <Button
+                            size="small"
+                            variant="text"
+                            onClick={() => onJumpToPartition(err.partition)}
+                            sx={{
+                              p: 0,
+                              minWidth: 0,
+                              fontSize: '0.72rem',
+                              fontWeight: 800,
+                              color: '#DC2626',
+                              textTransform: 'none',
+                              whiteSpace: 'nowrap'
+                            }}
+                          >
+                            Заполнить →
+                          </Button>
+                        )}
+                      </Box>
+                    ))}
+
+                    {integrityReport.warnings.map((warn) => (
+                      <Box
+                        key={warn.id}
+                        sx={{
+                          p: 0.8,
+                          px: 1.25,
+                          bgcolor: '#FFFFFF',
+                          borderRadius: 1.5,
+                          border: '1px solid #FCD34D',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          gap: 1
+                        }}
+                      >
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <WarningAmberIcon sx={{ color: '#D97706', fontSize: 16 }} />
+                          <Typography variant="caption" sx={{ color: '#78350F', fontWeight: 600, fontSize: '0.76rem' }}>
+                            <b>Раздел {warn.partition}:</b> {warn.message}
+                          </Typography>
+                        </Box>
+                        {onJumpToPartition && (
+                          <Button
+                            size="small"
+                            variant="text"
+                            onClick={() => onJumpToPartition(warn.partition)}
+                            sx={{
+                              p: 0,
+                              minWidth: 0,
+                              fontSize: '0.72rem',
+                              fontWeight: 800,
+                              color: '#D97706',
+                              textTransform: 'none',
+                              whiteSpace: 'nowrap'
+                            }}
+                          >
+                            Заполнить →
+                          </Button>
+                        )}
+                      </Box>
+                    ))}
+                  </Box>
+                </Collapse>
+              </Paper>
+            )}
+
             <Paper
               elevation={3}
               sx={{
@@ -483,7 +772,7 @@ export default function OrthoProtocolPreview({
                 p: { xs: 1, sm: 2 }
               }}
             >
-              <OrthoProtocolPrintTemplate ref={printRef} data={data} />
+              <OrthoProtocolPrintTemplate ref={printRef} data={data} highlightedPartition={highlightedPartition} />
             </Paper>
           </Box>
         )}

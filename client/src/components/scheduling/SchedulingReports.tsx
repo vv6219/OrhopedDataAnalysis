@@ -491,10 +491,10 @@ export const DoctorDailyRoster = forwardRef<
       <Box sx={{ pageBreakInside: 'avoid', borderTop: '2px solid #0F3C64', pt: 2.5, display: 'flex', justifyContent: 'space-between', gap: 2 }}>
         <Box sx={{ minWidth: 160 }}>
           <Typography variant="body2" sx={{ fontWeight: 700, fontSize: '0.85rem' }}>
-            Главный врач клиники:
+            {doctor.role || 'Врач клиники'}:
           </Typography>
           <Typography variant="caption" sx={{ color: '#475569', display: 'block', mt: 0.5 }}>
-            Добрушкин А.М. / ______________ (подпись)
+            {doctor.full_name || 'Врач клиники'} / ______________ (подпись)
           </Typography>
         </Box>
         <Box sx={{ minWidth: 180, textAlign: 'center' }}>

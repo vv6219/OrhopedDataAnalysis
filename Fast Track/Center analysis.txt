@@ -1,0 +1,426 @@
+improve and adjust with the main goal  build well structured DB with next data:  
+operations list
+operation price  for  preiod
+materials required for each operation
+operations templates cost 
+operations transactions with real cost calculation
+operations transactions by users take part of it
+doctors, nurses, other users  list 
+ 
+ 
+ create prompt to implement web React ts application with sqlite db , 
+ implement  suport   ERP full operational logic for orthopedic center based on loaded data.  
+ with full crud and and operational flow design implemented, 
+ well implemented UX and GUI,  MAUI based, 
+ well implemented GRID for CRUD operations, 
+ full functional Sidebar menu for app navigation,
+ PDF reports output for each stage and data type
+ 
+ take "C:\Users\vladimir\source\repos\Data Analysis\client\public\MainLogoTransparent.png" adjust it to app logo, redesign all app colors with exactly logo color
+ 
+ implement full CRUD for "Каталог операций" prepare 
+ 
+ https://zoon.ru/sochi/medical/tsentr_ortopedii_i_travmatologii_dobrushkina_na_transportnoj/
+ 
+ think deeper and enchance with detailed on over text hint for "Аналитика операций" 
+ for ALL present DATA and parameters on screen, text russian only, 
+ User-friendly and intuitive, Plain-spoken and self-explanatory, Accessible and straightforward, Clear and natural
+ 
+ adjust plan for correct check and install if needed  sqlite client anf firebird client
+ 
+ detailed plan for implement module "Расчет выплат сотрудникам". 
+ Задание description: на базе визитов пациента расчитать выплаты сотруднику проводившему прием 
+ на основе индивидуально определенной схемы выплаты,определить структуру БД.
+ Выплата=(Доход от процедуры-суммарная Стоимость расходных материалов * [material_cost_factor]) * процент выплаты для операции (определить для каждой процедуры раздельно). 
+ Расчет для операции отдельно либо для списка операции. 
+ ПРедусмотреть удобный визард выбора операций. 
+ Вывод на экран полнофункциональный грид,
+ pdf на бланке, csv для загрузки в excel. 
+ well implemented UX and GUI,  
+ well implemented GRID for with CRUD operations, 
+ full functional link to Sidebar menu to "Операции" for app navigation
+ adjust DB required structure. 
+ т.к. процедуру могут проводить более одного сотрудника предусмотреть расчет "для процедуры" и "для сотрудника"
+ 
+Составить инструкцию пользователя
+ Детально Описать порядок работы системы
+ сущности их взаимосвязи
+ параметры настройки и расчетов
+  flow
+ порядок определения и ввода данных 
+эран работы  с бизнес процессами 
+печать и вывод,
+keep consistent and professional  style and terminology
+link well formated structured, human friendly, with full text search inside   instruction view to sidebar menu
+prepare pdf version for download
+------
+unify term процедуры, операции, сервисы, use everywhere in all modules only the  term  сервисы,сервис
+
+improve Оформление визита пациента, Расход материалов для сервисов, Себестоимость материалов -> show first  separate by сервис  and after total for all services
+
+
+unify term персонал,  use everywhere in all modules only the  term  сотрудник
+ 
+design plan for add to Анализ операций detaILED BI выплаты-доходы-сервисы, 
+add well GUI designed  new screen сервисы analytics by diff param
+analisys include service by patient, service by type, 
+service by kpi and so on
+
+
+design plan to  fill db with daemon test  data  for each flow step and  for each entity, mark this data as test daemon, 
+the goal emulate and check proccess properly defined and calculation properly produced, output properly generated 
+
+check properly delete test daemon data for all 
+--------------
+add password autentification for client,swagger and DB Sqlite manager, encrypt password, set one shared password "ortho#2026"
+
+
+adjust  Guide with detailed full test description
+
+create distributive.zip with  full instalation for standalone Application includes all required tools, backend service and client
+
+design plan for adjust work with  фискальный регистратор «АТОЛ 91Ф» по сменам, 
+автоматическая нумерация смен с мнемоническим номером и дато, авто открытие смены, 
+well designed gui интерфейс закрытия смены и вывод результатов смены,
+отчетность в разрезе смен и полная аналитика смен, 
+вывод в разныж форматах,
+adjust DB structure and add test open close смен, add demo_daemon data for смены
+
+adjust plan with option switch state физического POS-терминала эквайринга Альфа-Банка/emulation POS-терминала эквайринга Альфа-Банка, test физического POS-терминала эквайринга Альфа-Банка with full daignostics, set parameters screen for POS-терминала эквайринга Альфа-Банка, set exacly gui and functional work with POS-терминала эквайринга Альфа-Банка like work with  АТОЛ 91Ф
+
+check and improve plan for deffect and proper DB data integrity
+
+ check connection problem always show detailed problem message and diagnisis
+
+adjust Мастер синхронизации Firebird (MEDICAL.FDB)
+to SQLite DB for tables:
+ PROTDICT,PROTOCOLS,PROTSHOTS, MKB,
+ LABDICT,LABPDF,LABPLAN, DMSCARDS,
+ SERVDICT , 
+ try find related informatiln for this tables if found sync it also
+ 
+ try undestand by DB table structures  PROTDICT,PROTOCOLS,PROTSHOTS, MKB,
+ LABDICT,LABPDF,LABPLAN, DMSCARDS,
+ SERVDICT , 
+ try find related information and data inside 
+ and design plan for implement doctors wizzard screen to manage patient vizit, 
+ fill protocol with user friendly GUI using with predefined templates
+for diagnoses, anamneses etc all needed procces doctor pataient visit registration ,
+build plan for UX and GUI well designed wizzard, 
+include options output to pdw, docx,rtf, txt with preview
+
+adjust plan investigate DB tables PROTDICT,PROTOCOLS,PROTSHOTS, MKB,
+ LABDICT,LABPDF,LABPLAN, DMSCARDS,
+ SERVDICT  for fill
+ 
+ check for proper without defects integration АРМ врача-ортопеда -> План лечения, манипуляции и назначенные услуги клиники 
+ and Оформление визита proper calculation
+ 
+ develop detailed plan for advanced  design implementation manager Справочик шаблонов 
+ with full well organized UX and gui for enchance crud  with  шаблоны -> ортопедические тесты, 
+ шаблоны -> методы диагностики
+ enchance db structure for ортопедические тесты, методы диагностики,
+ find and fill proper ортопедические тесты, методы диагностики for each шаблон, 
+ develop required ортопедические тесты UX and gui,
+ refine existing db data for each existing шаблон with ортопедические тесты and  методы диагностики,
+ adjust existing DB structure, 
+ adjust АРМ врача screen with new structure , thik about enchanced UX redesign 
+ 
+ adjust guide with Справочик шаблонов, ортопедические тесты,методы диагностики detailed using expalnation with  full text search ,
+Полный реестр  валидированных ортопедических тестов,Полный реестр ортопедические тесты, Полный реестр методы диагностики
+ 
+ Made4Net.DataAccess.DataInterface detailed recommendation 
+ with all options to prevent [ThreadStatic] Threads Leakage Across Requests,
+ prevent cross-request thread-static contamination, 
+ ranging from contextual abstraction to deterministic cleanup patterns
+ 
+
+  39 to 76 entries, alongside an increase in the catalog of diagnostic methods from 26 to 48
+  
+  Расширение «Справочника Тестов» (с 39 до 76 тестов)
+  «Каталога методов диагностики» (с 26 до 48 методов)
+  
+  plan for redisigng flow арм врача for intuitive and quick way: 
+  - если нет перexода с другого экрана по ключу пациента 
+  начинать пустой записи , затем выбор пациента, 
+  после этого выбор протокола из Справочник   клинических шаблонов и протоколов: 2 уровня Кластер ->Протокол ,
+  think deeper about ux and gui using option filter  claster with Анатомическая карта (2D Гомункулус)  
+  the next step load all info, keep option change patient and protocol
+  
+  left sidebar menu  adjust panel with expand/collapse with iconografic gui  functionality 
+  
+  В шаблонах нет разделов: “Анамнез жизни”,  “Объективный статус”, “Специальные методы исследования” (МРТ, КТ, рентген, УЗИ, анализы), 
+“Выполненные манипуляции”.
+
+
+
+
+
+plan for redisigng АРМ врача and Справочник клинических шаблонов и протоколов. 
+for both expand/collapse (sandwich GUI ) for each vertical part (card) include expand/collapse all , on first load open expanded all
+posibiliti деактивировать раздел какой-то раздел, который не заполняется на приеме или если он не заполнен, 
+его не будет видно на печати,
+add to шаблон part:  “Анамнез жизни”,  “Объективный статус”, “Специальные методы исследования” (МРТ, КТ, рентген, УЗИ, анализы), 
+“Выполненные манипуляции”, adjust db structure, fill data for all clasters and shablons
+
+check proper full integrity and absent deffects for Справочник клинических шаблонов и протоколов and АРМ врача and user guide
+
+
+ design plan: заполняя шаблон на конкретного пациента, set option переименовать его and save to Кластер как 
+ "Кастомизированный шаблон" with special tag for search this kind of shablons, implement in search
+
+кластер Коленный сустав.
+шаблон гонартроз 1-2 ст. напереименовать как 1,2,3  стадии.
+При 4 стадии гонартроза рекомендовать эндопротезирование 
+или паллиативную терапию в соответствии возможностями.
+
+Кластер: Тазобедренный сустав - 
+добавить шаблон Энтезопатия (тендинит) ТФЛ, ягодичных мышц and fill all details data for it
+
+implement and add  to tests: Тест наклона Адамса (Adams Forward Bend Test) and Тест/признак Риссера (Risser Sign), 
+find and link for both for all relevant snablons to Специальные ортопедические тесты шаблона
+
+ deep research  for additional tests, add thfound  to all relevant shablons to Специальные ортопедические тесты шаблона
+  
+  deep research  for additional Методы диагностики, add found  to all relevant shablons to Методы диагностики
+
+  deep research  for maximum possible additional Шаблоны for each cluster, link to all relevant shablons to Методы диагностики and Специальные ортопедические тесты шаблона
+
+analyze Шаблоны,Методы диагностики,Специальные ортопедические тесты шаблона, 
+Верификация реестра и аудит клинико-информационной целостности,
+- проанализировать на доплолительное соответствия Шаблоны->Методы диагностики, дополнить до клинического стандарта
+- проанализировать на доплолительное соответствия Шаблоны->
+Специальные ортопедические тесты шаблона дополнить до клинического стандарта
+Сформируй  добавлениe недостающих провокационных тестов в 27 шаблонов, у которых сейчас привязан только 1 
+ чтобы довести каждый шаблон минимум до 3 специфичных тестов
+- установить приореты для Методы диагностики для каждого шаблона: 3 уровня высокий,средний, низкий, adjust db structure
+- установить приореты для Специальные ортопедические тесты шаблона для каждого шаблона: 3 уровня высокий,средний, низкий,adjust db structure
+Сформировать из результата markdown file "Кластеры Расшширение"
+   
+ 
+   deep and full research to link Методы диагностики and Специальные ортопедические тесты for relevant shablons
+
+исследовать loaded  и дополнить ортопедические Шаблоны результат в md file reay for download 
+
+провести  детальный клинический аудит загруженной базы ортопедических шаблонов,
+ выявить недостающие звенья и диагностические пробелы в каждом анатомическом кластере, 
+ после чего сформировать единый систематизированный документ в формате Markdown, 
+готовый для экспорта и интеграции в медицинскую информационную систему.
+
+проанализировать на допололительные для каждого Шаблона Методы диагностики, дополнить Шаблона до клинического стандарта,
+установить приоритеты для Методы диагностики для каждого шаблона: 3 уровня высокий,средний, низкий
+осле чего сформировать единый систематизированный документ в формате Markdown, 
+готовый для экспорта и интеграции в медицинскую информационную систему.
+
+проанализировать на допололительные для каждого Шаблона Специальные ортопедические тесты шаблона, 
+дополнить  до клинического стандарта,
+установить приоритеты для Специальные ортопедические тесты  для каждого шаблона: 3 уровня высокий,средний, низкий
+после чего сформировать единый систематизированный документ в формате Markdown, 
+готовый для экспорта и интеграции в медицинскую информационную систему.
+
+adjust Шаблоны,Методы диагностики,Специальные ортопедические тесты шаблона 
+with data from 
+create table db for Методы диагностики priority 3 уровня and fill with data and description for every level meaning
+create table db for Специальные ортопедические тесты priority 3 уровня and fill with data and description for every level meaning
+- установить приореты для Методы диагностики для каждого шаблона: 3 уровня высокий,средний, низкий, adjust db structure
+- установить приореты для Специальные ортопедические тесты шаблона для каждого шаблона: 3 уровня высокий,средний, низкий,adjust db structure,
+- определить таг для тестов [ДОПОЛНЕНО]
+
+
+design plan for Справочник клинических шаблонов и протоколов supplement and adjustment DB data structure  
+and content with 180 шаблонов  from md\Кластеры180.md, supplement and adjustment допололительные для каждого Шаблона 
+Методы диагностики from md\Кластеры180 Диагностика 2.md, 
+supplement and adjustment для каждого Шаблона Специальные ортопедические тесты 
+from md\test cluster 1.md,md\test cluster 2.md,md\test cluster 3.md,md\test cluster 4.md,md\test cluster 5.md,
+md\test cluster 6.md,md\test cluster 7.md,md\test cluster 8.md,md\test cluster 9.md,md\test cluster 10.md
+- установить приореты для Методы диагностики для каждого шаблона: 3 уровня высокий,средний, низкий, adjust db structure
+- установить приореты для Специальные ортопедические тесты шаблона для каждого шаблона: 3 уровня высокий,средний, низкий,adjust db structure,
+- определить таги для тестов по типу:  провокационные, релокационные, нейродинамические пробы и многофакторные диагностические кластеры с высокой чувствительностью и специфичностью
+-- определить таги для тестов по типу:  провокационные, релокационные, нейродинамические пробы и многофакторные диагностические кластеры с высокой чувствительностью и специфичностью
+- определить таг для тестов [ДОПОЛНЕНО]
+-enchance and improve with excellent GUI and UX for new data structure for Справочник клинических шаблонов и протоколов and АРМ врача-ортопеда
+
+
+
+------------------
+Специальные ортопедические тесты manager
+Методы диагностики manager
+Физиотерапии manager
+Ортопедические изделия manager
+
+арм врача
+
+design plan for Справочник клинических шаблонов и протоколов, 6. Физиотерапия и аппаратное лечение
+ supplement and adjustment DB data structure  and GUI and UX
+and content with 180 шаблонов  from md\Fisio180_1_7.md and Fisio180_7_11.md 
+- установить приореты и таги для Физиотерапия и аппаратное лечение
+
+
+design plan for Справочник клинических шаблонов и протоколов, Гониометрия ROM
+ supplement and adjustment DB data structure  and GUI and UX
+and content with 180 шаблонов  from md\Гониометрия ROM1 _5.md and Гониометрия ROM5_10.md
+- установить приореты и таги для Гониометрия ROM
+
+
+
+design plan for Справочник клинических шаблонов и протоколов,Ортопедические изделия и разгрузка
+ supplement and adjustment DB data structure  and GUI and UX
+and content with 180 шаблонов  from md\OrthoIzdeliya1_6.md and md\OrthoIzdeliya6_10.md 
+- установить приореты и таги для Ортопедические изделия и разгрузка
+--------------
+design plan for Справочник клинических шаблонов и протоколов,Манипуляции и инъекции
+ supplement and adjustment DB data structure  and GUI and UX
+and content with 180 шаблонов  from md\ManipulatuinandInjections1_8.md and md\ManipulatuinandInjections8_10.md
+- установить приореты и таги для Манипуляции и инъекции
+
+design plan for Справочник клинических шаблонов и протоколов,add new tab ЛФК(Комплекс Лечебной физкультуры )
+ supplement and adjustment DB data structure  and GUI and UX 
+and content with 180 шаблонов  from md\ЛФК1_3.md and md\ЛФК4_7.md and md\ЛФК7_10.md and md\ЛФК10_all.md
+ЛФК_комплекс_1_4.md,ЛФК_комплекс_4_5.md,ЛФК_комплекс_6_7.md, ЛФК_комплекс_8_9.md, ЛФК_комплекс_1_2_3.md,ЛФК_комплекс_10_11.md - 
+нормализовать данные, исключить повторы 
+- установить Фазы, Ступени  и таги для ЛФК, организовать GUI по Фазам
+
+
+--проанализировать на допололительные для каждого Шаблона  Ортопедические изделия и разгрузка with priority prepare ready for download "OrthoIzdeliya.md
+
+
+!!! Справочник клинических шаблонов и протоколов 
+ , ROM and Манипуляции и инъекции, render screen vew data with Latex\katex for formulas, json data to human readable format view 
+ 
+ design plan for Справочник клинических шаблонов и протоколов, синхронизация справочникоив и табов, унифицировать экраны справочников with the same exckellent GUI and UX, set for top button calls the same order and captions with on over hint detailed explanation like in tab 
+ 
+ click on button Клинический гид doesnt works properly
+ 
+ for арм врача: implement  detailed plan for flow: "Печать Направлений для пациентов" ,
+ для печати или выгрузки выбранных для печати или выгрузки направлений 
+ профессионального клинического стандарта в различных форматах pdf, word etc 
+ на бланке Центра с лого для всех назначаемых процедур 
+ (все домены) и операций, 
+ как я внешних так и для внутрених исполнителей процедур и операций, 
+ соблюдать строгий клиничиский стандарт, 
+ check proper latex\katex formulas rendering,
+ excellent blank design and layout,
+ включать подробное описание процедуры, diagnisis, anamneses etc all requered patient information,
+ устанавливать срок действия направления из параметров по умолчанию установить 90 дней что всегда указывать при печати,
+ , всегда добалять подписи, stamp from image icons\StampInvertDarkTransparent.png , 
+ add and support audit DB structure data  for issued Направлений for patients with description, 
+ add  all Направления for patient ux and gui management special screen 
+ 
+ design plan for арм врача,  
+ show active/choosed/reqired as expanded, the rest  collapsed with accordeon, the same for 
+ 2. ROM  3. Тесты 4. Диагностика 5. Манипуляции  ,6. Физиотерапия ,7. Ортезирование ,
+   8. ЛФК  for all  detailed data
+   
+   -------------------------------------------
+   for output printed document always "Клинические
+параметры и
+протокол" impove and detalize ALL!  required detals db data  
+to professional level, fill future documents  до клинического стандарта,
+ dont skip any detalil, dont miss anything, 
+ use katex\latex for rendering formulas, well format output text,
+ refine detailed "Подготовка", refine detailed 
+ "Памятка пациенту по подготовке к процедурам (из клинического стандарта Центра):"
+ 
+ proceed adjust userguide with current db data,
+ full check user guid view for proper latex\katex formulas rendering
+ 
+ build distributive.zip for stand alone instalation includes db and tools 
+
+implement detailed plan for
+adjust db structure with users table with all info required for autorization data
+user name, encrypted password,active status, expiration date etc
+and link it to staff, 
+autorization with user name/password screen on enter
+create  screen for users table crud, link screen  to Администратор sidebar menu
+
+add to users permission type : sysadmin, administrator, doctor, nurse, accountant, default
+adjust db with table permissions
+add crud screen for permissions table linked to users crud screen
+set to all users as default permission by default, sysadmin permission for admin
+adjust db structure and fill table data with  permission type
+adjust crud users screen for permissions set, well designed ux and gui
+add crud screen for permissions table 
+options set multi permissions for one user
+show on user on top hint over user current permissions 
+
+implement detailed plan for redesign flow арм врача
+start from today actual well organized  excellent designed UX and GUI queue list  
+with brief today patient queue information for current doctor (user)
+continue with choosed patient
+keep option direct search and  choose patient from full patiens list
+prepare [TEST_DAEMON] mock data  5-10 patients in turn for next 5 days for test for doctor Добрушкин А.М.
+option for addministrator pernissions  see all patient in queue
+
+add top level sidebar menu Бугалтерия move to this menu Журнал и Аналитика смен,Расчет выплат сотрудникам,
+Журнал аудита ККТ ,Каталог сервисов и технологических карт
+add top level sidebar menu Расписание и прием move to this menu Расписание и прием, Оформление визита пациента
+
+create config json file to  define sidebar menu items and screen elements  by permissions
+possibility show menu item for multi permissions, set * show for all
+add skill always adjust config json file on add/delete menu item
+implement show menu items by this config json
+define for each user main (enter) screen from permited
+
+Пользователи и безопасность системы adjust grid view without horizontal and vertical scroll
+
+implement в Аналитика: разработать BI form История Приема -  
+by stuff and totals for whole  clinic 
+,deep think about details of presentation and possible KPI , 
+excellent gui ,  define menu config json, permissions ,
+mock test data [TEST_DAEMON] for check 
+
+implement detaILED plan for server side service for syncrinization with medflex patient queue provider 
+dual direction request from medflex and update data in мис send from мис update to medflex
+investigate below links for implementation онлайн-запись
+https://developer.medflex.ru/clinic-token/tag/models/get_doctors
+https://developer.medflex.ru/clinic-token/tag/direct-appointment/cancel_online_appointment 
+
+enchance gui  for  activate/inactivaty meflex sync service, show current status for permitted on top status line 
+Онлайн-запись MedFlex move to Администратор sidebar menu
+add MedFlex диагностика to Статус и мониторинг сервисов бэкенда
+
+build distributive.zip for stand alone install incluse all requered tools, services and db
+
+Функция pruneOldSerilogLogs() автоматически удаляет записи старше 180 дней (6 месяцев
+---------------
+
+implement detailed plan for арм врача 
+redesign 2 side patient screen syncronization: 
+sync card numeration in shablon (left side) and numeraton in Протокол консультативного приема травматолога-ортопеда exactly the same,
+on any!! action in  shablon fix it in Протокол and   positioning right side panel to the same partition number, 
+always write to Протокол action action shablon->protocol, dont miss anything,
+implement autosave draft Протокол with status draft on any Протокол update, 
+implement action return to Протокол draft for protocol from state Подписан ЭЦП
+log with serilog all actions and save for 6 month in db serilog table
+--
+refine plan with detailed check for full sync numeration left 
+side partitions and Протокол inner partition  numeration , 
+add online on update check and show on screen Протокол  
+integrity status with warning and critical absent required information,
+sync left and right side positioning for both side scrolling
+add (i) and link to popup panel  with  detailed explanation for every partiotion item from DB 
+like for  test also implement for  rom,  4. Инструментальная и лабораторная диагностика, 
+6. Физиотерапия и аппаратное восстановительное лечение,
+7. Ортопедические изделия и средства разгрузки,
+8. Лечебная физкультура (ЛФК) и кинезиотерапия  etc.
+
+implement detailed plan for redesign  screen
+Реестр направлений пациентов
+to
+Реестр Протоколов и  направлений пациентов
+ add for Протоколы full CRUD management with excellent GUI and UX,
+well implemented full search inside Протоколы 
+by default on protocol created permit access to protocol   for created doctor or Administrator or sysadmin,
+doctor ,not Administrator, by default   has access only for created himself protocols,
+Протоколы подписаные ЭЦП have status readonly permisions for all users , except sysadmin,grant and implement full crud for sysadmin
+add to Administrator function grant access to doctor to protocol with confirmation!, 
+doctor has access to granted access protocols,
+all protocol changes and access grant log with serilog
+link Печать include Направления 
+
+ for Добрушкин Александр Моисеевич
+Врач травматолог-ортопед, remove everywhere  where к.м.н db and code, 
+for screen and document output presentation and output always takes staff data from DB only! , 
+check code to prevent hard coded data staff data
+
+

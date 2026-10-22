@@ -118,8 +118,21 @@ export default function OperationsAnalytics() {
   const [period, setPeriod] = useState<string>('all');
   const [category, setCategory] = useState<string>('all');
   const [doctorId, setDoctorId] = useState<string>('all');
+  const [doctorsList, setDoctorsList] = useState<Array<{ id: number; full_name: string; role?: string }>>([]);
   const [search, setSearch] = useState<string>('');
   const [activeChartTab, setActiveChartTab] = useState<number>(0);
+
+  // Fetch doctors dynamically from DB
+  useEffect(() => {
+    fetch(`${API_BASE_URL}/api/ortho/doctors`)
+      .then((res) => res.json())
+      .then((resData) => {
+        if (resData.success && Array.isArray(resData.doctors)) {
+          setDoctorsList(resData.doctors);
+        }
+      })
+      .catch((err) => console.error('Error fetching doctors for operations analytics:', err));
+  }, []);
 
   // What-If Simulation state
   const [showSimulator, setShowSimulator] = useState<boolean>(false);
@@ -856,7 +869,7 @@ export default function OperationsAnalytics() {
           </FormControl>
         </Tooltip>
 
-        <Tooltip title="Анализ эффективности работы конкретного специалиста: Добрушкин А.М. (Главврач) или Петров С.В. (Ортопед)" arrow>
+        <Tooltip title="Анализ эффективности работы конкретного специалиста из базы данных сотрудников" arrow>
           <FormControl size="small" sx={{ minWidth: 220 }}>
             <InputLabel id="doctor-label" htmlFor="doctor-select">Оперирующий хирург</InputLabel>
             <Select
@@ -868,8 +881,11 @@ export default function OperationsAnalytics() {
               onChange={(e) => setDoctorId(e.target.value)}
             >
               <MenuItem value="all">Все специалисты клиники</MenuItem>
-              <MenuItem value="1">Добрушкин А.М. (Главный врач)</MenuItem>
-              <MenuItem value="2">Петров С.В. (Врач-ортопед)</MenuItem>
+              {doctorsList.map((doc) => (
+                <MenuItem key={doc.id} value={String(doc.id)}>
+                  {doc.full_name}{doc.role ? ` (${doc.role})` : ''}
+                </MenuItem>
+              ))}
             </Select>
           </FormControl>
         </Tooltip>

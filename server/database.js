@@ -246,7 +246,7 @@ const db = new sqlite3.Database(dbPath, (err) => {
               start_time: '09:00',
               end_time: '09:30',
               duration_minutes: 30,
-              room_number: 'Кабинет №1 (Добрушкин)',
+              room_number: 'Кабинет №1',
               joint_area: 'knee',
               urgency_level: 'routine',
               status: 'completed',
@@ -261,7 +261,7 @@ const db = new sqlite3.Database(dbPath, (err) => {
               start_time: '09:45',
               end_time: '10:30',
               duration_minutes: 45,
-              room_number: 'Кабинет №1 (Добрушкин)',
+              room_number: 'Кабинет №1',
               joint_area: 'knee',
               urgency_level: 'urgent',
               status: 'in_progress',
@@ -276,7 +276,7 @@ const db = new sqlite3.Database(dbPath, (err) => {
               start_time: '10:45',
               end_time: '11:15',
               duration_minutes: 30,
-              room_number: 'Кабинет №1 (Добрушкин)',
+              room_number: 'Кабинет №1',
               joint_area: 'hip',
               urgency_level: 'routine',
               status: 'waiting',
@@ -291,7 +291,7 @@ const db = new sqlite3.Database(dbPath, (err) => {
               start_time: '11:30',
               end_time: '12:00',
               duration_minutes: 30,
-              room_number: 'Кабинет №1 (Добрушкин)',
+              room_number: 'Кабинет №1',
               joint_area: 'shoulder',
               urgency_level: 'routine',
               status: 'confirmed',
@@ -365,7 +365,7 @@ const db = new sqlite3.Database(dbPath, (err) => {
                     [
                       appId, 'patient', 'Пациент клиники', '+7 (988) 189-13-62', 'telegram', '@ortho_patient',
                       'booking_confirmation',
-                      `Здравствуйте! Вы записаны в «Центр Ортопедии Добрушкина» на ${app.appointment_date} в ${app.start_time}. Врач: ${app.doctor_id === 2 ? 'Добрушкин А.М.' : 'Петров С.В.'}. Пожалуйста, подтвердите визит.`,
+                      `Здравствуйте! Вы записаны в «Центр Ортопедии» на ${app.appointment_date} в ${app.start_time}. Врач: ${app.doctor_name || 'Врач клиники'}. Пожалуйста, подтвердите визит.`,
                       1, app.status === 'confirmed' ? 'confirmed_by_user' : 'delivered'
                     ]
                   );

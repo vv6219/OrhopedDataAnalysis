@@ -208,11 +208,13 @@ export default function ServicesBiAnalytics() {
   // Trigger Print Report
   const handlePrint = () => {
     if (!summaryData) return;
+    const chiefDoc = staffList.find(s => s.role && s.role.toLowerCase().includes('главный')) || staffList[0];
     setPrintData({
       summary: summaryData,
       rows: gridRows,
       generatedDate: new Date().toLocaleString('ru-RU'),
-      filterPeriod: period === 'all' ? 'За весь период' : period
+      filterPeriod: period === 'all' ? 'За весь период' : period,
+      chiefDoctorName: chiefDoc?.full_name || 'Главный врач'
     });
     setTimeout(() => {
       handlePrintTrigger();

@@ -140,6 +140,12 @@ if ($backupDbTemp -and (Test-Path $backupDbTemp)) {
     Write-Host "  -> Restored existing database" -ForegroundColor Yellow
 } elseif (Test-Path $sourceDb) {
     Copy-Item -Path $sourceDb -Destination $destDb -Force
+    if (Test-Path "$sourceDb-wal") {
+        Copy-Item -Path "$sourceDb-wal" -Destination "$destDb-wal" -Force -ErrorAction SilentlyContinue
+    }
+    if (Test-Path "$sourceDb-shm") {
+        Copy-Item -Path "$sourceDb-shm" -Destination "$destDb-shm" -Force -ErrorAction SilentlyContinue
+    }
     $dbSizeMb = (Get-Item $destDb).Length / 1MB
     Write-Host ("  -> Copied master SQLite database with data: " + [Math]::Round($dbSizeMb, 2) + " MB (61k+ records, v2.0.1 schemas, 180 clinical templates 2.0)") -ForegroundColor Green
 } else {
@@ -200,6 +206,8 @@ if ($FreshInstallDependencies) {
     if ($LASTEXITCODE -ge 8) {
         Write-Host "  -> Robocopy fallback to Copy-Item..." -ForegroundColor Yellow
         Copy-Item -Path $sourceNodeModules -Destination $destNodeModules -Recurse -Force
+    } else {
+        $global:LASTEXITCODE = 0
     }
     Write-Host "  [OK] Pre-compiled node_modules copied (zero-dependency ready)." -ForegroundColor Green
 } else {

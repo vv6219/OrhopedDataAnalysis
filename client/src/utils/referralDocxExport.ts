@@ -285,7 +285,7 @@ function createReferralSection(data: OrthoReferralData): ISectionOptions {
       new Paragraph({
         children: [
           new TextRun({ text: 'Лечащий врач: ', bold: true }),
-          new TextRun({ text: 'Добрушкин А.М. ________________________ / М.П.' })
+          new TextRun({ text: `${data.doctor_name || 'Врач травматолог-ортопед'} ________________________ / М.П.` })
         ],
         spacing: { before: 240, after: 100 }
       }),

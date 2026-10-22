@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -183,9 +183,9 @@ export default function ClinicalGuidanceModal({
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
   // Sync tab when initialSection changes and modal opens
-  useState(() => {
+  useEffect(() => {
     setActiveTab(resolvedInitialTab);
-  });
+  }, [resolvedInitialTab, open]);
 
   const currentTabMeta = SECTION_TABS[activeTab] || SECTION_TABS[0];
 

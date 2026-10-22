@@ -26,7 +26,9 @@ import {
   TableCell,
   TableContainer,
   TableHead,
-  TableRow
+  TableRow,
+  Tabs,
+  Tab
 } from '@mui/material';
 import {
   DataGrid,
@@ -54,6 +56,7 @@ import { exportReferralToDocx } from '../utils/referralDocxExport';
 import LatexText from '../components/ortho/LatexText';
 import { resolveClinicalProtocolText } from '../utils/clinicalProtocolResolver';
 import { COMMON_PRINT_PAGE_STYLE } from '../utils/printStyles';
+import { useAuth } from '../context/AuthContext';
 
 interface ReferralRow {
   id: number;
@@ -281,7 +284,8 @@ function mapReferralToPrintData(ref: any): OrthoReferralData {
     issue_date: ref.issue_date,
     valid_days: ref.valid_days || 90,
     expires_at: ref.expires_at,
-    doctor_name: 'Добрушкин А.М',
+    doctor_name: ref.doctor_name || '',
+    doctor_specialization: ref.doctor_specialization || '',
     performer_id: ref.performer_id,
     performer_name: ref.performer_name,
     performer_is_internal: ref.performer_is_internal,
@@ -307,6 +311,8 @@ function mapReferralToPrintData(ref: any): OrthoReferralData {
 export default function PatientReferralsManager() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  const { currentUser } = useAuth();
+  const operatorName = currentUser?.fullName || 'Сотрудник клиники';
   const queryPatientId = searchParams.get('patientId');
 
   const [rows, setRows] = useState<ReferralRow[]>([]);
@@ -430,7 +436,7 @@ export default function PatientReferralsManager() {
       fetch(`/api/ortho/referrals/${row.id}/audit-print`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ performed_by_name: 'Добрушкин А.М', format: 'pdf', notes: 'Повторная печать из реестра' })
+        body: JSON.stringify({ performed_by_name: operatorName, format: 'pdf', notes: 'Повторная печать из реестра' })
       }).catch(e => console.error(e));
 
       setToastMessage(`Бланк направления ${row.referral_number} отправлен на печать`);
@@ -453,7 +459,7 @@ export default function PatientReferralsManager() {
       fetch(`/api/ortho/referrals/${row.id}/audit-print`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ performed_by_name: 'Добрушкин А.М', format: 'docx', notes: 'Экспорт DOCX из реестра' })
+        body: JSON.stringify({ performed_by_name: operatorName, format: 'docx', notes: 'Экспорт DOCX из реестра' })
       }).catch(e => console.error(e));
 
       setToastMessage(`Документ Word (.docx) направления ${row.referral_number} успешно сформирован`);
@@ -481,7 +487,7 @@ export default function PatientReferralsManager() {
           fetch(`/api/ortho/referrals/${id}/audit-print`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ performed_by_name: 'Добрушкин А.М', format: 'pdf', notes: 'Групповая печать бланков из реестра' })
+            body: JSON.stringify({ performed_by_name: operatorName, format: 'pdf', notes: 'Групповая печать бланков из реестра' })
           }).catch(e => console.error(e));
         }
       }
@@ -520,7 +526,7 @@ export default function PatientReferralsManager() {
           fetch(`/api/ortho/referrals/${id}/audit-print`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ performed_by_name: 'Добрушкин А.М', format: 'docx', notes: 'Групповой экспорт в Word из реестра' })
+            body: JSON.stringify({ performed_by_name: operatorName, format: 'docx', notes: 'Групповой экспорт в Word из реестра' })
           }).catch(e => console.error(e));
         }
       }
@@ -558,7 +564,7 @@ export default function PatientReferralsManager() {
         body: JSON.stringify({
           status: newStatusValue,
           reason: statusChangeReason.trim(),
-          performed_by: 'Добрушкин А.М'
+          performed_by: operatorName
         })
       });
       const data = await res.json();
@@ -830,7 +836,7 @@ export default function PatientReferralsManager() {
         elevation={0}
         sx={{
           p: 2.5,
-          mb: 3,
+          mb: 2,
           bgcolor: '#FFFFFF',
           border: '1px solid #E2E8F0',
           borderRadius: 2.5,
@@ -849,7 +855,7 @@ export default function PatientReferralsManager() {
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
               <AssignmentIcon sx={{ color: '#0F3C64', fontSize: 32 }} />
               <Typography variant="h5" sx={{ fontWeight: 900, color: '#0F3C64', letterSpacing: '-0.3px' }}>
-                Реестр направлений пациентов
+                Реестр Протоколов и направлений пациентов
               </Typography>
             </Box>
             <Typography variant="body2" sx={{ color: '#64748B', mt: 0.5 }}>
@@ -877,6 +883,31 @@ export default function PatientReferralsManager() {
             АРМ врача (Новый прием)
           </Button>
         </Box>
+      </Paper>
+
+      {/* DUAL NAVIGATION TABS */}
+      <Paper elevation={0} sx={{ mb: 2.5, bgcolor: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 2, px: 2, pt: 1 }}>
+        <Tabs
+          value={1}
+          onChange={(_, val) => {
+            if (val === 0) navigate('/protocols-registry');
+          }}
+          textColor="primary"
+          indicatorColor="primary"
+        >
+          <Tab
+            label="1. Протоколы приёмов (АРМ Врача)"
+            icon={<DescriptionIcon />}
+            iconPosition="start"
+            sx={{ fontWeight: 700, textTransform: 'none', fontSize: '0.95rem' }}
+          />
+          <Tab
+            label="2. Направления пациентов (90 дней)"
+            icon={<AssignmentIcon />}
+            iconPosition="start"
+            sx={{ fontWeight: 700, textTransform: 'none', fontSize: '0.95rem' }}
+          />
+        </Tabs>
       </Paper>
 
       {/* 2. STATS OVERVIEW CARDS */}

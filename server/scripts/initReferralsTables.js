@@ -36,7 +36,7 @@ db.serialize(() => {
     patient_id INTEGER NOT NULL,
     appointment_id INTEGER,
     protocol_id INTEGER,
-    doctor_name TEXT NOT NULL DEFAULT 'Добрушкин А.М',
+    doctor_name TEXT NOT NULL DEFAULT 'Врач травматолог-ортопед',
     issue_date TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
     valid_days INTEGER NOT NULL DEFAULT 90,
     expires_at TEXT NOT NULL,
@@ -86,7 +86,7 @@ db.serialize(() => {
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     referral_id INTEGER NOT NULL,
     action_type TEXT NOT NULL,
-    performed_by_name TEXT NOT NULL DEFAULT 'Добрушкин А.М',
+    performed_by_name TEXT NOT NULL DEFAULT 'Сотрудник клиники',
     details_json TEXT,
     created_at TEXT DEFAULT (datetime('now', 'localtime')),
     FOREIGN KEY(referral_id) REFERENCES ortho_referrals(id) ON DELETE CASCADE

@@ -38,6 +38,41 @@ const upload = multer({
   limits: { fileSize: 50 * 1024 * 1024 } // 50MB
 });
 
+const { extractTokenFromReq, verifyToken } = require('./auth');
+
+/**
+ * Extract authenticated user context and role flags from request
+ */
+function getUserContext(req) {
+  try {
+    const token = extractTokenFromReq(req);
+    if (token) {
+      const payload = verifyToken(token);
+      if (payload) {
+        const perms = Array.isArray(payload.permissions) ? payload.permissions : [];
+        const isSysadmin = perms.includes('sysadmin') || perms.includes('*') || payload.role === 'sysadmin' || payload.role === 'admin' || payload.username === 'admin';
+        const isAdministrator = perms.includes('administrator') || payload.role === 'admin' || payload.role === 'administrator' || isSysadmin;
+        const isDoctor = perms.includes('doctor') || payload.role === 'doctor' || Boolean(payload.staffId);
+        return {
+          userId: payload.userId,
+          user: payload.user || payload.username || 'Пользователь',
+          username: payload.username,
+          role: payload.role,
+          staffId: payload.staffId ? Number(payload.staffId) : null,
+          staffName: payload.staffName,
+          permissions: perms,
+          isSysadmin,
+          isAdministrator,
+          isDoctor
+        };
+      }
+    }
+  } catch (e) {
+    // ignore
+  }
+  return null;
+}
+
 // Helper: Compute SHA-256 hash
 function computeSha256(content) {
   return crypto.createHash('sha256').update(content || '').digest('hex');
@@ -193,11 +228,13 @@ router.get('/templates', (req, res) => {
 // -----------------------------------------------------------------------------
 router.get('/registry', (req, res) => {
   const t0 = performance.now();
+  const user = getUserContext(req);
   const {
     search,
     joint,
     status,
     doctorId,
+    patientId,
     startDate,
     endDate,
     page = 1,
@@ -209,6 +246,47 @@ router.get('/registry', (req, res) => {
   const pageNum = Math.max(1, Number(page));
   const limit = Math.min(100, Math.max(5, Number(pageSize)));
   const offset = (pageNum - 1) * limit;
+
+  // Determine RBAC doctor access restriction:
+  // If user is a Doctor AND NOT sysadmin AND NOT administrator:
+  // restrict to only protocols created by himself OR granted to him via ortho_protocol_doctor_access
+  let rbacWhereClause = '';
+  const rbacParams = [];
+  if (user && !user.isSysadmin && !user.isAdministrator && user.staffId) {
+    rbacWhereClause = ` AND (p.docn = ? OR p.id IN (SELECT protocol_id FROM ortho_protocol_doctor_access WHERE doctor_id = ? AND is_active = 1))`;
+    rbacParams.push(user.staffId, user.staffId);
+  } else if (doctorId) {
+    // Administrator or Sysadmin filtering by specific doctor:
+    rbacWhereClause = ` AND p.docn = ?`;
+    rbacParams.push(Number(doctorId));
+  }
+
+  const enrichRows = (rows) => {
+    return (rows || []).map(r => {
+      const grantedIds = (r.granted_doctor_ids || '').split(',').map(Number).filter(Boolean);
+      const isOwner = Boolean(user && user.staffId && r.docn === user.staffId);
+      const isGranted = Boolean(user && user.staffId && grantedIds.includes(user.staffId));
+      const isSigned = r.status === 'signed' || r.is_signed === 1;
+      const isSysadmin = Boolean(user && user.isSysadmin);
+      const isAdmin = Boolean(user && user.isAdministrator);
+
+      // Signed protocols have readonly permissions for all users, except sysadmin:
+      const canEdit = isSysadmin ? true : (!isSigned && (isOwner || isGranted || isAdmin));
+      const canDelete = isSysadmin ? true : (!isSigned && (isOwner || isAdmin));
+      const canReturnToDraft = isSysadmin;
+      const canGrantAccess = isAdmin || isSysadmin;
+
+      return {
+        ...r,
+        is_owner: isOwner,
+        is_granted: isGranted,
+        can_edit: canEdit,
+        can_delete: canDelete,
+        can_return_to_draft: canReturnToDraft,
+        can_grant_access: canGrantAccess
+      };
+    });
+  };
 
   // If full-text search term is provided, use FTS5 virtual table
   if (search && search.trim().length > 0) {
@@ -238,6 +316,10 @@ router.get('/registry', (req, res) => {
       countSql += ` AND p.status = ?`;
       countParams.push(status);
     }
+    if (patientId) {
+      countSql += ` AND p.pt_id = ?`;
+      countParams.push(Number(patientId));
+    }
     if (startDate) {
       countSql += ` AND date(p.vdate) >= date(?)`;
       countParams.push(startDate);
@@ -245,6 +327,10 @@ router.get('/registry', (req, res) => {
     if (endDate) {
       countSql += ` AND date(p.vdate) <= date(?)`;
       countParams.push(endDate);
+    }
+    if (rbacWhereClause) {
+      countSql += rbacWhereClause;
+      countParams.push(...rbacParams);
     }
 
     db.get(countSql, countParams, (err, countRow) => {
@@ -272,7 +358,9 @@ router.get('/registry', (req, res) => {
           p.signed_at,
           p.signature_hash,
           p.revocation_reason,
-          COALESCE(st.full_name, 'Добрушкин Александр Моисеевич') AS doctor_name,
+          COALESCE(st.full_name, 'Врач травматолог-ортопед') AS doctor_name,
+          st.specialization AS doctor_specialization,
+          st.role AS doctor_role,
           pt.full_name AS patient_name,
           pt.bdate AS patient_bdate,
           pt.age AS patient_age,
@@ -293,7 +381,10 @@ router.get('/registry', (req, res) => {
               THEN (SELECT COALESCE(SUM(total_price), 0) FROM ortho_treatment_prescriptions WHERE protocol_id = p.id)
               ELSE (SELECT COALESCE(SUM(sd.price * sp.cnt), 0) FROM servplan sp JOIN servdict sd ON sd.id = sp.sd_id WHERE sp.pr_id = p.id)
             END
-          ) AS total_prescriptions_amount
+          ) AS total_prescriptions_amount,
+          (SELECT COUNT(*) FROM ortho_referrals WHERE protocol_id = p.id OR appointment_id = p.appointment_id) AS referrals_count,
+          (SELECT GROUP_CONCAT(st_acc.full_name, '|||') FROM ortho_protocol_doctor_access da JOIN staff st_acc ON st_acc.id = da.doctor_id WHERE da.protocol_id = p.id AND da.is_active = 1) AS granted_doctors,
+          (SELECT GROUP_CONCAT(da.doctor_id, ',') FROM ortho_protocol_doctor_access da WHERE da.protocol_id = p.id AND da.is_active = 1) AS granted_doctor_ids
         FROM protocols_fts fts
         JOIN protocols p ON p.id = fts.protocol_id
         LEFT JOIN staff st ON st.id = p.docn
@@ -310,6 +401,10 @@ router.get('/registry', (req, res) => {
         selectSql += ` AND p.status = ?`;
         selectParams.push(status);
       }
+      if (patientId) {
+        selectSql += ` AND p.pt_id = ?`;
+        selectParams.push(Number(patientId));
+      }
       if (startDate) {
         selectSql += ` AND date(p.vdate) >= date(?)`;
         selectParams.push(startDate);
@@ -317,6 +412,10 @@ router.get('/registry', (req, res) => {
       if (endDate) {
         selectSql += ` AND date(p.vdate) <= date(?)`;
         selectParams.push(endDate);
+      }
+      if (rbacWhereClause) {
+        selectSql += rbacWhereClause;
+        selectParams.push(...rbacParams);
       }
 
       selectSql += ` GROUP BY p.id ORDER BY p.id DESC LIMIT ? OFFSET ?`;
@@ -341,7 +440,7 @@ router.get('/registry', (req, res) => {
           total,
           page: pageNum,
           pageSize: limit,
-          rows: rows || [],
+          rows: enrichRows(rows),
           durationMs: Math.round(durationMs)
         });
       });
@@ -359,9 +458,9 @@ router.get('/registry', (req, res) => {
       whereClauses.push('p.status = ?');
       params.push(status);
     }
-    if (doctorId) {
-      whereClauses.push('p.docn = ?');
-      params.push(doctorId);
+    if (patientId) {
+      whereClauses.push('p.pt_id = ?');
+      params.push(Number(patientId));
     }
     if (startDate) {
       whereClauses.push('date(p.vdate) >= date(?)');
@@ -370,6 +469,10 @@ router.get('/registry', (req, res) => {
     if (endDate) {
       whereClauses.push('date(p.vdate) <= date(?)');
       params.push(endDate);
+    }
+    if (rbacWhereClause) {
+      whereClauses.push(rbacWhereClause.replace(/^ AND /, ''));
+      params.push(...rbacParams);
     }
 
     const whereStr = whereClauses.join(' AND ');
@@ -401,7 +504,9 @@ router.get('/registry', (req, res) => {
           p.signed_at,
           p.signature_hash,
           p.revocation_reason,
-          COALESCE(st.full_name, 'Добрушкин Александр Моисеевич') AS doctor_name,
+          COALESCE(st.full_name, 'Врач травматолог-ортопед') AS doctor_name,
+          st.specialization AS doctor_specialization,
+          st.role AS doctor_role,
           pt.full_name AS patient_name,
           pt.bdate AS patient_bdate,
           pt.age AS patient_age,
@@ -422,7 +527,10 @@ router.get('/registry', (req, res) => {
               THEN (SELECT COALESCE(SUM(total_price), 0) FROM ortho_treatment_prescriptions WHERE protocol_id = p.id)
               ELSE (SELECT COALESCE(SUM(sd.price * sp.cnt), 0) FROM servplan sp JOIN servdict sd ON sd.id = sp.sd_id WHERE sp.pr_id = p.id)
             END
-          ) AS total_prescriptions_amount
+          ) AS total_prescriptions_amount,
+          (SELECT COUNT(*) FROM ortho_referrals WHERE protocol_id = p.id OR appointment_id = p.appointment_id) AS referrals_count,
+          (SELECT GROUP_CONCAT(st_acc.full_name, '|||') FROM ortho_protocol_doctor_access da JOIN staff st_acc ON st_acc.id = da.doctor_id WHERE da.protocol_id = p.id AND da.is_active = 1) AS granted_doctors,
+          (SELECT GROUP_CONCAT(da.doctor_id, ',') FROM ortho_protocol_doctor_access da WHERE da.protocol_id = p.id AND da.is_active = 1) AS granted_doctor_ids
         FROM protocols p
         LEFT JOIN staff st ON st.id = p.docn
         LEFT JOIN patients pt ON pt.id = p.pt_id
@@ -441,11 +549,245 @@ router.get('/registry', (req, res) => {
           total,
           page: pageNum,
           pageSize: limit,
-          rows: rows || []
+          rows: enrichRows(rows)
         });
       });
     });
   }
+});
+
+// -----------------------------------------------------------------------------
+// POST /api/ortho/protocols/:id/grant-access - Grant doctor access to a protocol (Administrator or sysadmin)
+// -----------------------------------------------------------------------------
+router.post('/protocols/:id/grant-access', (req, res) => {
+  const protocolId = Number(req.params.id);
+  const { doctorId, reason } = req.body;
+  const user = getUserContext(req);
+
+  if (!user || (!user.isAdministrator && !user.isSysadmin)) {
+    return res.status(403).json({
+      success: false,
+      error: 'Только Администратор клиники или Системный администратор имеет право предоставлять доступ к протоколам'
+    });
+  }
+
+  if (!protocolId || !doctorId) {
+    return res.status(400).json({ success: false, error: 'Укажите protocolId и doctorId' });
+  }
+
+  db.get('SELECT id, full_name, role FROM staff WHERE id = ?', [doctorId], (errDoc, targetDoctor) => {
+    if (errDoc || !targetDoctor) {
+      return res.status(404).json({ success: false, error: 'Указанный врач не найден в справочнике сотрудников' });
+    }
+
+    const nowIso = new Date().toISOString().slice(0, 19).replace('T', ' ');
+    const grantReason = (reason || 'Клинический консилиум / замещение приёма').trim();
+
+    db.run(`
+      INSERT INTO ortho_protocol_doctor_access (protocol_id, doctor_id, granted_by_user_id, granted_by_name, granted_at, reason, is_active)
+      VALUES (?, ?, ?, ?, ?, ?, 1)
+      ON CONFLICT(protocol_id, doctor_id) DO UPDATE SET
+        is_active = 1,
+        granted_by_user_id = excluded.granted_by_user_id,
+        granted_by_name = excluded.granted_by_name,
+        granted_at = excluded.granted_at,
+        reason = excluded.reason
+    `, [protocolId, doctorId, user.userId || 1, user.user, nowIso, grantReason], function(err) {
+      if (err) {
+        return res.status(500).json({ success: false, error: err.message });
+      }
+
+      logOrthoAudit({
+        eventType: EventTypes.PROTOCOL_ACCESS_GRANTED,
+        level: LogLevels.INFO,
+        protocolId,
+        doctorId,
+        message: `Администратор ${user.user} предоставил доступ к протоколу #${protocolId} врачу ${targetDoctor.full_name}. Обоснование: "${grantReason}"`,
+        properties: {
+          ProtocolId: protocolId,
+          TargetDoctorId: doctorId,
+          TargetDoctorName: targetDoctor.full_name,
+          GrantedBy: user.user,
+          Reason: grantReason
+        }
+      });
+
+      res.json({
+        success: true,
+        message: `Доступ к протоколу успешно предоставлен врачу ${targetDoctor.full_name}`,
+        access: {
+          protocolId,
+          doctorId,
+          doctorName: targetDoctor.full_name,
+          grantedBy: user.user,
+          grantedAt: nowIso,
+          reason: grantReason
+        }
+      });
+    });
+  });
+});
+
+// -----------------------------------------------------------------------------
+// DELETE /api/ortho/protocols/:id/grant-access/:doctorId - Revoke doctor access
+// -----------------------------------------------------------------------------
+router.delete('/protocols/:id/grant-access/:doctorId', (req, res) => {
+  const protocolId = Number(req.params.id);
+  const doctorId = Number(req.params.doctorId);
+  const user = getUserContext(req);
+
+  if (!user || (!user.isAdministrator && !user.isSysadmin)) {
+    return res.status(403).json({
+      success: false,
+      error: 'Только Администратор или Системный администратор имеет право отзывать доступ'
+    });
+  }
+
+  db.run(`
+    UPDATE ortho_protocol_doctor_access
+    SET is_active = 0
+    WHERE protocol_id = ? AND doctor_id = ?
+  `, [protocolId, doctorId], function(err) {
+    if (err) {
+      return res.status(500).json({ success: false, error: err.message });
+    }
+
+    logOrthoAudit({
+      eventType: EventTypes.PROTOCOL_ACCESS_REVOKED,
+      level: LogLevels.WARN,
+      protocolId,
+      doctorId,
+      message: `Администратор ${user.user} отозвал доступ к протоколу #${protocolId} у врача ID ${doctorId}`
+    });
+
+    res.json({ success: true, message: 'Доступ врача к протоколу успешно отозван' });
+  });
+});
+
+// -----------------------------------------------------------------------------
+// GET /api/ortho/protocols/:id/access-list - List doctors granted access to protocol
+// -----------------------------------------------------------------------------
+router.get('/protocols/:id/access-list', (req, res) => {
+  const protocolId = Number(req.params.id);
+  db.all(`
+    SELECT da.*, st.full_name as doctor_name, st.specialization, st.role as doctor_role
+    FROM ortho_protocol_doctor_access da
+    JOIN staff st ON st.id = da.doctor_id
+    WHERE da.protocol_id = ? AND da.is_active = 1
+    ORDER BY da.granted_at DESC
+  `, [protocolId], (err, rows) => {
+    if (err) {
+      return res.status(500).json({ success: false, error: err.message });
+    }
+    res.json({ success: true, rows: rows || [] });
+  });
+});
+
+// -----------------------------------------------------------------------------
+// DELETE /api/ortho/protocols/:id - Delete / revoke protocol with strict permission checks
+// -----------------------------------------------------------------------------
+router.delete('/protocols/:id', (req, res) => {
+  const protocolId = Number(req.params.id);
+  const user = getUserContext(req);
+
+  db.get('SELECT id, status, is_signed, docn FROM protocols WHERE id = ?', [protocolId], (err, proto) => {
+    if (err || !proto) {
+      return res.status(404).json({ success: false, error: 'Протокол не найден' });
+    }
+
+    const isSigned = proto.status === 'signed' || proto.is_signed === 1;
+    const isSysadmin = Boolean(user && user.isSysadmin);
+    const isAdmin = Boolean(user && user.isAdministrator);
+    const isOwner = Boolean(user && user.staffId && proto.docn === user.staffId);
+
+    // Signed protocol can ONLY be deleted/revoked by sysadmin!
+    if (isSigned && !isSysadmin) {
+      return res.status(403).json({
+        success: false,
+        error: 'Подписанный ЭЦП протокол может удалить или аннулировать только системный администратор (sysadmin)'
+      });
+    }
+
+    if (!isSigned && !isSysadmin && !isAdmin && !isOwner) {
+      return res.status(403).json({
+        success: false,
+        error: 'У вас нет прав на удаление этого черновика'
+      });
+    }
+
+    const revocationReason = `Аннулировано пользователем ${user?.user || 'Администратор'}`;
+    db.run('UPDATE protocols SET status = "revoked", revocation_reason = ? WHERE id = ?',
+      [revocationReason, protocolId], function(errDel) {
+        if (errDel) {
+          return res.status(500).json({ success: false, error: errDel.message });
+        }
+
+        logOrthoAudit({
+          eventType: EventTypes.PROTOCOL_DELETED,
+          level: LogLevels.WARN,
+          protocolId,
+          message: `Протокол #${protocolId} аннулирован пользователем ${user?.user || 'Администратор'}`
+        });
+
+        res.json({ success: true, message: `Протокол #${protocolId} успешно аннулирован` });
+      }
+    );
+  });
+});
+
+// -----------------------------------------------------------------------------
+// GET /api/ortho/protocols/:id/referrals - Get referrals for bundled printing
+// -----------------------------------------------------------------------------
+router.get('/protocols/:id/referrals', (req, res) => {
+  const protocolId = Number(req.params.id);
+  db.all(`
+    SELECT r.*,
+      st.specialization AS doctor_specialization,
+      (SELECT JSON_GROUP_ARRAY(
+        JSON_OBJECT(
+          'id', ri.id,
+          'service_code', ri.service_code,
+          'service_name', ri.service_name,
+          'service_group', ri.service_group,
+          'target_zone', ri.target_zone,
+          'clinical_protocol_text', ri.clinical_protocol_text
+        )
+      ) FROM ortho_referral_items ri WHERE ri.referral_id = r.id) AS items_json
+    FROM ortho_referrals r
+    LEFT JOIN staff st ON st.full_name = r.doctor_name
+    WHERE r.protocol_id = ?
+       OR r.appointment_id = (SELECT appointment_id FROM protocols WHERE id = ?)
+    ORDER BY r.id ASC
+  `, [protocolId, protocolId], (err, rows) => {
+    if (err) {
+      return res.status(500).json({ success: false, error: err.message });
+    }
+    const referrals = (rows || []).map(r => ({
+      ...r,
+      doctor_specialization: r.doctor_specialization || 'Травматология и ортопедия',
+      items: r.items_json ? JSON.parse(r.items_json) : []
+    }));
+    res.json({ success: true, rows: referrals });
+  });
+});
+
+// -----------------------------------------------------------------------------
+// POST /api/ortho/protocols/:id/log-print - Audit protocol print action
+// -----------------------------------------------------------------------------
+router.post('/protocols/:id/log-print', (req, res) => {
+  const protocolId = Number(req.params.id);
+  const { withReferrals = false } = req.body || {};
+  const user = getUserContext(req);
+
+  logOrthoAudit({
+    eventType: EventTypes.PROTOCOL_PRINTED,
+    level: LogLevels.INFO,
+    protocolId,
+    message: `Печать протокола #${protocolId} ${withReferrals ? 'с направлениями' : ''} пользователем ${user?.user || 'Врач'}`,
+    properties: { ProtocolId: protocolId, WithReferrals: withReferrals, PrintedBy: user?.user }
+  });
+
+  res.json({ success: true });
 });
 
 // -----------------------------------------------------------------------------
@@ -832,41 +1174,82 @@ router.get(['/context', '/context/:identifier'], (req, res) => {
         return res.status(404).json({ success: false, error: 'Пациент не найден' });
       }
 
-      // If appointment was not preloaded, attempt load or build pseudo-appointment
-      const completeAppointment = (doneAppt) => {
-        if (appointment) return doneAppt();
-        if (appointmentId) {
-          db.get(`
-            SELECT a.*, d.full_name AS doctor_name, d.specialization AS doctor_specialization
-            FROM appointments a
-            LEFT JOIN staff d ON d.id = a.doctor_id
-            WHERE a.id = ?
-          `, [appointmentId], (aErr, loadedAppt) => {
-            appointment = loadedAppt || {
-              id: appointmentId,
-              patient_id: patientId,
-              appointment_date: new Date().toISOString().slice(0, 10),
-              doctor_name: 'Добрушкин Александр Моисеевич'
-            };
-            doneAppt();
+      // Fetch doctor profile from DB staff
+      let doctorProfile = null;
+      const fetchDoctorProfile = (doneDoc) => {
+        const docIdToTry = (appointment && appointment.doctor_id) || (initialProtocol && initialProtocol.docn);
+        if (docIdToTry) {
+          db.get(`SELECT id, full_name, role, specialization, contact_phone, email FROM staff WHERE id = ?`, [docIdToTry], (err, row) => {
+            if (row) {
+              doctorProfile = row;
+              return doneDoc();
+            }
+            fallbackDoc();
           });
         } else {
-          db.get(`
-            SELECT a.*, d.full_name AS doctor_name, d.specialization AS doctor_specialization
-            FROM appointments a
-            LEFT JOIN staff d ON d.id = a.doctor_id
-            WHERE a.patient_id = ?
-            ORDER BY a.appointment_date DESC, a.id DESC LIMIT 1
-          `, [patientId], (aErr, loadedAppt) => {
-            appointment = loadedAppt || {
-              id: initialProtocol ? initialProtocol.id : null,
-              patient_id: patientId,
-              appointment_date: initialProtocol ? initialProtocol.vdate : new Date().toISOString().slice(0, 10),
-              doctor_name: 'Добрушкин Александр Моисеевич'
-            };
-            doneAppt();
+          fallbackDoc();
+        }
+
+        function fallbackDoc() {
+          const userCtx = getUserContext(req);
+          if (userCtx.staffId) {
+            db.get(`SELECT id, full_name, role, specialization, contact_phone, email FROM staff WHERE id = ?`, [userCtx.staffId], (err, row) => {
+              if (row) {
+                doctorProfile = row;
+                return doneDoc();
+              }
+              firstActiveDoc();
+            });
+          } else {
+            firstActiveDoc();
+          }
+        }
+
+        function firstActiveDoc() {
+          db.get(`SELECT id, full_name, role, specialization, contact_phone, email FROM staff WHERE status = 'active' ORDER BY id ASC LIMIT 1`, [], (err, row) => {
+            doctorProfile = row || null;
+            doneDoc();
           });
         }
+      };
+
+      // If appointment was not preloaded, attempt load or build pseudo-appointment
+      const completeAppointment = (doneAppt) => {
+        fetchDoctorProfile(() => {
+          if (appointment) return doneAppt();
+          if (appointmentId) {
+            db.get(`
+              SELECT a.*, d.full_name AS doctor_name, d.specialization AS doctor_specialization
+              FROM appointments a
+              LEFT JOIN staff d ON d.id = a.doctor_id
+              WHERE a.id = ?
+            `, [appointmentId], (aErr, loadedAppt) => {
+              appointment = loadedAppt || {
+                id: appointmentId,
+                patient_id: patientId,
+                appointment_date: new Date().toISOString().slice(0, 10),
+                doctor_name: doctorProfile?.full_name || ''
+              };
+              doneAppt();
+            });
+          } else {
+            db.get(`
+              SELECT a.*, d.full_name AS doctor_name, d.specialization AS doctor_specialization
+              FROM appointments a
+              LEFT JOIN staff d ON d.id = a.doctor_id
+              WHERE a.patient_id = ?
+              ORDER BY a.appointment_date DESC, a.id DESC LIMIT 1
+            `, [patientId], (aErr, loadedAppt) => {
+              appointment = loadedAppt || {
+                id: initialProtocol ? initialProtocol.id : null,
+                patient_id: patientId,
+                appointment_date: initialProtocol ? initialProtocol.vdate : new Date().toISOString().slice(0, 10),
+                doctor_name: doctorProfile?.full_name || ''
+              };
+              doneAppt();
+            });
+          }
+        });
       };
 
       completeAppointment(() => {
@@ -1010,6 +1393,7 @@ router.get(['/context', '/context/:identifier'], (req, res) => {
 
                           res.json({
                             success: true,
+                            doctor: doctorProfile,
                             appointment,
                             patient,
                             clinicalProfile: clinicalProfile || {
@@ -1153,9 +1537,11 @@ router.post('/save', (req, res) => {
   });
 
   const signatureHash = status === 'signed' ? computeSha256(contentText + nowIso + doctorId) : null;
+  const user = getUserContext(req);
 
-  db.serialize(() => {
-    // 1. Update or Insert protocol
+  const executeSave = () => {
+    db.serialize(() => {
+      // 1. Update or Insert protocol
     if (protocolId) {
       db.run(`
         UPDATE protocols SET
@@ -1351,12 +1737,13 @@ router.post('/save', (req, res) => {
           INSERT INTO protocols_fts (
             protocol_id, patient_id, patient_name, doctor_name, joint_area, mkb_codes, mkb_names, complaints, status_localis, full_content
           ) VALUES (
-            ?, ?, (SELECT full_name FROM patients WHERE id = ?), 'Добрушкин А.М.', ?, ?, ?, ?, ?, ?
+            ?, ?, (SELECT full_name FROM patients WHERE id = ?), (SELECT full_name FROM staff WHERE id = ?), ?, ?, ?, ?, ?, ?
           )
         `, [
           savedProtocolId,
           patientId,
           patientId,
+          doctorId,
           jointArea || '',
           diagnosis ? diagnosis.mkb_code || '' : '',
           diagnosis ? diagnosis.mkb_name || '' : '',
@@ -1388,40 +1775,189 @@ router.post('/save', (req, res) => {
       });
     }
   });
+};
+
+  if (protocolId) {
+    db.get('SELECT id, status, is_signed, docn FROM protocols WHERE id = ?', [protocolId], (errCheck, existingProto) => {
+      if (!errCheck && existingProto) {
+        const isSigned = existingProto.status === 'signed' || existingProto.is_signed === 1;
+        const isSysadmin = Boolean(user && user.isSysadmin);
+
+        // If protocol is signed, ONLY sysadmin can modify it
+        if (isSigned && !isSysadmin) {
+          return res.status(403).json({
+            success: false,
+            error: 'Протокол подписан ЭЦП и защищен от изменений (readonly). Вносить изменения разрешено исключительно системному администратору (sysadmin).'
+          });
+        }
+      }
+      executeSave();
+    });
+  } else {
+    executeSave();
+  }
 });
 
 // -----------------------------------------------------------------------------
-// 4. POST /api/ortho/revoke - Soft delete / revoke signed protocol
+// 4. POST /api/ortho/revoke - Soft delete / revoke signed protocol (Sysadmin or author for draft)
 // -----------------------------------------------------------------------------
 router.post('/revoke', (req, res) => {
   const { protocolId, reason } = req.body;
+  const user = getUserContext(req);
   if (!protocolId) {
     return res.status(400).json({ success: false, error: 'Укажите protocolId' });
   }
 
-  const revocationReason = reason || 'Аннулировано врачом';
+  db.get('SELECT id, status, is_signed, docn FROM protocols WHERE id = ?', [protocolId], (errProto, proto) => {
+    if (errProto || !proto) {
+      return res.status(404).json({ success: false, error: 'Протокол не найден' });
+    }
+
+    const isSigned = proto.status === 'signed' || proto.is_signed === 1;
+    const isSysadmin = Boolean(user && user.isSysadmin);
+    const isAdmin = Boolean(user && user.isAdministrator);
+    const isOwner = Boolean(user && user.staffId && proto.docn === user.staffId);
+
+    if (isSigned && !isSysadmin) {
+      return res.status(403).json({
+        success: false,
+        error: 'Подписанный ЭЦП протокол может отозвать или аннулировать только системный администратор (sysadmin)'
+      });
+    }
+
+    if (!isSigned && !isSysadmin && !isAdmin && !isOwner) {
+      return res.status(403).json({
+        success: false,
+        error: 'Недостаточно прав для аннулирования черновика'
+      });
+    }
+
+    const revocationReason = reason || `Аннулировано пользователем ${user?.user || 'Врач'}`;
+
+    db.run(`
+      UPDATE protocols
+      SET status = 'revoked', revocation_reason = ?
+      WHERE id = ?
+    `, [revocationReason, protocolId], function(err) {
+      if (err) {
+        return res.status(500).json({ success: false, error: err.message });
+      }
+
+      logOrthoAudit({
+        eventType: EventTypes.PROTOCOL_REVOKED,
+        protocolId,
+        level: LogLevels.WARN,
+        message: `Протокол #${protocolId} аннулирован пользователем ${user?.user || 'Администратор'}. Причина: "${revocationReason}"`
+      });
+
+      res.json({
+        success: true,
+        message: `Протокол #${protocolId} успешно аннулирован`
+      });
+    });
+  });
+});
+
+// -----------------------------------------------------------------------------
+// 4.1 POST /api/ortho/return-to-draft - Return signed protocol back to draft state (Sysadmin only)
+// -----------------------------------------------------------------------------
+router.post('/return-to-draft', (req, res) => {
+  const { protocolId, appointmentId, reason = 'Возврат для редактирования', doctorId = 1, patientId } = req.body;
+  const user = getUserContext(req);
+
+  if (!protocolId) {
+    return res.status(400).json({ success: false, error: 'Укажите protocolId' });
+  }
+
+  // Sysadmin-only permission check for un-signing protocols
+  if (user && !user.isSysadmin) {
+    return res.status(403).json({
+      success: false,
+      error: 'Возврат подписанного ЭЦП протокола в статус черновика разрешен исключительно системному администратору (sysadmin)'
+    });
+  }
+
+  const actingUser = user?.user || user?.username || 'Главный Администратор (sysadmin)';
+
+  const nowIso = new Date().toISOString().slice(0, 19).replace('T', ' ');
 
   db.run(`
     UPDATE protocols
-    SET status = 'revoked', revocation_reason = ?
+    SET
+      status = 'draft',
+      is_signed = 0,
+      signed_at = NULL,
+      signature_hash = NULL,
+      revocation_reason = ?,
+      moddate = ?
     WHERE id = ?
-  `, [revocationReason, protocolId], function(err) {
+  `, [reason, nowIso, protocolId], function(err) {
     if (err) {
       return res.status(500).json({ success: false, error: err.message });
     }
 
+    if (appointmentId) {
+      db.run(`UPDATE appointments SET status = 'in_progress' WHERE id = ?`, [appointmentId]);
+    }
+
     logOrthoAudit({
-      eventType: EventTypes.PROTOCOL_REVOKED,
+      eventType: EventTypes.PROTOCOL_RETURNED_TO_DRAFT,
       protocolId,
+      appointmentId,
+      patientId,
+      doctorId,
       level: LogLevels.WARN,
-      message: `Протокол #${protocolId} аннулирован. Причина: "${revocationReason}"`
+      message: `Системный администратор ${actingUser} вернул протокол #${protocolId} из статуса «Подписан ЭЦП» в статус «Черновик» (Причина: "${reason}")`,
+      properties: {
+        reason,
+        returnedBy: actingUser,
+        previousStatus: 'signed',
+        newStatus: 'draft',
+        revokedAt: nowIso
+      }
     });
 
     res.json({
       success: true,
-      message: `Протокол #${protocolId} успешно аннулирован`
+      protocolId,
+      status: 'draft',
+      is_signed: 0,
+      message: `Протокол #${protocolId} успешно возвращен в статус «Черновик»`
     });
   });
+});
+
+// -----------------------------------------------------------------------------
+// 4.2 POST /api/ortho/log-action - Telemetry endpoint for shablon user actions
+// -----------------------------------------------------------------------------
+router.post('/log-action', (req, res) => {
+  const {
+    eventType = EventTypes.SHABLON_ACTION_SYNC,
+    protocolId = null,
+    appointmentId = null,
+    patientId = null,
+    doctorId = 1,
+    partitionNumber,
+    actionName = 'action_sync',
+    details = {}
+  } = req.body;
+
+  logOrthoAudit({
+    eventType,
+    protocolId,
+    appointmentId,
+    patientId,
+    doctorId,
+    level: LogLevels.INFO,
+    message: `[АРМ Врача] Секция #${partitionNumber || '?'}: ${actionName}`,
+    properties: {
+      partitionNumber,
+      actionName,
+      details
+    }
+  });
+
+  res.json({ success: true });
 });
 
 // -----------------------------------------------------------------------------
@@ -3750,7 +4286,6 @@ router.post('/referrals/issue', async (req, res) => {
       patient_id,
       appointment_id,
       protocol_id,
-      doctor_name = 'Добрушкин А.М',
       valid_days = 90,
       performer_id,
       icd10_code,
@@ -3762,6 +4297,19 @@ router.post('/referrals/issue', async (req, res) => {
       special_notes,
       items = []
     } = req.body;
+
+    let doctor_name = req.body.doctor_name;
+    if (!doctor_name) {
+      const userCtx = getUserContext(req);
+      if (userCtx.staffId) {
+        const staffDoc = await new Promise(resolve => db.get('SELECT full_name FROM staff WHERE id = ?', [userCtx.staffId], (err, r) => resolve(r)));
+        if (staffDoc && staffDoc.full_name) doctor_name = staffDoc.full_name;
+      }
+      if (!doctor_name) {
+        const defaultDoc = await new Promise(resolve => db.get("SELECT full_name FROM staff WHERE status = 'active' ORDER BY id ASC LIMIT 1", [], (err, r) => resolve(r)));
+        doctor_name = defaultDoc?.full_name || '';
+      }
+    }
 
     if (!patient_id) {
       return res.status(400).json({ success: false, error: 'patient_id is required' });
@@ -3857,7 +4405,7 @@ router.post('/referrals/issue', async (req, res) => {
                   patient_id,
                   appointment_id || null,
                   protocol_id || null,
-                  doctor_name || 'Добрушкин А.М',
+                  doctor_name || '',
                   issue_date,
                   effectiveValidDays,
                   expires_at,
@@ -4091,10 +4639,10 @@ router.post('/referrals/:id/audit-print', (req, res) => {
   );
 });
 
-// 11.6. PATCH /api/ortho/referrals/:id/status - Update referral status
 router.patch('/referrals/:id/status', (req, res) => {
   const referralId = req.params.id;
-  const { status, reason = '', performed_by = 'Добрушкин А.М' } = req.body;
+  const user = getUserContext(req);
+  const { status, reason = '', performed_by = (user?.username || 'Сотрудник клиники') } = req.body;
 
   if (!status) return res.status(400).json({ success: false, error: 'Status is required' });
 

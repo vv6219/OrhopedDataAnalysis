@@ -31,6 +31,7 @@ export interface PayoutReportData {
   total_payout_amount: number;
   tax_rate_percent?: number;
   payout_account_info?: string;
+  approver_name?: string;
   items: PayoutReportItem[];
 }
 
@@ -208,7 +209,7 @@ export const StaffPayoutReportTemplate = React.forwardRef<HTMLDivElement, StaffP
                   Руководитель клиники / Главный врач:
                 </Typography>
                 <Typography variant="body2" sx={{ borderBottom: '1px solid black', pb: 0.5 }}>
-                  / Добрушкин А.М. /
+                  / {data.approver_name || 'Руководитель клиники'} /
                 </Typography>
               </Box>
 

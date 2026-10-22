@@ -262,6 +262,7 @@ module.exports = {
   verifyPassword,
   createToken,
   verifyToken,
+  extractTokenFromReq,
   requireAuth,
   swaggerBasicAuth
 };

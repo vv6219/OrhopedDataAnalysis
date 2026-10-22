@@ -92,7 +92,7 @@ export default function IssueReferralModal({
   patient,
   protocolId,
   appointmentId,
-  doctorName = 'Добрушкин А.М',
+  doctorName = '',
   defaultMkbCode = '',
   defaultDiagnosis = '',
   targetJoint = '',
@@ -529,7 +529,7 @@ export default function IssueReferralModal({
         protocol_id: protocolId || null,
         performer_id: selectedPerformer ? selectedPerformer.id : null,
         custom_performer_name: selectedPerformer ? undefined : customPerformerName.trim(),
-        doctor_name: doctorName || 'Добрушкин А.М', // Strict clinical requirement
+        doctor_name: doctorName || 'Врач травматолог-ортопед',
         icd10_code: icd10Code || 'M19.9',
         icd10_name: clinicalDiagnosis || 'Ортопедическая патология',
         clinical_diagnosis: clinicalDiagnosis || 'Ортопедическая патология',
@@ -570,7 +570,7 @@ export default function IssueReferralModal({
         issue_date: ref.issue_date,
         valid_days: ref.valid_days,
         expires_at: ref.expires_at,
-        doctor_name: 'Добрушкин А.М',
+        doctor_name: ref.doctor_name || doctorName || 'Врач травматолог-ортопед',
         performer_id: ref.performer_id,
         performer_name: ref.performer_name,
         performer_is_internal: ref.performer_is_internal,
@@ -614,7 +614,7 @@ export default function IssueReferralModal({
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              performed_by_name: 'Добрушкин А.М',
+              performed_by_name: doctorName || 'Сотрудник клиники',
               export_format: 'pdf',
               notes: 'Печать официального бланка из АРМ врача'
             })
@@ -628,7 +628,7 @@ export default function IssueReferralModal({
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              performed_by_name: 'Добрушкин А.М',
+              performed_by_name: doctorName || 'Сотрудник клиники',
               export_format: 'docx',
               notes: 'Экспорт направления в формат Microsoft Word (.docx)'
             })
@@ -743,7 +743,7 @@ export default function IssueReferralModal({
               </Box>
               <Chip
                 icon={<VerifiedUserIcon sx={{ fontSize: 16 }} />}
-                label="Врач: Добрушкин А.М"
+                label={doctorName ? `Врач: ${doctorName}` : 'Врач клиники'}
                 size="small"
                 sx={{
                   bgcolor: '#EFF6FF',
@@ -1835,7 +1835,7 @@ export default function IssueReferralModal({
                 startDate: doc.data.startDate,
                 endDate: doc.data.endDate,
                 returnToWorkDate: doc.data.returnToWorkDate,
-                doctorName: doctorName || 'Добрушкин А.М',
+                doctorName: doctorName || 'Врач травматолог-ортопед',
                 doctorSpecialty: 'Врач травматолог-ортопед',
                 officialNotice: doc.description,
                 icd10Code: icd10Code,
@@ -1879,7 +1879,7 @@ export default function IssueReferralModal({
                 peGroup: doc.data.peGroup || 'full_exemption',
                 peSpecialRecommendations: doc.data.peSpecialRecommendations,
                 returnToStudiesDate: doc.data.returnToStudiesDate,
-                doctorName: doctorName || 'Добрушкин А.М',
+                doctorName: doctorName || 'Врач травматолог-ортопед',
                 doctorSpecialty: 'Врач травматолог-ортопед'
               };
               return (

@@ -225,7 +225,7 @@ export const VisitReportTemplate = React.forwardRef<HTMLDivElement, VisitReportP
                 Ответственные сотрудники:
               </Typography>
               <Typography variant="body2" sx={{ fontWeight: 600, color: '#2D3748', fontSize: '0.85rem' }}>
-                Врач: {doctorName || 'Добрушкин Александр Моисеевич'}
+                Врач: {doctorName || 'Врач травматолог-ортопед'}
               </Typography>
               {nurseName && (
                 <Typography variant="caption" sx={{ color: '#4A5568', display: 'block', fontSize: '0.72rem' }}>
@@ -520,7 +520,7 @@ export const VisitReportTemplate = React.forwardRef<HTMLDivElement, VisitReportP
           <Box sx={{ mt: 2, pt: 1, display: 'flex', justifyContent: 'space-between', gap: 4 }}>
             <Box sx={{ width: '48%', borderTop: '1px solid #2D3748', pt: 0.5, textAlign: 'center' }}>
               <Typography variant="body2" sx={{ fontWeight: 700, color: '#1A2027', fontSize: '0.78rem', lineHeight: 1.2 }}>
-                Врач: {doctorName || 'Добрушкин Александр Моисеевич'}
+                Врач: {doctorName || 'Врач травматолог-ортопед'}
               </Typography>
               <Typography variant="caption" sx={{ color: '#718096', fontSize: '0.68rem', display: 'block' }}>
                 (подпись / печать врача)

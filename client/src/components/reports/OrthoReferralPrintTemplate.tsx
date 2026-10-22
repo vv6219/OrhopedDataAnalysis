@@ -32,6 +32,7 @@ export interface OrthoReferralData {
   valid_days: number;
   expires_at: string;
   doctor_name: string;
+  doctor_specialization?: string;
   
   // Performer from DB
   performer_id: number;
@@ -585,10 +586,10 @@ const OrthoReferralPrintTemplate = forwardRef<HTMLDivElement, OrthoReferralPrint
             {/* Left: Doctor block with signature and overlay stamp */}
             <Box sx={{ position: 'relative' }}>
               <Typography variant="body2" sx={{ fontSize: '0.86rem', color: '#0F172A', fontWeight: 700 }}>
-                Лечащий врач: Добрушкин А.М
+                Лечащий врач: {data.doctor_name || 'Врач травматолог-ортопед'}
               </Typography>
               <Typography variant="caption" sx={{ color: '#64748B', display: 'block', mb: 2 }}>
-                Врач травматолог-ортопед
+                {data.doctor_specialization || 'Врач травматолог-ортопед'}
               </Typography>
 
               <Box sx={{ display: 'flex', alignItems: 'flex-end', gap: 1 }}>
