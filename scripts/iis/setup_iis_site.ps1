@@ -10,7 +10,7 @@
 [CmdletBinding()]
 param (
     [string]$SiteName = "OrthopedClinic",
-    [int]$Port = 80,
+    [int]$Port = 8088,
     [string]$PhysicalPath = "$PSScriptRoot\..\..\dist_app\client",
     [int]$BackendPort = 5000
 )
@@ -62,31 +62,13 @@ if (-not (Test-Path "IIS:\AppPools\$poolName")) {
     Set-ItemProperty "IIS:\AppPools\$poolName" -Name "managedRuntimeVersion" -Value ""
 }
 
-# 6. Проверка и разрешение конфликтов портов с другими сайтами IIS (например, Default Web Site)
-$otherSites = Get-WebSite | Where-Object { $_.Name -ne $SiteName }
-foreach ($s in $otherSites) {
-    $hasPort = $false
-    if ($s.bindings -and $s.bindings.Collection) {
-        foreach ($b in $s.bindings.Collection) {
-            if ($b.bindingInformation -match ":$($Port):") {
-                $hasPort = $true
-                break
-            }
-        }
-    }
-    if ($hasPort) {
-        Write-Host "Сайт '$($s.Name)' уже занимает порт $Port. Останавливаем его для освобождения порта..." -ForegroundColor Yellow
-        Stop-WebSite -Name $s.Name -ErrorAction SilentlyContinue
-        Set-ItemProperty "IIS:\Sites\$($s.Name)" -Name "serverAutoStart" -Value $false -ErrorAction SilentlyContinue
-        Write-Host "  [OK] Сайт '$($s.Name)' остановлен, автозапуск отключен." -ForegroundColor Green
-    }
-}
-
-# 7. Создание или перенастройка IIS Website
+# 6. Создание или перенастройка IIS Website
 if (Test-Path "IIS:\Sites\$SiteName") {
-    Write-Host "Сайт $SiteName уже существует, обновляем настройки..." -ForegroundColor Yellow
+    Write-Host "Сайт $SiteName уже существует, обновляем настройки и привязку к порту $Port..." -ForegroundColor Yellow
     Set-ItemProperty "IIS:\Sites\$SiteName" -Name "physicalPath" -Value $siteRoot
     Set-ItemProperty "IIS:\Sites\$SiteName" -Name "applicationPool" -Value $poolName
+    Get-WebBinding -Name $SiteName | Remove-WebBinding -ErrorAction SilentlyContinue
+    New-WebBinding -Name $SiteName -Port $Port -Protocol "http" -IPAddress "*"
 } else {
     Write-Host "Создание нового сайта $SiteName на порту $Port..." -ForegroundColor Yellow
     New-Item "IIS:\Sites\$SiteName" -bindings @{protocol="http";bindingInformation="*:$($Port):"} -physicalPath $siteRoot
