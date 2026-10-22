@@ -9,6 +9,7 @@ client/node_modules/
 Demo/
 dist_app/
 distributive/
+OrthoERP/
 installer_output/
 backups/
 *.zip
