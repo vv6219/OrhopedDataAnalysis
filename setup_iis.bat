@@ -5,7 +5,7 @@ setlocal
 title Настройка и публикация сайта в Microsoft IIS
 
 echo ======================================================================
-echo  Центр Ортопедии Добрушкина — Развертывание в Microsoft IIS (Порт 8088)
+echo  Центр Ортопедии Добрушкина — Развертывание в Microsoft IIS (Порт 8080)
 echo ======================================================================
 
 net session >nul 2>&1
@@ -24,7 +24,7 @@ if %ERRORLEVEL% NEQ 0 (
 
 echo.
 echo [2/2] Создание веб-сайта в IIS и настройка проксирования на порт 5000...
-powershell -ExecutionPolicy Bypass -File "%~dp0scripts\iis\setup_iis_site.ps1" -SiteName "OrthopedClinic" -Port 8088 -PhysicalPath "%~dp0client" -BackendPort 5000
+powershell -ExecutionPolicy Bypass -File "%~dp0scripts\iis\setup_iis_site.ps1" -SiteName "OrthopedClinic" -Port 8080 -PhysicalPath "%~dp0client" -BackendPort 5000
 
 echo.
 echo ======================================================================

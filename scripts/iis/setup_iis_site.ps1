@@ -10,7 +10,7 @@
 [CmdletBinding()]
 param (
     [string]$SiteName = "OrthopedClinic",
-    [int]$Port = 8088,
+    [int]$Port = 8080,
     [string]$PhysicalPath = "$PSScriptRoot\..\..\dist_app\client",
     [int]$BackendPort = 5000
 )

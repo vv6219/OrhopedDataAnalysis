@@ -76,26 +76,49 @@ if ($iisInstalled) {
 
 # 4. Проверка модуля URL Rewrite
 Write-Host "`n[2/4] Проверка модуля IIS URL Rewrite..." -ForegroundColor Yellow
-$rewriteInstalled = Test-Path "$env:ProgramFiles\Reference Assemblies\Microsoft\IIS\Microsoft.Web.Iis.Rewrite.dll" -ErrorAction SilentlyContinue
-if (-not $rewriteInstalled) {
-    $rewriteInstalled = (Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\IIS Extensions\URL Rewrite" -ErrorAction SilentlyContinue) -ne $null
-}
+$rewriteInstalled = (Test-Path "$env:SystemRoot\System32\inetsrv\rewrite.dll") -or 
+                    (Test-Path "$env:ProgramFiles\Reference Assemblies\Microsoft\IIS\Microsoft.Web.Iis.Rewrite.dll") -or
+                    ((Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\IIS Extensions\URL Rewrite" -ErrorAction SilentlyContinue) -ne $null)
+
+$modulesChanged = $false
 
 if ($rewriteInstalled) {
     Write-Host "  -> Модуль URL Rewrite 2.1 обнаружен." -ForegroundColor Green
 } else {
     Write-Host "  [ВНИМАНИЕ] Модуль URL Rewrite 2.1 не найден." -ForegroundColor Yellow
-    $installerPath = Join-Path $PSScriptRoot "..\..\installers\rewrite_amd64_ru-RU.msi"
+    $installerRu = Join-Path $PSScriptRoot "..\..\installers\rewrite_amd64_ru-RU.msi"
+    $installerEnUs = Join-Path $PSScriptRoot "..\..\installers\rewrite_amd64_en-US.msi"
     $installerEn = Join-Path $PSScriptRoot "..\..\installers\rewrite_amd64.msi"
 
     $targetMsi = $null
-    if (Test-Path $installerPath) { $targetMsi = $installerPath }
-    elseif (Test-Path $installerEn) { $targetMsi = $installerEn }
+    $isRussianOs = [System.Globalization.CultureInfo]::InstalledUICulture.Name -like "ru*"
+    if ($isRussianOs -and (Test-Path $installerRu)) {
+        $targetMsi = $installerRu
+    } elseif (Test-Path $installerEnUs) {
+        $targetMsi = $installerEnUs
+    } elseif (Test-Path $installerRu) {
+        $targetMsi = $installerRu
+    } elseif (Test-Path $installerEn) {
+        $targetMsi = $installerEn
+    }
 
     if ($targetMsi -and -not $SkipModuleInstall) {
         Write-Host "  -> Запуск тихой установки URL Rewrite: $targetMsi..." -ForegroundColor Cyan
-        Start-Process -FilePath "msiexec.exe" -ArgumentList "/i `"$targetMsi`" /quiet /qn /norestart" -Wait
-        Write-Host "  [OK] URL Rewrite успешно установлен." -ForegroundColor Green
+        $proc = Start-Process -FilePath "msiexec.exe" -ArgumentList "/i `"$targetMsi`" /quiet /qn /norestart" -Wait -PassThru
+        if ($proc.ExitCode -eq 0 -or $proc.ExitCode -eq 3010) {
+            Write-Host "  [OK] URL Rewrite успешно установлен." -ForegroundColor Green
+            $modulesChanged = $true
+        } else {
+            Write-Host "  [ВНИМАНИЕ] Установка через $targetMsi завершилась с кодом $($proc.ExitCode). Пробуем альтернативный языковой пакет..." -ForegroundColor Yellow
+            $fallbackMsi = if ($targetMsi -eq $installerRu) { $installerEnUs } else { $installerRu }
+            if ($fallbackMsi -and (Test-Path $fallbackMsi)) {
+                $proc2 = Start-Process -FilePath "msiexec.exe" -ArgumentList "/i `"$fallbackMsi`" /quiet /qn /norestart" -Wait -PassThru
+                if ($proc2.ExitCode -eq 0 -or $proc2.ExitCode -eq 3010) {
+                    Write-Host "  [OK] URL Rewrite успешно установлен." -ForegroundColor Green
+                    $modulesChanged = $true
+                }
+            }
+        }
     } else {
         Write-Host "  -> Скачайте и установите URL Rewrite 2.1 x64 с официального сайта Microsoft:" -ForegroundColor Yellow
         Write-Host "     https://www.iis.net/downloads/microsoft/url-rewrite" -ForegroundColor White
@@ -104,10 +127,9 @@ if ($rewriteInstalled) {
 
 # 5. Проверка модуля Application Request Routing (ARR)
 Write-Host "`n[3/4] Проверка модуля Application Request Routing (ARR)..." -ForegroundColor Yellow
-$arrInstalled = Test-Path "$env:ProgramFiles\IIS\Application Request Routing\requestRouter.dll" -ErrorAction SilentlyContinue
-if (-not $arrInstalled) {
-    $arrInstalled = (Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\IIS Extensions\Application Request Routing" -ErrorAction SilentlyContinue) -ne $null
-}
+$arrInstalled = (Test-Path "$env:SystemRoot\System32\inetsrv\requestRouter.dll") -or 
+                (Test-Path "$env:ProgramFiles\IIS\Application Request Routing\requestRouter.dll") -or
+                ((Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\IIS Extensions\Application Request Routing" -ErrorAction SilentlyContinue) -ne $null)
 
 if ($arrInstalled) {
     Write-Host "  -> Модуль ARR 3.0 обнаружен." -ForegroundColor Green
@@ -116,12 +138,21 @@ if ($arrInstalled) {
     $arrMsi = Join-Path $PSScriptRoot "..\..\installers\requestRouter_amd64.msi"
     if ((Test-Path $arrMsi) -and -not $SkipModuleInstall) {
         Write-Host "  -> Запуск тихой установки ARR: $arrMsi..." -ForegroundColor Cyan
-        Start-Process -FilePath "msiexec.exe" -ArgumentList "/i `"$arrMsi`" /quiet /qn /norestart" -Wait
-        Write-Host "  [OK] ARR успешно установлен." -ForegroundColor Green
+        $procArr = Start-Process -FilePath "msiexec.exe" -ArgumentList "/i `"$arrMsi`" /quiet /qn /norestart" -Wait -PassThru
+        if ($procArr.ExitCode -eq 0 -or $procArr.ExitCode -eq 3010) {
+            Write-Host "  [OK] ARR успешно установлен." -ForegroundColor Green
+            $modulesChanged = $true
+        }
     } else {
         Write-Host "  -> Скачайте и установите ARR 3.0 x64 с официального сайта Microsoft:" -ForegroundColor Yellow
         Write-Host "     https://www.iis.net/downloads/microsoft/application-request-routing" -ForegroundColor White
     }
+}
+
+# Перезапуск IIS при установке новых модулей
+if ($modulesChanged) {
+    Write-Host "  -> Перезапуск службы IIS (iisreset) для активации модулей..." -ForegroundColor Gray
+    & "$env:SystemRoot\System32\iisreset.exe" /restart | Out-Null
 }
 
 # 6. Включение функционала Proxy в ARR
