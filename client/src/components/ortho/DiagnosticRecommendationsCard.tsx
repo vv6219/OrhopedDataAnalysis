@@ -308,12 +308,12 @@ export default function DiagnosticRecommendationsCard({
 
         <Collapse in={isExpanded}>
           <Box sx={{ pt: 1.5 }}>
-            <Grid container spacing={1.5}>
+            <Grid container spacing={1.5} sx={{ alignItems: 'stretch' }}>
               {items.map((item) => {
                 const added = isAlreadyPrescribed(item);
                 const style = getModalityColor(item.modality);
                 return (
-                  <Grid size={{ xs: 12, sm: 6, lg: 4 }} key={item.code}>
+                  <Grid size={{ xs: 12, sm: 6, lg: 4 }} key={item.code} sx={{ display: 'flex' }}>
                     <Paper
                       variant="outlined"
                       sx={{
@@ -324,8 +324,8 @@ export default function DiagnosticRecommendationsCard({
                         bgcolor: added ? '#F0FDF4' : '#FFFFFF',
                         display: 'flex',
                         flexDirection: 'column',
-                        justifyContent: 'space-between',
-                        gap: 1,
+                        width: '100%',
+                        height: '100%',
                         transition: 'all 0.15s ease-in-out',
                         '&:hover': {
                           boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
@@ -333,7 +333,7 @@ export default function DiagnosticRecommendationsCard({
                         }
                       }}
                     >
-                      <Box>
+                      <Box sx={{ flex: '1 1 auto', display: 'flex', flexDirection: 'column', mb: 1 }}>
                         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
                           <Chip
                             label={item.modality?.toUpperCase()}
@@ -418,10 +418,12 @@ export default function DiagnosticRecommendationsCard({
                         startIcon={added ? <AddedIcon /> : <AddIcon />}
                         onClick={() => handleAddDiagnostic(item)}
                         sx={{
+                          mt: 'auto',
+                          width: '100%',
                           textTransform: 'none',
                           fontWeight: 700,
                           fontSize: '0.75rem',
-                          py: 0.3
+                          py: 0.4
                         }}
                       >
                         {added ? 'В плане приёма' : item.servdict_price ? '+ Назначить и в кассу' : '+ Добавить в протокол'}
