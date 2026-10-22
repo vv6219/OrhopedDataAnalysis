@@ -16,7 +16,7 @@
       "title": "Сервисы",
       "icon": "AutoAwesomeMotion",
       "defaultOpen": false,
-      "tooltip": "Клинические процессы: АРМ врача-ортопеда, реестры протоколов и направлений, шаблоны 2.0, отчеты и руководство",
+      "tooltip": "Клинические процессы: АРМ врача-ортопеда, реестры протоколов и направлений, шаблоны 2.0 и руководство",
       "permissions": ["*"],
       "items": [
         {
@@ -54,14 +54,6 @@
           "iconColor": "#0F3C64",
           "tooltip": "Справочник 180 клинических шаблонов, 1 377 ортопедических тестов, 381 метод аппаратной диагностики и Neutral-0 ROM пресетов",
           "permissions": ["*"]
-        },
-        {
-          "id": "reports",
-          "text": "Отчетность и документы",
-          "path": "/reports",
-          "icon": "Assessment",
-          "tooltip": "Генератор документов и отчетов: формирование сводных справок, протоколов лечения, реестров услуг и экспорт документов в PDF и Excel",
-          "permissions": ["sysadmin", "administrator", "accountant", "doctor"]
         },
         {
           "id": "user_guide",
@@ -105,8 +97,8 @@
       "title": "Бухгалтерия",
       "icon": "AccountBalanceWallet",
       "defaultOpen": false,
-      "tooltip": "Бухгалтерский и финансовый учет: кассовые смены, выплаты персоналу, аудит ККТ, склад, технологические карты и параметры расчетов",
-      "permissions": ["sysadmin", "accountant", "administrator"],
+      "tooltip": "Бухгалтерский и финансовый учет: кассовые смены, выплаты персоналу, аудит ККТ, отчетность и документы, склад, технологические карты и параметры расчетов",
+      "permissions": ["sysadmin", "accountant", "administrator", "doctor", "nurse"],
       "items": [
         {
           "id": "fiscal_shifts",
@@ -124,6 +116,14 @@
           "icon": "AccountBalanceWallet",
           "tooltip": "Расчет и ведомости выплат: автоматический расчет заработной платы врачей и ассистентов на основе выполненных услуг, ставок и нормативов",
           "permissions": ["sysadmin", "accountant"]
+        },
+        {
+          "id": "reports",
+          "text": "Отчетность и документы",
+          "path": "/reports",
+          "icon": "Assessment",
+          "tooltip": "Генератор документов и отчетов: формирование сводных справок, протоколов лечения, реестров услуг и экспорт документов в PDF и Excel",
+          "permissions": ["sysadmin", "administrator", "accountant", "doctor"]
         },
         {
           "id": "fiscal_audit",
