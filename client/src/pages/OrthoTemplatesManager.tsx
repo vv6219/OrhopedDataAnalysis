@@ -2437,18 +2437,16 @@ export default function OrthoTemplatesManager() {
                         display: 'flex',
                         flexWrap: 'wrap',
                         width: '100%',
-                        gap: 0.75
+                        gap: 0.75,
+                        pb: 0.75
                       },
                       '& .MuiTab-root': {
-                        flex: {
-                          xs: '1 1 calc(50% - 6px)',
-                          sm: '1 1 calc(25% - 6px)',
-                          lg: '1 1 0px'
-                        },
-                        minWidth: 0,
+                        flex: '1 1 auto',
+                        minWidth: 'fit-content',
                         maxWidth: 'none',
                         minHeight: 38,
-                        p: { xs: 0.5, sm: 0.75 },
+                        py: 0.6,
+                        px: { xs: 1, sm: 1.25, md: 1.5 },
                         textTransform: 'none',
                         fontWeight: 700,
                         fontSize: { xs: '0.73rem', sm: '0.75rem', xl: '0.78rem' },
@@ -2566,16 +2564,17 @@ export default function OrthoTemplatesManager() {
                             <Box
                               sx={{
                                 width: '100%',
-                                display: 'flex',
+                                display: 'inline-flex',
                                 alignItems: 'center',
                                 justifyContent: 'center',
-                                gap: 0.5,
-                                whiteSpace: 'nowrap',
-                                overflow: 'hidden'
+                                gap: 0.6,
+                                whiteSpace: 'nowrap'
                               }}
                             >
-                              {tab.icon}
-                              <Box component="span" sx={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                              <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', flexShrink: 0 }}>
+                                {tab.icon}
+                              </Box>
+                              <Box component="span" sx={{ whiteSpace: 'nowrap', fontWeight: activeTab === tab.index ? 800 : 700 }}>
                                 {tab.shortCaption}
                               </Box>
                               {tab.badgeCount !== undefined && (
@@ -2588,9 +2587,14 @@ export default function OrthoTemplatesManager() {
                                     fontSize: '0.64rem',
                                     fontWeight: 800,
                                     px: 0.3,
+                                    flexShrink: 0,
                                     bgcolor: activeTab === tab.index ? '#0284C7' : '#E2E8F0',
                                     color: activeTab === tab.index ? '#FFFFFF' : '#475569',
-                                    transition: 'all 0.15s ease'
+                                    transition: 'all 0.15s ease',
+                                    '& .MuiChip-label': {
+                                      px: 0.5,
+                                      overflow: 'visible'
+                                    }
                                   }}
                                 />
                               )}
