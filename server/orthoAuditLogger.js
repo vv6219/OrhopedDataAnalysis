@@ -34,7 +34,11 @@ const EventTypes = {
   PROTOCOL_ACCESS_REVOKED: 'protocol_access_revoked',
   PROTOCOL_DELETED: 'protocol_deleted',
   PROTOCOL_UPDATED: 'protocol_updated',
-  PROTOCOL_PRINTED: 'protocol_printed'
+  PROTOCOL_PRINTED: 'protocol_printed',
+  PATIENT_DOCUMENT_ISSUED: 'patient_document_issued',
+  PATIENT_DOCUMENT_PRINTED: 'patient_document_printed',
+  PATIENT_DOCUMENT_REVOKED: 'patient_document_revoked',
+  SECURITY_ACCESS_DENIED: 'security_access_denied'
 };
 
 // Ensure logs directory exists

@@ -4665,5 +4665,451 @@ router.patch('/referrals/:id/status', (req, res) => {
   );
 });
 
+// =============================================================================
+// PATIENT ISSUED DOCUMENTS (FORMAL REGISTRATION, STRONG NUMERATION, SERILOG AUDIT)
+// =============================================================================
+
+const DOC_PREFIXES = {
+  referral: 'НАПР',
+  certificate: 'СПР',
+  sick_leave: 'БЛ',
+  disability: 'БЛ',
+  pe_release: 'ФИЗ',
+  fit_to_fly: 'АВИА',
+  sports_admission: 'СПОРТ',
+  extract: 'ВЫП',
+  card: 'МК',
+  consent: 'ИДС',
+  memo: 'ПАМ'
+};
+
+/**
+ * POST /api/ortho/patient-documents/issue
+ * Register an issued medical document with strong inner sequence numbering and Serilog audit
+ */
+router.post('/patient-documents/issue', (req, res) => {
+  const user = getUserContext(req);
+  const {
+    patient_id,
+    patient_name,
+    protocol_id = null,
+    appointment_id = null,
+    document_type,
+    form_code,
+    title,
+    valid_until = null,
+    doctor_id = null,
+    doctor_name,
+    organization_name = 'Центр Ортопедии и Травматологии Добрушкина',
+    recipient_organization = '',
+    icd10_code = '',
+    clinical_diagnosis = '',
+    document_data = {}
+  } = req.body;
+
+  if (!patient_id || !patient_name || !document_type || !title) {
+    return res.status(400).json({ success: false, error: 'Обязательные поля: patient_id, patient_name, document_type, title' });
+  }
+
+  // Permission check: Листок нетрудоспособности (больничный лист) и справка о нетрудоспособности разрешены исключительно sysadmin
+  const isSickLeaveDoc =
+    document_type === 'certificate' ||
+    document_type === 'sick_leave' ||
+    document_type === 'disability' ||
+    form_code === '095/у' ||
+    form_code === '347н / ЭЛН' ||
+    (title && title.toLowerCase().includes('нетрудоспособност')) ||
+    (title && title.toLowerCase().includes('больничный'));
+
+  if (isSickLeaveDoc) {
+    if (!user || !user.isSysadmin) {
+      logOrthoAudit({
+        level: LogLevels.WARN,
+        eventType: EventTypes.SECURITY_ACCESS_DENIED,
+        message: `Отказ в доступе: пользователь ${user?.user || 'Аноним'} попытался оформить «Листок нетрудоспособности / Больничный лист» без прав sysadmin`,
+        patientId: patient_id,
+        properties: { User: user?.user, DocumentType: document_type, FormCode: form_code, Title: title }
+      });
+      return res.status(403).json({
+        success: false,
+        error: 'Оформление и печать листка нетрудоспособности (больничного листа) разрешена исключительно системному администратору (sysadmin)'
+      });
+    }
+  }
+
+  const prefix = DOC_PREFIXES[document_type] || 'ДОК';
+  const year = new Date().getFullYear();
+  const searchPattern = `${prefix}-${year}-%`;
+
+  db.get(
+    'SELECT COUNT(*) AS cnt FROM patient_issued_documents WHERE document_number LIKE ?',
+    [searchPattern],
+    (cErr, cRow) => {
+      if (cErr) return res.status(500).json({ success: false, error: cErr.message });
+
+      const nextNum = (cRow?.cnt || 0) + 1;
+      const document_number = `${prefix}-${year}-${String(nextNum).padStart(6, '0')}`;
+      const now = new Date();
+      const issue_date = now.toISOString().replace('T', ' ').substring(0, 19);
+
+      const hashPayload = `${document_number}|${patient_id}|${patient_name}|${issue_date}|${doctor_name || ''}`;
+      const verification_hash = crypto.createHash('sha256').update(hashPayload).digest('hex').substring(0, 32);
+
+      const effectiveDoctorName = doctor_name || user?.user || 'Добрушкин А.М.';
+      const effectiveIssuedByUserId = user?.userId || null;
+      const effectiveIssuedByName = user?.user || effectiveDoctorName;
+      const docDataJson = typeof document_data === 'string' ? document_data : JSON.stringify(document_data);
+
+      const insertSql = `
+        INSERT INTO patient_issued_documents (
+          document_number, patient_id, patient_name, protocol_id, appointment_id,
+          document_type, form_code, title, issue_date, valid_until,
+          doctor_id, doctor_name, issued_by_user_id, issued_by_name,
+          organization_name, recipient_organization, icd10_code, clinical_diagnosis,
+          document_data_json, verification_hash, printed_count, status
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'issued')
+      `;
+
+      db.run(
+        insertSql,
+        [
+          document_number, patient_id, patient_name, protocol_id, appointment_id,
+          document_type, form_code || '', title, issue_date, valid_until,
+          doctor_id, effectiveDoctorName, effectiveIssuedByUserId, effectiveIssuedByName,
+          organization_name, recipient_organization, icd10_code, clinical_diagnosis,
+          docDataJson, verification_hash
+        ],
+        function(iErr) {
+          if (iErr) return res.status(500).json({ success: false, error: iErr.message });
+
+          const issuedDocId = this.lastID;
+
+          // Serilog Audit Write
+          logOrthoAudit({
+            level: LogLevels.INFO,
+            eventType: EventTypes.PATIENT_DOCUMENT_ISSUED,
+            message: `Выдан официальный медицинский документ № ${document_number} (${title}) для пациента ${patient_name}`,
+            patientId: patient_id,
+            protocolId: protocol_id,
+            appointmentId: appointment_id,
+            doctorId: doctor_id,
+            properties: {
+              DocumentId: issuedDocId,
+              DocumentNumber: document_number,
+              DocumentType: document_type,
+              FormCode: form_code,
+              Title: title,
+              PatientName: patient_name,
+              DoctorName: effectiveDoctorName,
+              IssuedByUserId: effectiveIssuedByUserId,
+              IssuedByName: effectiveIssuedByName,
+              RecipientOrg: recipient_organization,
+              VerificationHash: verification_hash
+            },
+            clientIp: req.ip || req.connection?.remoteAddress
+          });
+
+          res.json({
+            success: true,
+            message: 'Документ успешно зарегистрирован в реестре',
+            document: {
+              id: issuedDocId,
+              document_number,
+              patient_id,
+              patient_name,
+              protocol_id,
+              appointment_id,
+              document_type,
+              form_code,
+              title,
+              issue_date,
+              valid_until,
+              doctor_name: effectiveDoctorName,
+              issued_by_name: effectiveIssuedByName,
+              recipient_organization,
+              icd10_code,
+              clinical_diagnosis,
+              verification_hash,
+              printed_count: 1,
+              status: 'issued'
+            }
+          });
+        }
+      );
+    }
+  );
+});
+
+/**
+ * GET /api/ortho/patient-documents
+ * Search and retrieve issued documents with filtering
+ */
+router.get('/patient-documents', (req, res) => {
+  const {
+    patient_id,
+    document_type,
+    doctor_name,
+    date_from,
+    date_to,
+    search,
+    limit = 100,
+    offset = 0
+  } = req.query;
+
+  let whereClauses = [];
+  let params = [];
+
+  if (patient_id) {
+    whereClauses.push('patient_id = ?');
+    params.push(patient_id);
+  }
+  if (document_type && document_type !== 'all') {
+    whereClauses.push('document_type = ?');
+    params.push(document_type);
+  }
+  if (doctor_name && doctor_name !== 'all') {
+    whereClauses.push('doctor_name LIKE ?');
+    params.push(`%${doctor_name}%`);
+  }
+  if (date_from) {
+    whereClauses.push('issue_date >= ?');
+    params.push(date_from);
+  }
+  if (date_to) {
+    whereClauses.push('issue_date <= ?');
+    params.push(date_to + ' 23:59:59');
+  }
+  if (search && search.trim()) {
+    const s = `%${search.trim()}%`;
+    whereClauses.push('(document_number LIKE ? OR patient_name LIKE ? OR title LIKE ? OR recipient_organization LIKE ? OR icd10_code LIKE ?)');
+    params.push(s, s, s, s, s);
+  }
+
+  const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
+
+  const countSql = `SELECT COUNT(*) AS total FROM patient_issued_documents ${whereSql}`;
+  db.get(countSql, params, (cErr, cRow) => {
+    if (cErr) return res.status(500).json({ success: false, error: cErr.message });
+    const total = cRow?.total || 0;
+
+    const dataSql = `
+      SELECT id, document_number, patient_id, patient_name, protocol_id, appointment_id,
+             document_type, form_code, title, issue_date, valid_until,
+             doctor_id, doctor_name, issued_by_user_id, issued_by_name,
+             organization_name, recipient_organization, icd10_code, clinical_diagnosis,
+             document_data_json, verification_hash, printed_count, status, created_at
+      FROM patient_issued_documents
+      ${whereSql}
+      ORDER BY id DESC
+      LIMIT ? OFFSET ?
+    `;
+
+    db.all(dataSql, [...params, Number(limit), Number(offset)], (dErr, rows) => {
+      if (dErr) return res.status(500).json({ success: false, error: dErr.message });
+      res.json({ success: true, total, rows: rows || [] });
+    });
+  });
+});
+
+/**
+ * GET /api/ortho/patient-documents/patient/:patientId
+ * Get all issued documents for specific patient
+ */
+router.get('/patient-documents/patient/:patientId', (req, res) => {
+  const patientId = req.params.patientId;
+  const sql = `
+    SELECT id, document_number, patient_id, patient_name, protocol_id, appointment_id,
+           document_type, form_code, title, issue_date, valid_until,
+           doctor_name, issued_by_name, recipient_organization,
+           icd10_code, clinical_diagnosis, document_data_json,
+           verification_hash, printed_count, status, created_at
+    FROM patient_issued_documents
+    WHERE patient_id = ?
+    ORDER BY id DESC
+  `;
+  db.all(sql, [patientId], (err, rows) => {
+    if (err) return res.status(500).json({ success: false, error: err.message });
+    res.json({ success: true, documents: rows || [] });
+  });
+});
+
+/**
+ * POST /api/ortho/patient-documents/:id/log-print
+ * Record print/reprint event and write to Serilog audit
+ */
+router.post('/patient-documents/:id/log-print', (req, res) => {
+  const docId = req.params.id;
+  const user = getUserContext(req);
+
+  db.get('SELECT * FROM patient_issued_documents WHERE id = ?', [docId], (fErr, doc) => {
+    if (fErr || !doc) return res.status(404).json({ success: false, error: 'Документ не найден' });
+
+    // Permission check: Листок нетрудоспособности (больничный лист) и справка о нетрудоспособности разрешены исключительно sysadmin
+    const isSickLeaveDoc =
+      doc.document_type === 'certificate' ||
+      doc.document_type === 'sick_leave' ||
+      doc.document_type === 'disability' ||
+      doc.form_code === '095/у' ||
+      doc.form_code === '347н / ЭЛН' ||
+      (doc.title && doc.title.toLowerCase().includes('нетрудоспособност')) ||
+      (doc.title && doc.title.toLowerCase().includes('больничный'));
+
+    if (isSickLeaveDoc) {
+      if (!user || !user.isSysadmin) {
+        logOrthoAudit({
+          level: LogLevels.WARN,
+          eventType: EventTypes.SECURITY_ACCESS_DENIED,
+          message: `Отказ в доступе: пользователь ${user?.user || 'Аноним'} попытался распечатать «Листок нетрудоспособности / Больничный лист» ${doc.document_number} без прав sysadmin`,
+          patientId: doc.patient_id,
+          properties: { User: user?.user, DocumentNumber: doc.document_number, Title: doc.title }
+        });
+        return res.status(403).json({
+          success: false,
+          error: 'Печать листка нетрудоспособности (больничного листа) разрешена исключительно системному администратору (sysadmin)'
+        });
+      }
+    }
+
+    const newPrintedCount = (doc.printed_count || 1) + 1;
+    db.run(
+      'UPDATE patient_issued_documents SET printed_count = ?, updated_at = datetime("now", "localtime") WHERE id = ?',
+      [newPrintedCount, docId],
+      (uErr) => {
+        if (uErr) return res.status(500).json({ success: false, error: uErr.message });
+
+        // Serilog Audit Write
+        logOrthoAudit({
+          level: LogLevels.INFO,
+          eventType: EventTypes.PATIENT_DOCUMENT_PRINTED,
+          message: `Печать документа ${doc.document_number} (${doc.title}), экз. №${newPrintedCount} для пациента ${doc.patient_name}`,
+          patientId: doc.patient_id,
+          protocolId: doc.protocol_id,
+          appointmentId: doc.appointment_id,
+          doctorId: doc.doctor_id,
+          properties: {
+            DocumentId: doc.id,
+            DocumentNumber: doc.document_number,
+            DocumentType: doc.document_type,
+            FormCode: doc.form_code,
+            PrintedCount: newPrintedCount,
+            PrintedByName: user?.user || 'Медицинский персонал'
+          },
+          clientIp: req.ip || req.connection?.remoteAddress
+        });
+
+        res.json({ success: true, printed_count: newPrintedCount });
+      }
+    );
+  });
+});
+
+/**
+ * GET /api/ortho/patient-documents/kpi
+ * Get aggregated KPIs and statistics for Tab 3
+ */
+router.get('/patient-documents/kpi', (req, res) => {
+  const { doctor_name, date_from, date_to } = req.query;
+
+  let whereClauses = [];
+  let params = [];
+
+  if (doctor_name && doctor_name !== 'all') {
+    whereClauses.push('doctor_name LIKE ?');
+    params.push(`%${doctor_name}%`);
+  }
+  if (date_from) {
+    whereClauses.push('issue_date >= ?');
+    params.push(date_from);
+  }
+  if (date_to) {
+    whereClauses.push('issue_date <= ?');
+    params.push(date_to + ' 23:59:59');
+  }
+
+  const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
+
+  const qOverview = `
+    SELECT
+      COUNT(*) AS total_issued,
+      SUM(CASE WHEN date(issue_date) = date('now', 'localtime') THEN 1 ELSE 0 END) AS issued_today,
+      SUM(CASE WHEN strftime('%Y-%m', issue_date) = strftime('%Y-%m', 'now', 'localtime') THEN 1 ELSE 0 END) AS issued_this_month,
+      SUM(CASE WHEN printed_count > 1 THEN printed_count - 1 ELSE 0 END) AS reprints_count,
+      COUNT(DISTINCT patient_id) AS unique_patients
+    FROM patient_issued_documents
+    ${whereSql}
+  `;
+
+  const qByType = `
+    SELECT document_type, form_code, title, COUNT(*) AS count
+    FROM patient_issued_documents
+    ${whereSql}
+    GROUP BY document_type
+    ORDER BY count DESC
+  `;
+
+  const qByDoctor = `
+    SELECT doctor_name, COUNT(*) AS count, COUNT(DISTINCT patient_id) AS patients_count
+    FROM patient_issued_documents
+    ${whereSql}
+    GROUP BY doctor_name
+    ORDER BY count DESC
+    LIMIT 10
+  `;
+
+  const qRecentTrend = `
+    SELECT date(issue_date) AS day, COUNT(*) AS count
+    FROM patient_issued_documents
+    ${whereSql ? whereSql + ' AND' : 'WHERE'} issue_date >= datetime('now', '-30 days', 'localtime')
+    GROUP BY date(issue_date)
+    ORDER BY day ASC
+  `;
+
+  const qTopDiagnoses = `
+    SELECT COALESCE(NULLIF(icd10_code, ''), 'Без кода') AS icd10,
+           COALESCE(NULLIF(clinical_diagnosis, ''), 'Основной клинический диагноз') AS diagnosis,
+           COUNT(*) AS count
+    FROM patient_issued_documents
+    ${whereSql}
+    GROUP BY icd10
+    ORDER BY count DESC
+    LIMIT 10
+  `;
+
+  db.get(qOverview, params, (oErr, overview) => {
+    if (oErr) return res.status(500).json({ success: false, error: oErr.message });
+
+    db.all(qByType, params, (tErr, byType) => {
+      if (tErr) return res.status(500).json({ success: false, error: tErr.message });
+
+      db.all(qByDoctor, params, (dErr, byDoctor) => {
+        if (dErr) return res.status(500).json({ success: false, error: dErr.message });
+
+        db.all(qRecentTrend, params, (rErr, trend) => {
+          if (rErr) return res.status(500).json({ success: false, error: rErr.message });
+
+          db.all(qTopDiagnoses, params, (gErr, topDiagnoses) => {
+            if (gErr) return res.status(500).json({ success: false, error: gErr.message });
+
+            res.json({
+              success: true,
+              overview: {
+                total_issued: overview?.total_issued || 0,
+                issued_today: overview?.issued_today || 0,
+                issued_this_month: overview?.issued_this_month || 0,
+                reprints_count: overview?.reprints_count || 0,
+                unique_patients: overview?.unique_patients || 0
+              },
+              by_type: byType || [],
+              by_doctor: byDoctor || [],
+              daily_trend: trend || [],
+              top_diagnoses: topDiagnoses || []
+            });
+          });
+        });
+      });
+    });
+  });
+});
+
 module.exports = router;
 

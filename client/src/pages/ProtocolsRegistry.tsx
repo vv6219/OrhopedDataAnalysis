@@ -52,6 +52,9 @@ import LockIcon from '@mui/icons-material/Lock';
 import UndoIcon from '@mui/icons-material/Undo';
 import DeleteIcon from '@mui/icons-material/Delete';
 import DescriptionIcon from '@mui/icons-material/Description';
+import FolderSharedIcon from '@mui/icons-material/FolderShared';
+import PersonIcon from '@mui/icons-material/Person';
+import AssessmentIcon from '@mui/icons-material/Assessment';
 import { useReactToPrint } from 'react-to-print';
 import { API_BASE_URL } from '../config/apiConfig';
 import { useAuth } from '../context/AuthContext';
@@ -59,6 +62,8 @@ import OrthoProtocolPrintTemplate from '../components/reports/OrthoProtocolPrint
 import type { OrthoProtocolData } from '../components/reports/OrthoProtocolPrintTemplate';
 import OrthoReferralPrintTemplate, { type OrthoReferralData } from '../components/reports/OrthoReferralPrintTemplate';
 import IssueReferralModal from '../components/ortho/IssueReferralModal';
+import PatientDocumentsPrintTab from '../components/ortho/PatientDocumentsPrintTab';
+import { PatientDocumentsKpiTab } from '../components/ortho/PatientDocumentsKpiTab';
 import { parseProtocolContent, stripProtocolXml } from '../utils/protocolXmlParser';
 
 export interface ProtocolRow {
@@ -198,7 +203,6 @@ export default function ProtocolsRegistry() {
   const { currentUser, hasPermission } = useAuth();
 
   const isSysadmin = hasPermission('sysadmin') || currentUser?.role === 'sysadmin';
-  const isAdministrator = hasPermission('administrator') || currentUser?.role === 'admin' || currentUser?.role === 'administrator';
 
   // Registry state
   const [rows, setRows] = useState<ProtocolRow[]>([]);
@@ -219,6 +223,16 @@ export default function ProtocolsRegistry() {
   const [patientIdFilter, setPatientIdFilter] = useState(searchParams.get('patientId') || '');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+
+  // Active Tab: 0 = 1. Протоколы приёмов (АРМ Врача), 1 = 2. Печать документов для пациента, 2 = 3. Аналитика и KPI
+  const [activeTab, setActiveTab] = useState<number>(() => {
+    const t = searchParams.get('tab');
+    if (t === 'documents') return 1;
+    if (t === 'kpi') return 2;
+    return 0;
+  });
+  const [docTabPatientId, setDocTabPatientId] = useState<string | number | null>(searchParams.get('patientId') || null);
+  const [referralPatientOverride, setReferralPatientOverride] = useState<any>(null);
 
   // Drawer Inspector State
   const [selectedProtocol, setSelectedProtocol] = useState<ProtocolRow | null>(null);
@@ -412,8 +426,68 @@ export default function ProtocolsRegistry() {
     setStartDate('');
     setEndDate('');
     setPage(0);
-    setSearchParams({});
+    setSearchParams(() => {
+      const updated = new URLSearchParams();
+      if (activeTab === 1) updated.set('tab', 'documents');
+      else if (activeTab === 2) updated.set('tab', 'kpi');
+      return updated;
+    });
   };
+
+  const handleSwitchToDocumentsTab = useCallback((patientId: number | string) => {
+    setDocTabPatientId(patientId);
+    setActiveTab(1);
+    setSearchParams(prev => {
+      const updated = new URLSearchParams(prev);
+      updated.set('tab', 'documents');
+      updated.set('patientId', String(patientId));
+      return updated;
+    });
+  }, [setSearchParams]);
+
+  const handleSwitchToProtocolsTab = useCallback((patientId?: number | string) => {
+    setActiveTab(0);
+    if (patientId) {
+      setPatientIdFilter(String(patientId));
+      setPage(0);
+      setSearchParams(prev => {
+        const updated = new URLSearchParams(prev);
+        updated.set('tab', 'protocols');
+        updated.set('patientId', String(patientId));
+        return updated;
+      });
+    } else {
+      setSearchParams(prev => {
+        const updated = new URLSearchParams(prev);
+        updated.delete('tab');
+        return updated;
+      });
+    }
+  }, [setSearchParams]);
+
+  const handleOpenReferralModalFromPatient = useCallback((patient: any, protocol?: any) => {
+    setReferralPatientOverride(patient);
+    setReferralModalProtocol(protocol || null);
+    if (protocol?.protocol_json) {
+      try {
+        const parsed = JSON.parse(protocol.protocol_json);
+        if (parsed?.prescriptions) {
+          setReferralPrescriptions(parsed.prescriptions);
+        }
+      } catch {
+        setReferralPrescriptions([]);
+      }
+    } else {
+      setReferralPrescriptions([]);
+    }
+    setReferralModalOpen(true);
+  }, []);
+
+  const filteredPatientName = useMemo(() => {
+    if (!patientIdFilter) return '';
+    const found = rows.find(r => String(r.pt_id) === String(patientIdFilter));
+    return found ? found.patient_name : '';
+  }, [rows, patientIdFilter]);
 
   // Revoke / Delete protocol action
   const handleConfirmRevoke = async () => {
@@ -670,49 +744,126 @@ export default function ProtocolsRegistry() {
     {
       field: 'patient_name',
       headerName: 'Пациент',
-      flex: 1.8,
-      minWidth: 200,
+      flex: 2.0,
+      minWidth: 230,
       renderCell: (params) => {
         const row = params.row as ProtocolRow;
         return (
           <Box sx={{ whiteSpace: 'normal', wordBreak: 'break-word', lineHeight: 1.35, py: 1 }}>
-            <Typography variant="body2" sx={{ fontWeight: 800, color: '#1E293B' }}>
-              {row.patient_name}
-            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8, flexWrap: 'wrap' }}>
+              <Tooltip title="Нажмите, чтобы сгруппировать и показать только приёмы этого пациента">
+                <Typography
+                  variant="body2"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setPatientIdFilter(String(row.pt_id));
+                    setPage(0);
+                  }}
+                  sx={{
+                    fontWeight: 800,
+                    color: '#0F3C64',
+                    cursor: 'pointer',
+                    '&:hover': { color: '#0284C7', textDecoration: 'underline' }
+                  }}
+                >
+                  {row.patient_name}
+                </Typography>
+              </Tooltip>
+              <Tooltip title={`Печать документов для ${row.patient_name} (направления, справки, выписки, медкарта)`}>
+                <IconButton
+                  size="small"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleSwitchToDocumentsTab(row.pt_id);
+                  }}
+                  sx={{
+                    p: 0.35,
+                    color: '#0284C7',
+                    bgcolor: '#F0F9FF',
+                    border: '1px solid #BAE6FD',
+                    borderRadius: 1,
+                    '&:hover': { bgcolor: '#BAE6FD' }
+                  }}
+                >
+                  <FolderSharedIcon sx={{ fontSize: 14 }} />
+                </IconButton>
+              </Tooltip>
+            </Box>
+
             <Typography variant="caption" sx={{ color: '#64748B', display: 'block' }}>
               {row.patient_bdate ? `Рожд.: ${row.patient_bdate} ` : ''}
               {row.patient_phone ? `• Тел: ${row.patient_phone}` : ''}
               {row.patient_mednum ? ` • Карта: #${row.patient_mednum}` : ''}
             </Typography>
-            {row.status === 'draft' && (
-              <Tooltip title={`Нажмите для перехода в АРМ врача: ${row.patient_name} (протокол #${row.id})`}>
-                <Chip
-                  icon={<MedicalServicesIcon sx={{ fontSize: '12px !important', color: '#92400E !important' }} />}
-                  label="Черновик приема • В АРМ"
-                  size="small"
-                  clickable
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    navigate(`/ortho-workstation?protocolId=${row.id}&patientId=${row.pt_id}`);
-                  }}
-                  sx={{
-                    mt: 0.5,
-                    height: 20,
-                    fontSize: '0.68rem',
-                    fontWeight: 800,
-                    bgcolor: '#FEF3C7',
-                    color: '#92400E',
-                    border: '1px solid #FCD34D',
-                    cursor: 'pointer',
-                    '&:hover': {
-                      bgcolor: '#FDE68A',
-                      borderColor: '#F59E0B',
-                      boxShadow: '0 2px 4px rgba(245, 158, 11, 0.25)'
-                    }
-                  }}
-                />
-              </Tooltip>
-            )}
+
+            <Box sx={{ display: 'flex', gap: 0.6, mt: 0.5, flexWrap: 'wrap', alignItems: 'center' }}>
+              <Chip
+                label="Все приёмы"
+                size="small"
+                clickable
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setPatientIdFilter(String(row.pt_id));
+                  setPage(0);
+                }}
+                sx={{
+                  height: 19,
+                  fontSize: '0.65rem',
+                  fontWeight: 700,
+                  bgcolor: '#F1F5F9',
+                  color: '#334155',
+                  '&:hover': { bgcolor: '#E2E8F0' }
+                }}
+              />
+
+              <Chip
+                icon={<PrintIcon sx={{ fontSize: '11px !important', color: '#0284C7 !important' }} />}
+                label="Печать док-тов"
+                size="small"
+                clickable
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleSwitchToDocumentsTab(row.pt_id);
+                }}
+                sx={{
+                  height: 19,
+                  fontSize: '0.65rem',
+                  fontWeight: 700,
+                  bgcolor: '#E0F2FE',
+                  color: '#0369A1',
+                  border: '1px solid #BAE6FD',
+                  '&:hover': { bgcolor: '#BAE6FD' }
+                }}
+              />
+
+              {row.status === 'draft' && (
+                <Tooltip title={`Нажмите для перехода в АРМ врача: ${row.patient_name} (протокол #${row.id})`}>
+                  <Chip
+                    icon={<MedicalServicesIcon sx={{ fontSize: '12px !important', color: '#92400E !important' }} />}
+                    label="Черновик • В АРМ"
+                    size="small"
+                    clickable
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      navigate(`/ortho-workstation?protocolId=${row.id}&patientId=${row.pt_id}`);
+                    }}
+                    sx={{
+                      height: 19,
+                      fontSize: '0.65rem',
+                      fontWeight: 800,
+                      bgcolor: '#FEF3C7',
+                      color: '#92400E',
+                      border: '1px solid #FCD34D',
+                      cursor: 'pointer',
+                      '&:hover': {
+                        bgcolor: '#FDE68A',
+                        borderColor: '#F59E0B'
+                      }
+                    }}
+                  />
+                </Tooltip>
+              )}
+            </Box>
           </Box>
         );
       }
@@ -925,7 +1076,7 @@ export default function ProtocolsRegistry() {
     {
       field: 'actions',
       headerName: 'Действия',
-      width: 290,
+      width: 325,
       sortable: false,
       filterable: false,
       align: 'center',
@@ -1022,6 +1173,17 @@ export default function ProtocolsRegistry() {
               </IconButton>
             </Tooltip>
 
+            {/* Patient Documents (Tab 2) */}
+            <Tooltip title={`Печать документов для ${row.patient_name} (направления, справки, выписки, медкарта)`}>
+              <IconButton
+                size="small"
+                onClick={() => handleSwitchToDocumentsTab(row.pt_id)}
+                sx={{ color: '#0284C7' }}
+              >
+                <FolderSharedIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+
             {/* Grant Access (Admin / Sysadmin) */}
             {row.can_grant_access && (
               <Tooltip title="Предоставить доступ врачу к этому протоколу">
@@ -1077,7 +1239,7 @@ export default function ProtocolsRegistry() {
         );
       }
     }
-  ], [navigate, isSysadmin]);
+  ], [navigate, isSysadmin, handleSwitchToDocumentsTab]);
 
   return (
     <Box sx={{ p: { xs: 2, sm: 3 }, bgcolor: '#F8FAFC', minHeight: '100vh' }}>
@@ -1085,10 +1247,10 @@ export default function ProtocolsRegistry() {
       <Box sx={{ mb: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 2 }}>
         <Box>
           <Typography variant="h5" sx={{ fontWeight: 800, color: '#0F3C64', letterSpacing: '-0.3px' }}>
-            Реестр Протоколов и направлений пациентов
+            Реестр протоколов и печать документов для пациентов
           </Typography>
           <Typography variant="body2" sx={{ color: '#64748B', mt: 0.3 }}>
-            Полнотекстовый поиск FTS5 по 32 881 историческим протоколам, клиническая аналитика, RBAC и управление ЭЦП
+            Полнотекстовый поиск FTS5 по клиническим протоколам, приёмы АРМ Врача, фильтрация по авторам и пакетная печать документов пациентов
           </Typography>
         </Box>
 
@@ -1104,12 +1266,23 @@ export default function ProtocolsRegistry() {
         </Box>
       </Box>
 
-      {/* DUAL NAVIGATION TABS */}
-      <Paper elevation={0} sx={{ mb: 2.5, bgcolor: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 2, px: 2, pt: 1 }}>
+      {/* 3 NAVIGATION TABS */}
+      <Paper elevation={0} sx={{ mb: 2.5, bgcolor: '#FFFFFF', border: '1px solid #CBD5E1', borderRadius: 2, px: 2, pt: 1, boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
         <Tabs
-          value={0}
+          value={activeTab}
           onChange={(_, val) => {
-            if (val === 1) navigate('/patient-referrals');
+            setActiveTab(val);
+            setSearchParams(prev => {
+              const updated = new URLSearchParams(prev);
+              if (val === 1) {
+                updated.set('tab', 'documents');
+              } else if (val === 2) {
+                updated.set('tab', 'kpi');
+              } else {
+                updated.delete('tab');
+              }
+              return updated;
+            });
           }}
           textColor="primary"
           indicatorColor="primary"
@@ -1118,236 +1291,355 @@ export default function ProtocolsRegistry() {
             label="1. Протоколы приёмов (АРМ Врача)"
             icon={<DescriptionIcon />}
             iconPosition="start"
-            sx={{ fontWeight: 700, textTransform: 'none', fontSize: '0.95rem' }}
+            sx={{ fontWeight: 800, textTransform: 'none', fontSize: '0.96rem' }}
           />
           <Tab
-            label="2. Направления пациентов (90 дней)"
-            icon={<AssignmentIcon />}
+            label="2. Печать документов для пациента"
+            icon={<FolderSharedIcon />}
             iconPosition="start"
-            sx={{ fontWeight: 700, textTransform: 'none', fontSize: '0.95rem' }}
+            sx={{ fontWeight: 800, textTransform: 'none', fontSize: '0.96rem' }}
+          />
+          <Tab
+            label="3. Аналитика и KPI выданных документов"
+            icon={<AssessmentIcon />}
+            iconPosition="start"
+            sx={{ fontWeight: 800, textTransform: 'none', fontSize: '0.96rem' }}
           />
         </Tabs>
       </Paper>
 
-      {/* QUICK FILTER BAR */}
-      <Paper sx={{ p: 2, mb: 2.5, borderRadius: 2, border: '1px solid #E2E8F0' }}>
-        <Box
-          sx={{
-            display: 'grid',
-            gridTemplateColumns: {
-              xs: '1fr',
-              sm: isAdministrator || isSysadmin ? '2fr 1fr 1fr 1fr 1fr 1fr auto' : '2fr 1fr 1fr 1fr 1fr auto'
-            },
-            gap: 1.5,
-            alignItems: 'center'
-          }}
-        >
-          <TextField
-            size="small"
-            placeholder="Полнотекстовый поиск FTS5 (ФИО, диагноз, жалобы, мениск, связка)..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            slotProps={{
-              input: {
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <SearchIcon sx={{ color: '#0F3C64' }} />
-                  </InputAdornment>
-                )
-              }
-            }}
-          />
-
-          {(isAdministrator || isSysadmin) && (
-            <FormControl size="small">
-              <InputLabel>Врач-автор</InputLabel>
-              <Select
-                label="Врач-автор"
-                value={selectedDoctorId}
-                onChange={(e) => {
-                  setSelectedDoctorId(e.target.value);
-                  setPage(0);
-                }}
-              >
-                <MenuItem value="">Все врачи</MenuItem>
-                {doctorsList.map((doc) => (
-                  <MenuItem key={doc.id} value={String(doc.id)}>
-                    {doc.full_name}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-          )}
-
-          <FormControl size="small">
-            <InputLabel>Локализация</InputLabel>
-            <Select
-              label="Локализация"
-              value={selectedJoint}
-              onChange={(e) => setSelectedJoint(e.target.value)}
-            >
-              <MenuItem value="">Все суставы</MenuItem>
-              <MenuItem value="knee">Коленный сустав</MenuItem>
-              <MenuItem value="hip">Тазобедренный сустав</MenuItem>
-              <MenuItem value="shoulder">Плечевой сустав</MenuItem>
-              <MenuItem value="foot">Голеностоп и стопа</MenuItem>
-              <MenuItem value="spine">Позвоночник</MenuItem>
-            </Select>
-          </FormControl>
-
-          <FormControl size="small">
-            <InputLabel>Статус ЭЦП</InputLabel>
-            <Select
-              label="Статус ЭЦП"
-              value={selectedStatus}
-              onChange={(e) => setSelectedStatus(e.target.value)}
-            >
-              <MenuItem value="">Все статусы</MenuItem>
-              <MenuItem value="signed">Подписан ЭЦП</MenuItem>
-              <MenuItem value="draft">Черновик</MenuItem>
-              <MenuItem value="revoked">Аннулирован</MenuItem>
-            </Select>
-          </FormControl>
-
-          <TextField
-            size="small"
-            type="date"
-            label="С даты"
-            slotProps={{ inputLabel: { shrink: true } }}
-            value={startDate}
-            onChange={(e) => setStartDate(e.target.value)}
-          />
-
-          <TextField
-            size="small"
-            type="date"
-            label="По дату"
-            slotProps={{ inputLabel: { shrink: true } }}
-            value={endDate}
-            onChange={(e) => setEndDate(e.target.value)}
-          />
-
-          <Button
-            variant={selectedStatus === 'draft' ? 'contained' : 'outlined'}
-            size="small"
-            startIcon={<MedicalServicesIcon sx={{ fontSize: '16px !important' }} />}
-            onClick={() => {
-              setSelectedStatus((prev) => (prev === 'draft' ? '' : 'draft'));
-              setPage(0);
-            }}
-            sx={{
-              fontWeight: 800,
-              color: selectedStatus === 'draft' ? '#FFFFFF' : '#92400E',
-              bgcolor: selectedStatus === 'draft' ? '#D97706' : '#FEF3C7',
-              borderColor: '#FCD34D',
-              height: 40,
-              textTransform: 'none',
-              boxShadow: selectedStatus === 'draft' ? '0 2px 6px rgba(217, 119, 6, 0.3)' : 'none',
-              '&:hover': {
-                bgcolor: selectedStatus === 'draft' ? '#B45309' : '#FDE68A',
-                borderColor: '#F59E0B'
-              }
-            }}
-          >
-            Черновики {totals.draftCount > 0 ? `(${totals.draftCount})` : ''}
-          </Button>
-
+      {/* TAB 1: PROTOCOLS REGISTRY (АРМ ВРАЧА) */}
+      {activeTab === 0 && (
+        <>
+          {/* PATIENT FILTER / GROUPING BANNER */}
           {patientIdFilter && (
-            <Chip
-              label={`Пациент ID: ${patientIdFilter}`}
-              size="small"
-              onDelete={() => {
-                setPatientIdFilter('');
-                setPage(0);
+            <Paper
+              elevation={0}
+              sx={{
+                p: 2,
+                mb: 2.5,
+                borderRadius: 2,
+                bgcolor: '#F0F9FF',
+                border: '1.5px solid #7DD3FC',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: 1.5,
+                boxShadow: '0 2px 6px rgba(2, 132, 199, 0.08)'
               }}
-              sx={{ bgcolor: '#E0F2FE', color: '#0369A1', fontWeight: 700 }}
-            />
+            >
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                <Box
+                  sx={{
+                    width: 44,
+                    height: 44,
+                    borderRadius: 2,
+                    bgcolor: '#0284C7',
+                    color: '#FFFFFF',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    boxShadow: '0 2px 6px rgba(2, 132, 199, 0.3)'
+                  }}
+                >
+                  <PersonIcon sx={{ fontSize: 26 }} />
+                </Box>
+                <Box>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                    <Typography variant="subtitle1" sx={{ fontWeight: 800, color: '#0F3C64', lineHeight: 1.2 }}>
+                      Приёмы пациента: {filteredPatientName || `Пациент ID #${patientIdFilter}`}
+                    </Typography>
+                    <Chip
+                      label={`ID: ${patientIdFilter}`}
+                      size="small"
+                      sx={{ bgcolor: '#E0F2FE', color: '#0369A1', fontWeight: 700, fontSize: '0.72rem' }}
+                    />
+                    <Chip
+                      label={`Приёмов в выборке: ${totalRows}`}
+                      size="small"
+                      sx={{ bgcolor: '#DCFCE7', color: '#166534', fontWeight: 700, fontSize: '0.72rem' }}
+                    />
+                  </Box>
+                  <Typography variant="caption" sx={{ color: '#475569', display: 'block', mt: 0.3 }}>
+                    Отображаются все исторические приёмы и протоколы данного пациента, сгруппированные в хронологическом порядке.
+                  </Typography>
+                </Box>
+              </Box>
+
+              <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
+                <Button
+                  variant="contained"
+                  size="small"
+                  startIcon={<FolderSharedIcon />}
+                  onClick={() => handleSwitchToDocumentsTab(patientIdFilter)}
+                  sx={{
+                    bgcolor: '#0F3C64',
+                    color: '#FFFFFF',
+                    fontWeight: 800,
+                    textTransform: 'none',
+                    borderRadius: 1.5,
+                    px: 1.8,
+                    '&:hover': { bgcolor: '#0284C7' }
+                  }}
+                >
+                  Печать документов пациента (Таб 2) →
+                </Button>
+
+                <Button
+                  variant="outlined"
+                  size="small"
+                  startIcon={<FilterAltOffIcon />}
+                  onClick={() => {
+                    setPatientIdFilter('');
+                    setPage(0);
+                    setSearchParams(prev => {
+                      const updated = new URLSearchParams(prev);
+                      updated.delete('patientId');
+                      return updated;
+                    });
+                  }}
+                  sx={{ color: '#64748B', borderColor: '#CBD5E1', fontWeight: 600, textTransform: 'none' }}
+                >
+                  Показать всех пациентов
+                </Button>
+              </Box>
+            </Paper>
           )}
 
-          <Button
-            variant="outlined"
-            size="small"
-            startIcon={<FilterAltOffIcon />}
-            onClick={handleResetFilters}
-            sx={{ fontWeight: 600, color: '#64748B', borderColor: '#CBD5E1', height: 40 }}
-          >
-            Сброс
-          </Button>
-        </Box>
-      </Paper>
+          {/* QUICK FILTER BAR (With Doctor Author filter) */}
+          <Paper sx={{ p: 2, mb: 2.5, borderRadius: 2, border: '1px solid #E2E8F0' }}>
+            <Box
+              sx={{
+                display: 'grid',
+                gridTemplateColumns: {
+                  xs: '1fr',
+                  sm: '2fr 1.2fr 1fr 1fr 1fr 1fr auto'
+                },
+                gap: 1.5,
+                alignItems: 'center'
+              }}
+            >
+              <TextField
+                size="small"
+                placeholder="Полнотекстовый поиск FTS5 (ФИО, диагноз, жалобы, мениск, связка)..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                slotProps={{
+                  input: {
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <SearchIcon sx={{ color: '#0F3C64' }} />
+                      </InputAdornment>
+                    )
+                  }
+                }}
+              />
 
-      {/* DATAGRID (Strictly compliant with grid-improvements skill) */}
-      <Paper
-        elevation={0}
-        sx={{
-          border: '1px solid #E2E8F0',
-          borderRadius: 2,
-          overflow: 'hidden',
-          width: '100%'
-        }}
-      >
-        <DataGrid
-          autoHeight
-          showToolbar
-          rows={rows}
-          columns={columns}
-          loading={loading}
-          rowCount={totalRows}
-          paginationMode="server"
-          paginationModel={{ page, pageSize }}
-          onPaginationModelChange={(model) => {
-            setPage(model.page);
-            setPageSize(model.pageSize);
-          }}
-          pageSizeOptions={[10, 25, 50, 100]}
-          getRowHeight={() => 'auto'}
-          onRowDoubleClick={(params) => {
-            const row = params.row as ProtocolRow;
-            navigate(`/ortho-workstation?protocolId=${row.id}&patientId=${row.pt_id}`);
-          }}
-          slots={{
-            toolbar: ProtocolsCustomToolbar,
-            footer: () => (
-              <ProtocolsCustomFooter
-                totalCount={totals.totalCount}
-                signedCount={totals.signedCount}
-                draftCount={totals.draftCount}
-                revokedCount={totals.revokedCount}
-                totalPrescriptionsSum={totals.totalPrescriptionsSum}
-                selectedStatus={selectedStatus}
-                onFilterDrafts={() => {
+              <FormControl size="small">
+                <InputLabel>Врач-автор</InputLabel>
+                <Select
+                  label="Врач-автор"
+                  value={selectedDoctorId}
+                  onChange={(e) => {
+                    setSelectedDoctorId(e.target.value);
+                    setPage(0);
+                  }}
+                >
+                  <MenuItem value="">Все врачи</MenuItem>
+                  {doctorsList.map((doc) => (
+                    <MenuItem key={doc.id} value={String(doc.id)}>
+                      {doc.full_name}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+
+              <FormControl size="small">
+                <InputLabel>Локализация</InputLabel>
+                <Select
+                  label="Локализация"
+                  value={selectedJoint}
+                  onChange={(e) => setSelectedJoint(e.target.value)}
+                >
+                  <MenuItem value="">Все суставы</MenuItem>
+                  <MenuItem value="knee">Коленный сустав</MenuItem>
+                  <MenuItem value="hip">Тазобедренный сустав</MenuItem>
+                  <MenuItem value="shoulder">Плечевой сустав</MenuItem>
+                  <MenuItem value="foot">Голеностоп и стопа</MenuItem>
+                  <MenuItem value="spine">Позвоночник</MenuItem>
+                </Select>
+              </FormControl>
+
+              <FormControl size="small">
+                <InputLabel>Статус ЭЦП</InputLabel>
+                <Select
+                  label="Статус ЭЦП"
+                  value={selectedStatus}
+                  onChange={(e) => setSelectedStatus(e.target.value)}
+                >
+                  <MenuItem value="">Все статусы</MenuItem>
+                  <MenuItem value="signed">Подписан ЭЦП</MenuItem>
+                  <MenuItem value="draft">Черновик</MenuItem>
+                  <MenuItem value="revoked">Аннулирован</MenuItem>
+                </Select>
+              </FormControl>
+
+              <TextField
+                size="small"
+                type="date"
+                label="С даты"
+                slotProps={{ inputLabel: { shrink: true } }}
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+              />
+
+              <TextField
+                size="small"
+                type="date"
+                label="По дату"
+                slotProps={{ inputLabel: { shrink: true } }}
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+              />
+
+              <Button
+                variant={selectedStatus === 'draft' ? 'contained' : 'outlined'}
+                size="small"
+                startIcon={<MedicalServicesIcon sx={{ fontSize: '16px !important' }} />}
+                onClick={() => {
                   setSelectedStatus((prev) => (prev === 'draft' ? '' : 'draft'));
                   setPage(0);
                 }}
-              />
-            )
-          }}
-          sx={{
-            width: '100%',
-            border: 'none',
-            '& .MuiDataGrid-virtualScroller': { overflowX: 'hidden' },
-            '& .MuiDataGrid-columnHeaders': {
-              position: 'sticky',
-              top: 0,
-              zIndex: 1,
-              bgcolor: '#F8FAFC',
-              fontWeight: 800,
-              color: '#0F3C64',
-              borderBottom: '2px solid #CBD5E1'
-            },
-            '& .MuiDataGrid-cell': {
-              alignItems: 'flex-start',
-              borderBottom: '1px solid #F1F5F9'
-            },
-            '& .MuiDataGrid-row': {
-              cursor: 'pointer'
-            },
-            '& .MuiDataGrid-row:hover': {
-              bgcolor: '#F8FAFC'
-            }
-          }}
+                sx={{
+                  fontWeight: 800,
+                  color: selectedStatus === 'draft' ? '#FFFFFF' : '#92400E',
+                  bgcolor: selectedStatus === 'draft' ? '#D97706' : '#FEF3C7',
+                  borderColor: '#FCD34D',
+                  height: 40,
+                  textTransform: 'none',
+                  boxShadow: selectedStatus === 'draft' ? '0 2px 6px rgba(217, 119, 6, 0.3)' : 'none',
+                  '&:hover': {
+                    bgcolor: selectedStatus === 'draft' ? '#B45309' : '#FDE68A',
+                    borderColor: '#F59E0B'
+                  }
+                }}
+              >
+                Черновики {totals.draftCount > 0 ? `(${totals.draftCount})` : ''}
+              </Button>
+
+              {patientIdFilter && (
+                <Chip
+                  label={`Пациент ID: ${patientIdFilter}`}
+                  size="small"
+                  onDelete={() => {
+                    setPatientIdFilter('');
+                    setPage(0);
+                  }}
+                  sx={{ bgcolor: '#E0F2FE', color: '#0369A1', fontWeight: 700 }}
+                />
+              )}
+
+              <Button
+                variant="outlined"
+                size="small"
+                startIcon={<FilterAltOffIcon />}
+                onClick={handleResetFilters}
+                sx={{ fontWeight: 600, color: '#64748B', borderColor: '#CBD5E1', height: 40 }}
+              >
+                Сброс
+              </Button>
+            </Box>
+          </Paper>
+
+          {/* DATAGRID (Strictly compliant with grid-improvements skill) */}
+          <Paper
+            elevation={0}
+            sx={{
+              border: '1px solid #E2E8F0',
+              borderRadius: 2,
+              overflow: 'hidden',
+              width: '100%'
+            }}
+          >
+            <DataGrid
+              autoHeight
+              showToolbar
+              rows={rows}
+              columns={columns}
+              loading={loading}
+              rowCount={totalRows}
+              paginationMode="server"
+              paginationModel={{ page, pageSize }}
+              onPaginationModelChange={(model) => {
+                setPage(model.page);
+                setPageSize(model.pageSize);
+              }}
+              pageSizeOptions={[10, 25, 50, 100]}
+              getRowHeight={() => 'auto'}
+              onRowDoubleClick={(params) => {
+                const row = params.row as ProtocolRow;
+                navigate(`/ortho-workstation?protocolId=${row.id}&patientId=${row.pt_id}`);
+              }}
+              slots={{
+                toolbar: ProtocolsCustomToolbar,
+                footer: () => (
+                  <ProtocolsCustomFooter
+                    totalCount={totals.totalCount}
+                    signedCount={totals.signedCount}
+                    draftCount={totals.draftCount}
+                    revokedCount={totals.revokedCount}
+                    totalPrescriptionsSum={totals.totalPrescriptionsSum}
+                    selectedStatus={selectedStatus}
+                    onFilterDrafts={() => {
+                      setSelectedStatus((prev) => (prev === 'draft' ? '' : 'draft'));
+                      setPage(0);
+                    }}
+                  />
+                )
+              }}
+              sx={{
+                width: '100%',
+                border: 'none',
+                '& .MuiDataGrid-virtualScroller': { overflowX: 'hidden' },
+                '& .MuiDataGrid-columnHeaders': {
+                  position: 'sticky',
+                  top: 0,
+                  zIndex: 1,
+                  bgcolor: '#F8FAFC',
+                  fontWeight: 800,
+                  color: '#0F3C64',
+                  borderBottom: '2px solid #CBD5E1'
+                },
+                '& .MuiDataGrid-cell': {
+                  alignItems: 'flex-start',
+                  borderBottom: '1px solid #F1F5F9'
+                },
+                '& .MuiDataGrid-row': {
+                  cursor: 'pointer'
+                },
+                '& .MuiDataGrid-row:hover': {
+                  bgcolor: '#F8FAFC'
+                }
+              }}
+            />
+          </Paper>
+        </>
+      )}
+
+      {/* TAB 2: PATIENT DOCUMENTS PRINTING & BATCH PRINT */}
+      {activeTab === 1 && (
+        <PatientDocumentsPrintTab
+          initialPatientId={patientIdFilter || docTabPatientId}
+          onNavigateToProtocolsTab={handleSwitchToProtocolsTab}
+          onOpenIssueReferralModal={handleOpenReferralModalFromPatient}
         />
-      </Paper>
+      )}
+
+      {/* TAB 3: STATISTICS & KPI OF ISSUED DOCUMENTS */}
+      {activeTab === 2 && (
+        <PatientDocumentsKpiTab />
+      )}
 
       {/* DRAWER PROTOCOL INSPECTOR */}
       <Drawer
@@ -1619,27 +1911,30 @@ export default function ProtocolsRegistry() {
       </Dialog>
 
       {/* ISSUE REFERRAL MODAL */}
-      {referralModalProtocol && (
+      {(referralModalProtocol || referralPatientOverride) && (
         <IssueReferralModal
           open={referralModalOpen}
           onClose={() => {
             setReferralModalOpen(false);
             setReferralModalProtocol(null);
+            setReferralPatientOverride(null);
           }}
-          patient={{
-            id: referralModalProtocol.pt_id,
-            fullName: referralModalProtocol.patient_name,
-            birthDate: referralModalProtocol.patient_bdate,
-            phone: referralModalProtocol.patient_phone,
-            cardNum: String(referralModalProtocol.patient_mednum || '')
-          }}
-          protocolId={referralModalProtocol.id}
-          doctorName={referralModalProtocol.doctor_name || ''}
-          defaultMkbCode={referralModalProtocol.mkb_code || 'M17.1'}
-          defaultDiagnosis={referralModalProtocol.mkb_name || referralModalProtocol.title || ''}
-          targetJoint={referralModalProtocol.primary_joint || ''}
-          targetSide={referralModalProtocol.side === 'left' ? 'Левая' : referralModalProtocol.side === 'right' ? 'Правая' : ''}
-          anamnesisSummary={referralModalProtocol.title || ''}
+          patient={
+            referralPatientOverride || {
+              id: referralModalProtocol?.pt_id,
+              fullName: referralModalProtocol?.patient_name || '',
+              birthDate: referralModalProtocol?.patient_bdate,
+              phone: referralModalProtocol?.patient_phone,
+              cardNum: String(referralModalProtocol?.patient_mednum || '')
+            }
+          }
+          protocolId={referralModalProtocol?.id || null}
+          doctorName={referralModalProtocol?.doctor_name || ''}
+          defaultMkbCode={referralModalProtocol?.mkb_code || 'M17.1'}
+          defaultDiagnosis={referralModalProtocol?.mkb_name || referralModalProtocol?.title || ''}
+          targetJoint={referralModalProtocol?.primary_joint || ''}
+          targetSide={referralModalProtocol?.side === 'left' ? 'Левая' : referralModalProtocol?.side === 'right' ? 'Правая' : ''}
+          anamnesisSummary={referralModalProtocol?.title || ''}
           availablePrescriptions={referralPrescriptions}
           onReferralIssued={(ref) => {
             setToastMessage(`Направление ${ref.referral_number} успешно выписано на бланке Центра`);

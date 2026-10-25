@@ -424,3 +424,23 @@ for screen and document output presentation and output always takes staff data f
 check code to prevent hard coded data staff data
 
 
+implement plan for redesign and enchance screen  "Реестр протоколов и направлений пациентов"
+add functioonality: Печать для пациентов -  направления, справки, выписки, медицинская карты, прочие документы
+фильтрция по врачу
+think about  well designed intuitive GUI with clear navigation filtering and full text search
+implement 2 tabs,
+ the first tab :1. Протоколы приёмов (АРМ Врача) second tab 2: Печать документов для пациента,quick filter with count number  by document type
+таб 1: вход по приемам сгруппированным для данного пациента, переход на таб 2 для пациента для печати документов
+таб 2 :вход по пациенту, группировка по типу документа : направления, справки, выписки, медицинская карты, прочие документы,
+переход на таб 1 на приемы 
+rename screen to "Реестр протоколов и печать документов для пациентов" 
+
+adjust plan with registration all issued for patient documents,adjust db structure, 
+serilog audit write info about each issued  document,
+ issued user, date and time etc,
+ strong inner document numeration, always  print inner number on issued document , tab 3 with statistics and kpi ,
+prepare template for all (each) document, dont miss and check doubled
+ in docs\medical_forms_templates.docx, docs\medical_forms_templates-v3.docx , 
+ develop GUI an UX for each document additional input, keep unified style of all documents ,  logo, issued organization etc
+
+

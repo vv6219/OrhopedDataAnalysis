@@ -945,6 +945,45 @@ function initOrthoSchema(db, callback) {
       }
     });
 
+    // -------------------------------------------------------------------------
+    // 13. Unified Patient Issued Documents (Formal Registration & Strong Numeration)
+    // -------------------------------------------------------------------------
+    db.run(`CREATE TABLE IF NOT EXISTS patient_issued_documents (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      document_number TEXT UNIQUE NOT NULL,
+      patient_id INTEGER NOT NULL,
+      patient_name TEXT NOT NULL,
+      protocol_id INTEGER,
+      appointment_id INTEGER,
+      document_type TEXT NOT NULL,
+      form_code TEXT NOT NULL,
+      title TEXT NOT NULL,
+      issue_date TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+      valid_until TEXT,
+      doctor_id INTEGER,
+      doctor_name TEXT NOT NULL,
+      issued_by_user_id INTEGER,
+      issued_by_name TEXT,
+      organization_name TEXT DEFAULT 'Центр Ортопедии и Травматологии Добрушкина',
+      recipient_organization TEXT,
+      icd10_code TEXT,
+      clinical_diagnosis TEXT,
+      document_data_json TEXT NOT NULL,
+      verification_hash TEXT NOT NULL,
+      printed_count INTEGER DEFAULT 1,
+      status TEXT NOT NULL DEFAULT 'issued',
+      revocation_reason TEXT,
+      created_at TEXT DEFAULT (datetime('now', 'localtime')),
+      updated_at TEXT DEFAULT (datetime('now', 'localtime')),
+      FOREIGN KEY(patient_id) REFERENCES patients(id)
+    );`);
+    db.run("CREATE INDEX IF NOT EXISTS idx_pid_patient ON patient_issued_documents(patient_id);");
+    db.run("CREATE INDEX IF NOT EXISTS idx_pid_number ON patient_issued_documents(document_number);");
+    db.run("CREATE INDEX IF NOT EXISTS idx_pid_type ON patient_issued_documents(document_type);");
+    db.run("CREATE INDEX IF NOT EXISTS idx_pid_form ON patient_issued_documents(form_code);");
+    db.run("CREATE INDEX IF NOT EXISTS idx_pid_date ON patient_issued_documents(issue_date);");
+    db.run("CREATE INDEX IF NOT EXISTS idx_pid_doctor ON patient_issued_documents(doctor_name);");
+
     if (callback) callback();
   });
 }

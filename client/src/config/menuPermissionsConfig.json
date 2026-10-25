@@ -3,12 +3,36 @@
   "version": "2.0.0",
   "description": "Единая централизованная конфигурация древовидного бокового меню (Sidebar), прав доступа (RBAC) и экранных элементов МИС «ОртоERP». Значение ['*'] разрешает доступ всем авторизованным пользователям. Массив прав ['sysadmin', 'doctor'] реализует мульти-доступ.",
   "rolesAndPermissions": [
-    { "code": "sysadmin", "name": "Системный администратор", "description": "Полный системный доступ ко всем модулям и настройкам" },
-    { "code": "administrator", "name": "Администратор клиники", "description": "Оформление визитов, расписание, прейскурант, персонал" },
-    { "code": "doctor", "name": "Врач травматолог-ортопед", "description": "АРМ врача, 2D-гомункулус, тесты, протоколы, направления" },
-    { "code": "nurse", "name": "Медицинская сестра", "description": "Процедурный кабинет, расписание, списание расходных материалов" },
-    { "code": "accountant", "name": "Бухгалтер / Экономист", "description": "Кассовые смены, выплаты персоналу, аудит ККТ, прейскурант" },
-    { "code": "default", "name": "Базовый доступ", "description": "Базовый просмотр справочников, дашборда и руководства" }
+    {
+      "code": "sysadmin",
+      "name": "Системный администратор",
+      "description": "Полный системный доступ ко всем модулям и настройкам"
+    },
+    {
+      "code": "administrator",
+      "name": "Администратор клиники",
+      "description": "Оформление визитов, расписание, прейскурант, персонал"
+    },
+    {
+      "code": "doctor",
+      "name": "Врач травматолог-ортопед",
+      "description": "АРМ врача, 2D-гомункулус, тесты, протоколы, направления"
+    },
+    {
+      "code": "nurse",
+      "name": "Медицинская сестра",
+      "description": "Процедурный кабинет, расписание, списание расходных материалов"
+    },
+    {
+      "code": "accountant",
+      "name": "Бухгалтер / Экономист",
+      "description": "Кассовые смены, выплаты персоналу, аудит ККТ, прейскурант"
+    },
+    {
+      "code": "default",
+      "name": "Базовый доступ",
+      "description": "Базовый просмотр справочников, дашборда и руководства"
+    }
   ],
   "menuGroups": [
     {
@@ -17,7 +41,9 @@
       "icon": "AutoAwesomeMotion",
       "defaultOpen": false,
       "tooltip": "Клинические процессы: АРМ врача-ортопеда, реестры протоколов и направлений, шаблоны 2.0 и руководство",
-      "permissions": ["*"],
+      "permissions": [
+        "*"
+      ],
       "items": [
         {
           "id": "ortho_workstation",
@@ -26,16 +52,23 @@
           "icon": "MedicalServices",
           "iconColor": "#0F3C64",
           "tooltip": "Рабочее место травматолога-ортопеда: интерактивный 2D-гомункулус, углометрия Neutral-0 ROM, клинические тесты, медиатека снимков и live-протокол (PDF/DOCX/RTF/TXT)",
-          "permissions": ["sysadmin", "doctor"]
+          "permissions": [
+            "sysadmin",
+            "doctor"
+          ]
         },
         {
           "id": "protocols_registry",
-          "text": "Реестр Протоколов и направлений пациентов",
+          "text": "Реестр протоколов и печать документов для пациентов",
           "path": "/protocols-registry",
           "icon": "Description",
           "iconColor": "#0F3C64",
-          "tooltip": "Реестр Протоколов и направлений пациентов: полнотекстовый поиск FTS5 по историческим записям, разграничение доступа RBAC (323-ФЗ), аудит Serilog, пакетная печать и контроль направлений",
-          "permissions": ["sysadmin", "doctor", "administrator"]
+          "tooltip": "Реестр протоколов и печать документов для пациентов: приёмы АРМ Врача, пакетная печать направлений, справок, выписок и медицинских карт, фильтрация по врачам и FTS5",
+          "permissions": [
+            "sysadmin",
+            "doctor",
+            "administrator"
+          ]
         },
         {
           "id": "patient_referrals",
@@ -44,7 +77,11 @@
           "icon": "Assignment",
           "iconColor": "#0F3C64",
           "tooltip": "Реестр направлений Центра Ортопедии Добрушкина: внутренние кабинеты и внешние центры, контроль 90-дневного срока действия, печать и экспорт Word",
-          "permissions": ["sysadmin", "doctor", "administrator"]
+          "permissions": [
+            "sysadmin",
+            "doctor",
+            "administrator"
+          ]
         },
         {
           "id": "ortho_templates_manager",
@@ -53,7 +90,9 @@
           "icon": "Science",
           "iconColor": "#0F3C64",
           "tooltip": "Справочник 180 клинических шаблонов, 1 377 ортопедических тестов, 381 метод аппаратной диагностики и Neutral-0 ROM пресетов",
-          "permissions": ["*"]
+          "permissions": [
+            "*"
+          ]
         },
         {
           "id": "user_guide",
@@ -62,7 +101,9 @@
           "icon": "MenuBook",
           "iconColor": "#0F3C64",
           "tooltip": "Интерактивное руководство пользователя: описание функционала МИС, справочников, архитектуры данных и пошаговых регламентов расчетов",
-          "permissions": ["*"]
+          "permissions": [
+            "*"
+          ]
         }
       ]
     },
@@ -72,7 +113,9 @@
       "icon": "CalendarMonth",
       "defaultOpen": false,
       "tooltip": "Управление потоком пациентов: расписание врачей, календарь приемов и пошаговое оформление визитов",
-      "permissions": ["*"],
+      "permissions": [
+        "*"
+      ],
       "items": [
         {
           "id": "scheduling",
@@ -80,7 +123,12 @@
           "path": "/scheduling",
           "icon": "Event",
           "tooltip": "Календарь приемов и расписание врачей: планирование слотов по кабинетам, отслеживание визитов, регистрация явки и перенос записей",
-          "permissions": ["sysadmin", "administrator", "doctor", "nurse"]
+          "permissions": [
+            "sysadmin",
+            "administrator",
+            "doctor",
+            "nurse"
+          ]
         },
         {
           "id": "checkout",
@@ -88,7 +136,11 @@
           "path": "/checkout",
           "icon": "LocalHospital",
           "tooltip": "Пошаговый мастер оформления визита: выбор пациента и доктора, добавление медицинских услуг, расчет себестоимости и скидок, печать фискального чека ККТ",
-          "permissions": ["sysadmin", "administrator", "accountant"]
+          "permissions": [
+            "sysadmin",
+            "administrator",
+            "accountant"
+          ]
         }
       ]
     },
@@ -98,7 +150,13 @@
       "icon": "AccountBalanceWallet",
       "defaultOpen": false,
       "tooltip": "Бухгалтерский и финансовый учет: кассовые смены, выплаты персоналу, аудит ККТ, отчетность и документы, склад, технологические карты и параметры расчетов",
-      "permissions": ["sysadmin", "accountant", "administrator", "doctor", "nurse"],
+      "permissions": [
+        "sysadmin",
+        "accountant",
+        "administrator",
+        "doctor",
+        "nurse"
+      ],
       "items": [
         {
           "id": "fiscal_shifts",
@@ -107,7 +165,11 @@
           "icon": "PointOfSale",
           "iconColor": "#0F3C64",
           "tooltip": "Кассовые смены ККТ АТОЛ 91Ф: открытие и закрытие смен с Z-отчетом, автоматическая мнемоническая нумерация, сверка кассы и X-отчеты",
-          "permissions": ["sysadmin", "accountant", "administrator"]
+          "permissions": [
+            "sysadmin",
+            "accountant",
+            "administrator"
+          ]
         },
         {
           "id": "staff_payouts",
@@ -115,7 +177,10 @@
           "path": "/staff-payouts",
           "icon": "AccountBalanceWallet",
           "tooltip": "Расчет и ведомости выплат: автоматический расчет заработной платы врачей и ассистентов на основе выполненных услуг, ставок и нормативов",
-          "permissions": ["sysadmin", "accountant"]
+          "permissions": [
+            "sysadmin",
+            "accountant"
+          ]
         },
         {
           "id": "reports",
@@ -123,7 +188,12 @@
           "path": "/reports",
           "icon": "Assessment",
           "tooltip": "Генератор документов и отчетов: формирование сводных справок, протоколов лечения, реестров услуг и экспорт документов в PDF и Excel",
-          "permissions": ["sysadmin", "administrator", "accountant", "doctor"]
+          "permissions": [
+            "sysadmin",
+            "administrator",
+            "accountant",
+            "doctor"
+          ]
         },
         {
           "id": "fiscal_audit",
@@ -131,7 +201,10 @@
           "path": "/fiscal-audit",
           "icon": "ReceiptLong",
           "tooltip": "Журнал аудита фискальных операций 54-ФЗ: поминутный журнал взаимодействия с ККТ через Serilog, фискальные признаки (ФД/ФП) и статусы чеков",
-          "permissions": ["sysadmin", "accountant"]
+          "permissions": [
+            "sysadmin",
+            "accountant"
+          ]
         },
         {
           "id": "inventory",
@@ -139,7 +212,12 @@
           "path": "/inventory",
           "icon": "Inventory",
           "tooltip": "Учет складских остатков: мониторинг остатков медикаментов, лимиты запасов и автоматическое списание по технологическим картам визитов",
-          "permissions": ["sysadmin", "accountant", "nurse", "administrator"]
+          "permissions": [
+            "sysadmin",
+            "accountant",
+            "nurse",
+            "administrator"
+          ]
         },
         {
           "id": "operations",
@@ -147,7 +225,11 @@
           "path": "/operations",
           "icon": "LocalHospital",
           "tooltip": "Справочник медицинских услуг: прейскурант клиники, технологические карты BOM, расходные материалы, себестоимость и длительность",
-          "permissions": ["sysadmin", "accountant", "administrator"]
+          "permissions": [
+            "sysadmin",
+            "accountant",
+            "administrator"
+          ]
         },
         {
           "id": "parameters",
@@ -155,7 +237,10 @@
           "path": "/parameters",
           "icon": "Settings",
           "tooltip": "Системные настройки клиники: реквизиты организации, коэффициенты наценок, нормы времени и глобальные системные коэффициенты",
-          "permissions": ["sysadmin", "accountant"]
+          "permissions": [
+            "sysadmin",
+            "accountant"
+          ]
         },
         {
           "id": "fiscal_settings",
@@ -163,7 +248,10 @@
           "path": "/admin/fiscal-settings",
           "icon": "Tune",
           "tooltip": "Конфигурация фискального регистратора: управление профилями подключения, COM-портом, скоростью обмена и параметрами в базе SQLite",
-          "permissions": ["sysadmin", "accountant"]
+          "permissions": [
+            "sysadmin",
+            "accountant"
+          ]
         },
         {
           "id": "pos_settings",
@@ -171,7 +259,10 @@
           "path": "/admin/pos-settings",
           "icon": "CreditCard",
           "tooltip": "Конфигурация банковского POS-эквайринга: управление профилями подключения (IP/Port), параметрами терминала и режимом эмуляции",
-          "permissions": ["sysadmin", "accountant"]
+          "permissions": [
+            "sysadmin",
+            "accountant"
+          ]
         }
       ]
     },
@@ -181,7 +272,12 @@
       "icon": "FolderSpecial",
       "defaultOpen": false,
       "tooltip": "Нормативно-справочная информация (НСИ): картотека пациентов клиники и электронные медицинские карты",
-      "permissions": ["sysadmin", "administrator", "doctor", "nurse"],
+      "permissions": [
+        "sysadmin",
+        "administrator",
+        "doctor",
+        "nurse"
+      ],
       "items": [
         {
           "id": "patients",
@@ -189,7 +285,12 @@
           "path": "/patients",
           "icon": "People",
           "tooltip": "Электронная медицинская карта (ЭМК): реестр пациентов клиники, паспортные данные, контакты, история визитов и прикрепленные файлы",
-          "permissions": ["sysadmin", "administrator", "doctor", "nurse"]
+          "permissions": [
+            "sysadmin",
+            "administrator",
+            "doctor",
+            "nurse"
+          ]
         }
       ]
     },
@@ -199,7 +300,9 @@
       "icon": "BarChart",
       "defaultOpen": false,
       "tooltip": "Управленческая и финансовая аналитика: BI дашборды, маржинальный анализ услуг, доходы и расходы клиники",
-      "permissions": ["*"],
+      "permissions": [
+        "*"
+      ],
       "items": [
         {
           "id": "dashboard",
@@ -207,7 +310,9 @@
           "path": "/",
           "icon": "Dashboard",
           "tooltip": "Главный экран аналитики: оперативные KPI клиники, динамика выручки, загрузка кабинетов и агрегированные финансовые метрики",
-          "permissions": ["*"]
+          "permissions": [
+            "*"
+          ]
         },
         {
           "id": "operations_analytics",
@@ -215,7 +320,11 @@
           "path": "/analytics/operations",
           "icon": "Assessment",
           "tooltip": "Финансовый анализ услуг: маржинальность, себестоимость технологических карт, объемы оказания и доходность медицинских направлений",
-          "permissions": ["sysadmin", "administrator", "accountant"]
+          "permissions": [
+            "sysadmin",
+            "administrator",
+            "accountant"
+          ]
         },
         {
           "id": "services_bi",
@@ -223,7 +332,10 @@
           "path": "/analytics/services-bi",
           "icon": "QueryStats",
           "tooltip": "Многомерный BI-анализ: корреляция выручки от оказанных услуг и расходов на выплаты врачам, маржинальная прибыль клиники",
-          "permissions": ["sysadmin", "accountant"]
+          "permissions": [
+            "sysadmin",
+            "accountant"
+          ]
         },
         {
           "id": "reception_history_bi",
@@ -232,7 +344,12 @@
           "icon": "CalendarMonth",
           "iconColor": "#0F3C64",
           "tooltip": "Многомерный BI-анализ истории приёма пациентов: загрузка врачей, явка, выручка, средний чек и сводные KPI по всей клинике",
-          "permissions": ["sysadmin", "administrator", "doctor", "accountant"]
+          "permissions": [
+            "sysadmin",
+            "administrator",
+            "doctor",
+            "accountant"
+          ]
         }
       ]
     },
@@ -242,7 +359,10 @@
       "icon": "AdminPanelSettings",
       "defaultOpen": false,
       "tooltip": "Системное администрирование: здоровье служб сервера, синхронизация с Firebird, SQLite Studio и профили ККТ",
-      "permissions": ["sysadmin", "administrator"],
+      "permissions": [
+        "sysadmin",
+        "administrator"
+      ],
       "items": [
         {
           "id": "users_manager",
@@ -251,7 +371,9 @@
           "icon": "AdminPanelSettings",
           "iconColor": "#0F3C64",
           "tooltip": "Управление учетными записями пользователей МИС «ОртоERP»: привязка к персоналу (staff), роли, контроль активности, сроки действия и автоблокировка (152-ФЗ)",
-          "permissions": ["sysadmin"]
+          "permissions": [
+            "sysadmin"
+          ]
         },
         {
           "id": "staff",
@@ -260,7 +382,10 @@
           "icon": "Badge",
           "iconColor": "#0F3C64",
           "tooltip": "Кадровый реестр персонала клиники: врачи, ассистенты, специализации, процентные ставки оплат и индивидуальные параметры доступа",
-          "permissions": ["sysadmin", "administrator"]
+          "permissions": [
+            "sysadmin",
+            "administrator"
+          ]
         },
         {
           "id": "server_health",
@@ -269,7 +394,9 @@
           "icon": "Dns",
           "iconColor": "#0284C7",
           "tooltip": "Мониторинг и диагностика серверов: проверка доступности Express API, базы SQLite, демона ККТ, сервера Firebird и REST-документации",
-          "permissions": ["sysadmin"]
+          "permissions": [
+            "sysadmin"
+          ]
         },
         {
           "id": "medflex_sync_center",
@@ -278,7 +405,10 @@
           "icon": "SyncAlt",
           "iconColor": "#4F46E5",
           "tooltip": "Центр синхронизации онлайн-записи MedFlex / ПроДокторов: мониторинг RTT пинга, RCA-анализ инцидентов, оффлайн-очередь, песочница Sandbox и аудит Serilog",
-          "permissions": ["sysadmin", "administrator"]
+          "permissions": [
+            "sysadmin",
+            "administrator"
+          ]
         },
         {
           "id": "firebird_sync",
@@ -286,7 +416,9 @@
           "path": "/admin/firebird-sync",
           "icon": "SyncAlt",
           "tooltip": "Мастер синхронизации баз данных: перенос и сопоставление пациентов и услуг из внешней базы Firebird (MEDICAL.FDB) в локальную SQLite",
-          "permissions": ["sysadmin"]
+          "permissions": [
+            "sysadmin"
+          ]
         },
         {
           "id": "sqlite_studio",
@@ -294,7 +426,9 @@
           "path": "/sqlite-studio",
           "icon": "Storage",
           "tooltip": "Интегрированный менеджер SQLite: просмотр таблиц, схемы данных, индексов и интерактивная SQL-консоль для выполнения запросов",
-          "permissions": ["sysadmin"]
+          "permissions": [
+            "sysadmin"
+          ]
         },
         {
           "id": "swagger_api",
@@ -303,7 +437,9 @@
           "icon": "Code",
           "tooltip": "Интерактивная REST API документация: онлайн-тестирование эндпоинтов бэкенда и схемы JSON в интерфейсе Swagger UI (в новой вкладке)",
           "isExternal": true,
-          "permissions": ["sysadmin"]
+          "permissions": [
+            "sysadmin"
+          ]
         },
         {
           "id": "menu_permissions_editor",
@@ -312,7 +448,9 @@
           "icon": "Tune",
           "iconColor": "#0284C7",
           "tooltip": "Визуальное управление структурой бокового меню, ролями и правами доступа (RBAC) к разделам и элементам экранов",
-          "permissions": ["sysadmin"]
+          "permissions": [
+            "sysadmin"
+          ]
         }
       ]
     },
@@ -323,7 +461,10 @@
       "iconColor": "#D97706",
       "defaultOpen": false,
       "tooltip": "Изолированный тестовый контур: сквозные тесты бэкенда, демо-данные [TEST_DAEMON] и сценарии верификации ККТ",
-      "permissions": ["sysadmin", "accountant"],
+      "permissions": [
+        "sysadmin",
+        "accountant"
+      ],
       "items": [
         {
           "id": "daemon_data",
@@ -331,7 +472,9 @@
           "path": "/admin/daemon-data",
           "icon": "SmartToy",
           "tooltip": "Панель управления демо-данными: создание, просмотр, очистка и тестирование изолированного контура [TEST_DAEMON]",
-          "permissions": ["sysadmin"]
+          "permissions": [
+            "sysadmin"
+          ]
         },
         {
           "id": "fiscal_test_wizard",
@@ -339,7 +482,10 @@
           "path": "/admin/fiscal-test-wizard",
           "icon": "PointOfSale",
           "tooltip": "Мастер тестирования фискализации: интерактивная симуляция пробития чеков, возвратов и верификация протокола ККТ",
-          "permissions": ["sysadmin", "accountant"]
+          "permissions": [
+            "sysadmin",
+            "accountant"
+          ]
         },
         {
           "id": "pos_test_wizard",
@@ -348,62 +494,186 @@
           "icon": "CreditCard",
           "iconColor": "#D97706",
           "tooltip": "Мастер тестирования эквайринга: пинг процессинга Альфа-Банка, тестовые списания с авто-отменой, сверка итогов и печать слипов",
-          "permissions": ["sysadmin", "accountant"]
+          "permissions": [
+            "sysadmin",
+            "accountant"
+          ]
         }
       ]
     }
   ],
   "screenElements": {
     "top_status_bar": {
-      "kkt_shift_clickable": ["sysadmin", "administrator", "accountant"],
-      "atol_chip_clickable": ["sysadmin", "administrator", "accountant"],
-      "alfa_pos_clickable": ["sysadmin", "administrator", "accountant"],
-      "kkt_shift_modal": ["sysadmin", "administrator", "accountant"],
-      "atol_wizard_chip": ["sysadmin", "administrator", "accountant"],
-      "alfa_pos_chip": ["sysadmin", "administrator", "accountant"],
-      "user_manager_link": ["sysadmin"],
-      "user_guide_buttons": ["*"],
-      "medflex_status_chip": ["sysadmin", "administrator"],
-      "medflex_toggle_active": ["sysadmin", "administrator"]
+      "kkt_shift_clickable": [
+        "sysadmin",
+        "administrator",
+        "accountant"
+      ],
+      "atol_chip_clickable": [
+        "sysadmin",
+        "administrator",
+        "accountant"
+      ],
+      "alfa_pos_clickable": [
+        "sysadmin",
+        "administrator",
+        "accountant"
+      ],
+      "kkt_shift_modal": [
+        "sysadmin",
+        "administrator",
+        "accountant"
+      ],
+      "atol_wizard_chip": [
+        "sysadmin",
+        "administrator",
+        "accountant"
+      ],
+      "alfa_pos_chip": [
+        "sysadmin",
+        "administrator",
+        "accountant"
+      ],
+      "user_manager_link": [
+        "sysadmin"
+      ],
+      "user_guide_buttons": [
+        "*"
+      ],
+      "medflex_status_chip": [
+        "sysadmin",
+        "administrator"
+      ],
+      "medflex_toggle_active": [
+        "sysadmin",
+        "administrator"
+      ]
     },
     "ortho_workstation": {
-      "sign_protocol_button": ["sysadmin", "doctor"],
-      "delete_protocol": ["sysadmin"],
-      "export_reports": ["sysadmin", "doctor", "administrator"]
+      "sign_protocol_button": [
+        "sysadmin",
+        "doctor"
+      ],
+      "delete_protocol": [
+        "sysadmin"
+      ],
+      "export_reports": [
+        "sysadmin",
+        "doctor",
+        "administrator"
+      ]
     },
     "staff_page": {
-      "edit_salaries_rates": ["sysadmin", "accountant"],
-      "create_staff": ["sysadmin", "administrator"],
-      "archive_staff": ["sysadmin", "administrator"]
+      "edit_salaries_rates": [
+        "sysadmin",
+        "accountant"
+      ],
+      "create_staff": [
+        "sysadmin",
+        "administrator"
+      ],
+      "archive_staff": [
+        "sysadmin",
+        "administrator"
+      ]
     },
     "users_manager": {
-      "create_user": ["sysadmin"],
-      "edit_permissions": ["sysadmin"],
-      "delete_user": ["sysadmin"],
-      "reset_password": ["sysadmin"]
+      "create_user": [
+        "sysadmin"
+      ],
+      "edit_permissions": [
+        "sysadmin"
+      ],
+      "delete_user": [
+        "sysadmin"
+      ],
+      "reset_password": [
+        "sysadmin"
+      ]
     },
     "checkout": {
-      "fiscal_print_check": ["sysadmin", "accountant", "administrator"],
-      "apply_custom_discount": ["sysadmin", "administrator"]
+      "fiscal_print_check": [
+        "sysadmin",
+        "accountant",
+        "administrator"
+      ],
+      "apply_custom_discount": [
+        "sysadmin",
+        "administrator"
+      ]
     },
     "scheduling": {
-      "cancel_appointment": ["sysadmin", "administrator", "doctor"],
-      "edit_doctor_schedule": ["sysadmin", "administrator"]
+      "cancel_appointment": [
+        "sysadmin",
+        "administrator",
+        "doctor"
+      ],
+      "edit_doctor_schedule": [
+        "sysadmin",
+        "administrator"
+      ]
     },
     "menu_permissions_editor": {
-      "save_config": ["sysadmin"],
-      "restore_backup": ["sysadmin"]
+      "save_config": [
+        "sysadmin"
+      ],
+      "restore_backup": [
+        "sysadmin"
+      ]
     },
     "reception_history_bi": {
-      "export_csv": ["sysadmin", "administrator", "accountant"],
-      "seed_mock_button": ["sysadmin"],
-      "clean_mock_button": ["sysadmin"]
+      "export_csv": [
+        "sysadmin",
+        "administrator",
+        "accountant"
+      ],
+      "seed_mock_button": [
+        "sysadmin"
+      ],
+      "clean_mock_button": [
+        "sysadmin"
+      ]
     },
     "medflex_sync_center": {
-      "flush_queue": ["sysadmin", "administrator"],
-      "change_mode": ["sysadmin"],
-      "test_simulators": ["sysadmin", "administrator"],
-      "resolve_incidents": ["sysadmin", "administrator"]
+      "flush_queue": [
+        "sysadmin",
+        "administrator"
+      ],
+      "change_mode": [
+        "sysadmin"
+      ],
+      "test_simulators": [
+        "sysadmin",
+        "administrator"
+      ],
+      "resolve_incidents": [
+        "sysadmin",
+        "administrator"
+      ]
+    },
+    "protocols_registry": {
+      "print_sick_leave": [
+        "sysadmin"
+      ],
+      "issue_sick_leave": [
+        "sysadmin"
+      ]
+    },
+    "issue_referral_modal": {
+      "issue_sick_leave": [
+        "sysadmin"
+      ],
+      "print_sick_leave": [
+        "sysadmin"
+      ]
+    },
+    "patient_referrals": {
+      "issue_sick_leave": [
+        "sysadmin"
+      ],
+      "print_sick_leave": [
+        "sysadmin"
+      ]
     }
   }
 }

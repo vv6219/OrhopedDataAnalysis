@@ -41,7 +41,11 @@ import NoteAddIcon from '@mui/icons-material/NoteAdd';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
+import LockIcon from '@mui/icons-material/Lock';
+import Tooltip from '@mui/material/Tooltip';
 import { useReactToPrint } from 'react-to-print';
+import { useAuth } from '../../context/AuthContext';
+import { isElementPermitted } from '../../utils/permissionUtils';
 
 import OrthoReferralPrintTemplate from '../reports/OrthoReferralPrintTemplate';
 import type { OrthoReferralData } from '../reports/OrthoReferralPrintTemplate';
@@ -102,6 +106,12 @@ export default function IssueReferralModal({
   activeDiagnostics = [],
   onReferralIssued
 }: IssueReferralModalProps) {
+  const { currentUser, hasPermission } = useAuth();
+  const isSysadmin =
+    hasPermission('sysadmin') ||
+    isElementPermitted('issue_referral_modal', 'issue_sick_leave', currentUser?.permissionCodes) ||
+    isElementPermitted('patient_referrals', 'issue_sick_leave', currentUser?.permissionCodes);
+
   const [loadingPerformers, setLoadingPerformers] = useState(false);
   const [performers, setPerformers] = useState<Performer[]>([]);
   const [selectedPerformerId, setSelectedPerformerId] = useState<number | string>('');
@@ -223,6 +233,10 @@ export default function IssueReferralModal({
   const [expandedDocIds, setExpandedDocIds] = useState<Record<string, boolean>>({ sick_leave: true, pe_release_095u: true });
 
   const handleToggleAdditionalDoc = (id: string) => {
+    if (id === 'sick_leave' && !isSysadmin) {
+      alert('Оформление и печать листка нетрудоспособности (больничного листа) разрешена исключительно системному администратору (sysadmin)');
+      return;
+    }
     setAdditionalDocs(prev => prev.map(doc => {
       if (doc.id === id) {
         const nextSelected = !doc.selected;
@@ -245,7 +259,12 @@ export default function IssueReferralModal({
   };
 
   const handleSelectAllAdditionalDocs = () => {
-    setAdditionalDocs(prev => prev.map(doc => ({ ...doc, selected: true })));
+    setAdditionalDocs(prev => prev.map(doc => {
+      if (doc.id === 'sick_leave' && !isSysadmin) {
+        return { ...doc, selected: false };
+      }
+      return { ...doc, selected: true };
+    }));
   };
 
   const handleDeselectAllAdditionalDocs = () => {
@@ -498,6 +517,11 @@ export default function IssueReferralModal({
 
     const selectedItems = items.filter(it => it.selected);
     const selectedAdditional = additionalDocs.filter(it => it.selected);
+
+    if (selectedAdditional.some(d => d.id === 'sick_leave') && !isSysadmin) {
+      setErrorMessage('Оформление и печать листка нетрудоспособности (больничного листа) разрешена исключительно системному администратору (sysadmin)');
+      return null;
+    }
 
     // If only additional documents are selected (no referral items) and user clicked print:
     if (selectedItems.length === 0 && selectedAdditional.length > 0) {
@@ -1281,6 +1305,7 @@ export default function IssueReferralModal({
             {/* List of Additional Documents */}
             {additionalDocs.map(doc => {
               const isExpanded = Boolean(expandedDocIds[doc.id]);
+              const isRestricted = doc.id === 'sick_leave' && !isSysadmin;
               return (
                 <Paper
                   key={doc.id}
@@ -1289,8 +1314,8 @@ export default function IssueReferralModal({
                     p: 1.8,
                     mb: 1.5,
                     border: '1.5px solid',
-                    borderColor: doc.selected ? '#0284C7' : '#E2E8F0',
-                    bgcolor: doc.selected ? '#F8FAFC' : '#FFFFFF',
+                    borderColor: isRestricted ? '#FECACA' : doc.selected ? '#0284C7' : '#E2E8F0',
+                    bgcolor: isRestricted ? '#FFF5F5' : doc.selected ? '#F8FAFC' : '#FFFFFF',
                     borderRadius: 2,
                     transition: 'all 0.15s ease'
                   }}
@@ -1298,20 +1323,25 @@ export default function IssueReferralModal({
                   {/* Top line with Checkbox, Title and Badge */}
                   <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 1 }}>
                     <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
-                      <FormControlLabel
-                        control={
-                          <Checkbox
-                            checked={doc.selected}
-                            onChange={() => handleToggleAdditionalDoc(doc.id)}
-                            sx={{ color: '#0F3C64', '&.Mui-checked': { color: '#0284C7' }, p: 0.3 }}
+                      <Tooltip title={isRestricted ? "Оформление и печать листка нетрудоспособности разрешена только системному администратору (sysadmin)" : ""}>
+                        <span>
+                          <FormControlLabel
+                            control={
+                              <Checkbox
+                                checked={doc.selected}
+                                disabled={isRestricted}
+                                onChange={() => handleToggleAdditionalDoc(doc.id)}
+                                sx={{ color: '#0F3C64', '&.Mui-checked': { color: '#0284C7' }, p: 0.3 }}
+                              />
+                            }
+                            label=""
+                            sx={{ mr: 0, mt: -0.2 }}
                           />
-                        }
-                        label=""
-                        sx={{ mr: 0, mt: -0.2 }}
-                      />
+                        </span>
+                      </Tooltip>
                       <Box>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-                          <Typography variant="subtitle2" sx={{ fontWeight: 800, color: doc.selected ? '#0F3C64' : '#334155', fontSize: '0.95rem' }}>
+                          <Typography variant="subtitle2" sx={{ fontWeight: 800, color: isRestricted ? '#64748B' : doc.selected ? '#0F3C64' : '#334155', fontSize: '0.95rem' }}>
                             {doc.title}
                           </Typography>
                           <Chip
@@ -1325,6 +1355,22 @@ export default function IssueReferralModal({
                               color: '#0369A1'
                             }}
                           />
+                          {isRestricted && (
+                            <Tooltip title="Оформление и печать листка нетрудоспособности разрешена исключительно системному администратору (sysadmin)">
+                              <Chip
+                                icon={<LockIcon sx={{ fontSize: '13px !important', color: '#DC2626 !important' }} />}
+                                label="Только sysadmin"
+                                size="small"
+                                sx={{
+                                  height: 20,
+                                  fontSize: '0.68rem',
+                                  fontWeight: 800,
+                                  bgcolor: '#FEE2E2',
+                                  color: '#DC2626'
+                                }}
+                              />
+                            </Tooltip>
+                          )}
                           {doc.selected && (
                             <Chip
                               size="small"
