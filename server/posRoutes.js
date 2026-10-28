@@ -4,6 +4,7 @@ const fs = require('fs');
 const db = require('./database');
 const { posService, inspectPortDevice } = require('./posService');
 const { logPosAudit, PosLogLevels, PosEventTypes } = require('./posAuditLogger');
+const { getClientIp, getUserContext } = require('./userActionAuditLogger');
 const { exec } = require('child_process');
 const { getWindowsServiceStatus, restartWindowsService, launchUtility } = require('./winServiceHelper');
 
@@ -155,12 +156,17 @@ router.get('/inpas/service-status', async (req, res) => {
  */
 router.post('/inpas/restart-service', async (req, res) => {
   const serviceName = req.body.service_name || posService.serviceName || 'DualConnectorService';
+  const user = getUserContext(req);
+  const clientIp = getClientIp(req);
   try {
     logPosAudit({
       level: PosLogLevels.INFO,
       message: `Запрос перезапуска службы Windows: ${serviceName}`,
       eventType: PosEventTypes.POS_CONNECT,
-      terminalId: posService.terminalId
+      terminalId: posService.terminalId,
+      userId: user.userId,
+      username: user.username,
+      clientIp
     });
 
     const result = await restartWindowsService(serviceName);
@@ -176,13 +182,18 @@ router.post('/inpas/restart-service', async (req, res) => {
  */
 router.post('/inpas/launch-dc-control', async (req, res) => {
   const targetPath = req.body.path || posService.driverExecutablePath || 'C:\\Program Files (x86)\\INPAS\\DualConnector\\DCControl.exe';
+  const user = getUserContext(req);
+  const clientIp = getClientIp(req);
   try {
     const result = await launchUtility(targetPath);
     logPosAudit({
       level: result.success ? PosLogLevels.INFO : PosLogLevels.WARN,
       message: `Запуск утилиты DC Control (${targetPath}): ${result.message}`,
       eventType: PosEventTypes.POS_CONNECT,
-      terminalId: posService.terminalId
+      terminalId: posService.terminalId,
+      userId: user.userId,
+      username: user.username,
+      clientIp
     });
     res.json(result);
   } catch (err) {
@@ -485,12 +496,17 @@ router.post('/settings', async (req, res) => {
     ], async function (err) {
       if (err) return res.status(500).json({ error: err.message });
       const newId = this.lastID;
+      const user = getUserContext(req);
+      const clientIp = getClientIp(req);
 
       logPosAudit({
         level: PosLogLevels.INFO,
         message: `Создан новый профиль настроек эквайринга: «${profile_name}» (ID: ${newId})`,
         eventType: PosEventTypes.SETTINGS_CREATED,
         terminalId: terminal_id,
+        userId: user.userId,
+        username: user.username || updated_by,
+        clientIp,
         properties: { profileId: newId, isMockMode: Boolean(is_mock_mode) }
       });
 
@@ -596,11 +612,17 @@ router.put('/settings/:id', async (req, res) => {
       if (err) return res.status(500).json({ error: err.message });
       if (this.changes === 0) return res.status(404).json({ error: 'Профиль не найден' });
 
+      const user = getUserContext(req);
+      const clientIp = getClientIp(req);
+
       logPosAudit({
         level: PosLogLevels.INFO,
         message: `Обновлен профиль настроек эквайринга ID: ${id} (${profile_name || 'без имени'})`,
         eventType: PosEventTypes.SETTINGS_UPDATED,
         terminalId: terminal_id || 'ALFA_770192',
+        userId: user.userId,
+        username: user.username || updated_by,
+        clientIp,
         properties: { profileId: id }
       });
 
@@ -618,6 +640,8 @@ router.put('/settings/:id', async (req, res) => {
  */
 router.post('/settings/:id/activate', async (req, res) => {
   const id = Number(req.params.id);
+  const user = getUserContext(req);
+  const clientIp = getClientIp(req);
   try {
     await new Promise((resolve, reject) => {
       db.run('UPDATE pos_terminal_settings SET is_active = 0', (err) => err ? reject(err) : resolve());
@@ -630,6 +654,9 @@ router.post('/settings/:id/activate', async (req, res) => {
         level: PosLogLevels.INFO,
         message: `Активирован профиль настроек эквайринга ID: ${id}`,
         eventType: PosEventTypes.SETTINGS_ACTIVATED,
+        userId: user.userId,
+        username: user.username,
+        clientIp,
         properties: { profileId: id }
       });
 
@@ -646,6 +673,8 @@ router.post('/settings/:id/activate', async (req, res) => {
  */
 router.delete('/settings/:id', (req, res) => {
   const id = Number(req.params.id);
+  const user = getUserContext(req);
+  const clientIp = getClientIp(req);
   db.get('SELECT is_active, profile_name FROM pos_terminal_settings WHERE id = ?', [id], (err, row) => {
     if (err) return res.status(500).json({ error: err.message });
     if (!row) return res.status(404).json({ error: 'Профиль не найден' });
@@ -659,6 +688,9 @@ router.delete('/settings/:id', (req, res) => {
         level: PosLogLevels.WARN,
         message: `Удален профиль настроек эквайринга: «${row.profile_name}» (ID: ${id})`,
         eventType: PosEventTypes.SETTINGS_DELETED,
+        userId: user.userId,
+        username: user.username,
+        clientIp,
         properties: { profileId: id }
       });
       res.json({ success: true, message: 'Профиль удален' });
@@ -670,12 +702,30 @@ router.delete('/settings/:id', (req, res) => {
  * Instant switch between Mock / Emulator and Real Hardware connection across the active profile.
  */
 router.post('/mode', async (req, res) => {
+  const user = getUserContext(req);
+  const clientIp = getClientIp(req);
   try {
     const { is_mock_mode, updated_by, profile_id } = req.body;
     if (is_mock_mode === undefined) {
       return res.status(400).json({ error: 'Параметр is_mock_mode обязателен' });
     }
-    const result = await posService.setMockMode(Boolean(is_mock_mode), updated_by || 'Администратор', profile_id || null);
+    const result = await posService.setMockMode(Boolean(is_mock_mode), updated_by || user.username || 'Администратор', profile_id || null);
+
+    logPosAudit({
+      level: PosLogLevels.WARN,
+      message: `Переключение режима работы эквайринга: ${Boolean(is_mock_mode) ? 'ЭМУЛЯТОР (Mock)' : 'РЕАЛЬНЫЙ ТЕРМИНАЛ (Arcus2/INPAS)'}`,
+      eventType: PosEventTypes.POS_STATUS,
+      terminalId: posService.terminalId,
+      userId: user.userId,
+      username: user.username || updated_by,
+      clientIp,
+      properties: {
+        isMockMode: Boolean(is_mock_mode),
+        profileId,
+        updatedBy: updated_by
+      }
+    });
+
     res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });

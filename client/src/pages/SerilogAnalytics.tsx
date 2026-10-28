@@ -22,7 +22,10 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
-  Snackbar
+  Snackbar,
+  Tabs,
+  Tab,
+  LinearProgress
 } from '@mui/material';
 import {
   DataGrid,
@@ -51,10 +54,17 @@ import DeleteSweepIcon from '@mui/icons-material/DeleteSweep';
 import ErrorIcon from '@mui/icons-material/Error';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
-import PersonIcon from '@mui/icons-material/Person';
 import SpeedIcon from '@mui/icons-material/Speed';
 import DnsIcon from '@mui/icons-material/Dns';
+import TableRowsIcon from '@mui/icons-material/TableRows';
+import AccountTreeIcon from '@mui/icons-material/AccountTree';
+import HubIcon from '@mui/icons-material/Hub';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 
+// ============================================================================
+// Interfaces
+// ============================================================================
 export interface SerilogLogItem {
   id: number;
   timestamp: string;
@@ -83,6 +93,176 @@ export interface SerilogSummary {
   topEvents: Array<{ event_type: string; count: number }>;
   sourcesBreakdown: Array<{ source_context: string; count: number }>;
   avgDurationMs: number;
+}
+
+export interface GroupedOperationItem {
+  source_context: string;
+  event_type: string;
+  total_count: number;
+  error_count: number;
+  warn_count: number;
+  info_count: number;
+  avg_duration_ms: number | null;
+  max_duration_ms: number | null;
+  last_seen: string;
+  active_users_count: number;
+  users_list: string | null;
+}
+
+export interface ServiceSummaryItem {
+  source_context: string;
+  operations_count: number;
+  total_events: number;
+  error_count: number;
+  warn_count: number;
+  avg_duration_ms: number | null;
+  last_seen: string;
+}
+
+// ============================================================================
+// Helper dictionaries for Human-readable Russian labels
+// ============================================================================
+export const SERVICE_NAMES_RU: Record<string, { title: string; color: string; bg: string }> = {
+  'OrthoErp.FiscalShifts': { title: 'Кассовые смены АТОЛ 91Ф', color: '#0F3C64', bg: '#E0F2FE' },
+  'OrthoErp.FiscalAtol': { title: 'Драйвер ККТ АТОЛ 91Ф', color: '#0284C7', bg: '#BAE6FD' },
+  'OrthoErp.FiscalSettings': { title: 'Параметры ККТ АТОЛ 91Ф', color: '#0369A1', bg: '#E0F2FE' },
+  'OrthoErp.FiscalDaemon': { title: 'Служба фискализации .NET', color: '#0284C7', bg: '#E0F2FE' },
+  'OrthoErp.Payouts': { title: 'Выплаты персоналу и ФОТ', color: '#4F46E5', bg: '#EEF2FF' },
+  'OrthoErp.Operations': { title: 'Прейскурант и BOM техкарты', color: '#7C3AED', bg: '#F5F3FF' },
+  'OrthoErp.Warehouse': { title: 'Склад материалов и медикаментов', color: '#0D9488', bg: '#CCFBF1' },
+  'OrthoErp.CalculationParams': { title: 'Параметры расчетов клиники', color: '#6366F1', bg: '#EEF2FF' },
+  'OrthoErp.AlfaPos': { title: 'Банковский эквайринг Альфа-Банка', color: '#D97706', bg: '#FEF3C7' },
+  'OrthoErp.Workstation': { title: 'АРМ врача-ортопеда', color: '#0F3C64', bg: '#E2E8F0' },
+  'OrthoErp.Clinical': { title: 'Клинические протоколы', color: '#0284C7', bg: '#E0F2FE' },
+  'OrthoErp.Referrals': { title: 'Направления пациентов', color: '#2563EB', bg: '#DBEAFE' },
+  'OrthoErp.Templates': { title: 'Клинические шаблоны 2.0', color: '#9333EA', bg: '#F3E8FF' },
+  'OrthoErp.MedFlexSync': { title: 'Шлюз интеграции MedFlex', color: '#4F46E5', bg: '#EEF2FF' },
+  'OrthoErp.Auth': { title: 'Авторизация и безопасность', color: '#059669', bg: '#D1FAE5' },
+  'OrthoErp.Users': { title: 'Управление персоналом и RBAC', color: '#16A34A', bg: '#DCFCE7' },
+  'OrthoErp.Admin': { title: 'Системное ядро и БД SQLite', color: '#334155', bg: '#F1F5F9' },
+  'OrthoERP.Central': { title: 'Центральный сервер МИС', color: '#1E293B', bg: '#F8FAFC' }
+};
+
+export const EVENT_NAMES_RU: Record<string, string> = {
+  // Authentication & Security
+  'auth_login_success': 'Успешный вход в систему',
+  'auth_login_failed': 'Неудачная попытка входа',
+  'auth_logout': 'Выход из системы',
+  'security_access_denied': 'Отказ в доступе (RBAC)',
+  'auth_session_expired': 'Истечение срока сессии',
+
+  // User Management
+  'user_created': 'Создание учетной записи',
+  'user_updated': 'Обновление данных пользователя',
+  'user_deleted': 'Удаление пользователя',
+  'user_permissions_updated': 'Изменение прав доступа пользователя',
+
+  // Fiscal Shifts & Reports
+  'fiscal_shift_opened': 'Открытие кассовой смены',
+  'fiscal_shift_closed': 'Закрытие смены (Z-отчет)',
+  'fiscal_x_report_printed': 'Печать промежуточного X-отчета',
+  'fiscal_shift_reconciled': 'Сверка кассы со сменным итогом',
+  'fiscal_shift_audit_export': 'Экспорт отчета смены (Excel/JSON)',
+  'fiscal_receipt_issued': 'Фискализация чека продажи (54-ФЗ)',
+  'fiscal_receipt_refund': 'Фискализация чека возврата',
+  'fiscal_receipt_failed': 'Ошибка фискализации чека',
+  'visit_receipt_repeat_printed': 'Повторная печать чека визита',
+
+  // Hardware & Devices
+  'device_connect': 'Инициализация оборудования',
+  'device_status': 'Опрос статуса оборудования',
+  'device_error': 'Аппаратная ошибка ККТ',
+  'paper_error': 'Замятие / окончание ленты',
+  'settings_created': 'Создание профиля настроек',
+  'settings_updated': 'Обновление профиля настроек',
+  'settings_activated': 'Активация профиля настроек',
+  'settings_deleted': 'Удаление профиля настроек',
+  'fiscal_mode_changed': 'Переключение режима (Mock/Реальный)',
+
+  // Staff Payouts
+  'payout_preview_calculated': 'Предварительный расчет выплат (Wizard)',
+  'payout_calculation_committed': 'Фиксация начислений сотрудникам',
+  'payout_scheme_created': 'Создание схемы выплат',
+  'payout_scheme_updated': 'Обновление схемы выплат',
+  'payout_staff_rates_updated': 'Обновление ставок сотрудника',
+  'payout_services_locked': 'Блокировка услуг для расчета',
+  'payout_services_unlocked': 'Снятие блокировки услуг',
+  'payout_accrual_updated': 'Корректировка начисления сотруднику',
+  'payout_accrual_deleted': 'Сторно / удаление начисления',
+  'payout_accruals_bulk_action': 'Массовая операция с начислениями',
+  'payout_sheet_created': 'Формирование платежной ведомости',
+  'payout_sheet_status_changed': 'Смена статуса ведомости (Утверждена/Выплачена)',
+
+  // Operations & BOM
+  'operation_created': 'Создание услуги в прейскуранте',
+  'operation_updated': 'Изменение стоимости / услуги',
+  'operation_deleted': 'Удаление услуги из каталога',
+  'operation_bom_updated': 'Изменение техкарты (BOM расхода)',
+
+  // Warehouse & Inventory
+  'inventory_item_created': 'Оприходование материала на склад',
+  'inventory_item_updated': 'Обновление данных материала',
+  'inventory_item_deleted': 'Списание / удаление со склада',
+
+  // Calculation Parameters
+  'calculation_parameter_updated': 'Изменение параметра расчетов',
+  'calculation_parameter_deleted': 'Удаление параметра расчетов',
+
+  // POS Acquiring
+  'pos_auth_success': 'Успешная оплата картой через POS',
+  'pos_auth_decline': 'Отказ в авторизации карты POS',
+  'pos_reversal_success': 'Возврат / отмена транзакции POS',
+  'pos_settlement_success': 'Сверка итогов дня POS (успешно)',
+  'pos_settlement_fail': 'Сбой сверки итогов дня POS',
+  'test_host': 'Тест связи с процессингом банка',
+  'pos_connect': 'Инициализация POS сервиса',
+  'pos_status': 'Статус эквайринга POS',
+
+  // Clinical & Doctor ARM
+  'visit_initiated': 'Начало приема в АРМ врача',
+  'exam_draft_saved': 'Сохранение черновика осмотра',
+  'shablon_action_sync': 'Применение клинического шаблона',
+  'protocol_signed': 'Подписание протокола осмотра',
+  'protocol_revoked': 'Отзыв / аннулирование протокола',
+  'protocol_returned_to_draft': 'Возврат протокола в черновик',
+  'protocol_printed': 'Печать протокола осмотра',
+  'protocol_deleted': 'Удаление протокола',
+  'protocol_access_granted': 'Предоставление доступа к протоколу',
+  'protocol_access_revoked': 'Отзыв доступа к протоколу',
+  'referral_issued': 'Выдача направления пациенту',
+  'referral_printed': 'Печать направления',
+  'referral_status_changed': 'Смена статуса направления',
+  'patient_document_issued': 'Оформление справки / документа',
+  'patient_document_printed': 'Печать официального бланка',
+  'media_uploaded': 'Загрузка снимка / медиафайла',
+  'media_deleted': 'Удаление снимка / медиафайла',
+
+  // Templates 2.0
+  'template_created': 'Создание шаблона 2.0',
+  'template_updated': 'Обновление шаблона 2.0',
+  'template_cloned': 'Клонирование шаблона',
+  'template_deleted': 'Удаление шаблона',
+  'catalog_item_created': 'Создание элемента каталога 2.0',
+  'catalog_item_updated': 'Обновление элемента каталога 2.0',
+  'catalog_item_archived': 'Архивация элемента каталога 2.0',
+
+  // MedFlex & Schedule
+  'mf_heartbeat_ok': 'MedFlex Heartbeat Ping OK',
+  'mf_sync_completed': 'Синхронизация слотов MedFlex',
+  'appointment_scheduled': 'Запись пациента на прием',
+  'appointment_patient_arrived': 'Пациент прибыл в клинику'
+};
+
+export function getServiceReadable(sourceContext: string) {
+  return SERVICE_NAMES_RU[sourceContext] || {
+    title: sourceContext.replace('OrthoErp.', ''),
+    color: '#334155',
+    bg: '#F1F5F9'
+  };
+}
+
+export function getEventReadable(eventType: string) {
+  return EVENT_NAMES_RU[eventType] || eventType;
 }
 
 // ============================================================================
@@ -180,7 +360,7 @@ export function SerilogGridFooter({
 }
 
 // ============================================================================
-// Main Page Component
+// Main Page Component: SerilogAnalytics
 // ============================================================================
 export default function SerilogAnalytics() {
   const { currentUser } = useAuth();
@@ -188,6 +368,9 @@ export default function SerilogAnalytics() {
 
   const canExport = isElementPermitted('serilog_analytics', 'export_logs', permissions);
   const canPurge = isElementPermitted('serilog_analytics', 'purge_logs', permissions);
+
+  // Active Tab: 0 = Flat Logs, 1 = Operation Grouping, 2 = Services Health
+  const [activeTab, setActiveTab] = useState<number>(0);
 
   // Data states
   const [logs, setLogs] = useState<SerilogLogItem[]>([]);
@@ -203,6 +386,11 @@ export default function SerilogAnalytics() {
     sourcesBreakdown: [],
     avgDurationMs: 0
   });
+
+  // Grouped operations states
+  const [groupedOperations, setGroupedOperations] = useState<GroupedOperationItem[]>([]);
+  const [servicesSummary, setServicesSummary] = useState<ServiceSummaryItem[]>([]);
+  const [groupedLoading, setGroupedLoading] = useState(false);
 
   // Source options & Event types
   const [sourceOptions, setSourceOptions] = useState<string[]>([]);
@@ -221,7 +409,7 @@ export default function SerilogAnalytics() {
   const [endDate, setEndDate] = useState('');
 
   // Auto-refresh states
-  const [autoRefreshInterval, setAutoRefreshInterval] = useState<number>(0); // 0 = off, 5, 15, 30 sec
+  const [autoRefreshInterval, setAutoRefreshInterval] = useState<number>(0);
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
 
   // Drawer inspector state
@@ -286,7 +474,7 @@ export default function SerilogAnalytics() {
       .catch(err => console.error('Error fetching sources/events:', err));
   }, []);
 
-  // Fetch logs and summary
+  // Fetch flat logs and summary
   const fetchLogs = useCallback(async () => {
     setLoading(true);
     try {
@@ -339,18 +527,58 @@ export default function SerilogAnalytics() {
     }
   }, [paginationModel, startDate, endDate, selectedSource, selectedLevels, selectedEventType, searchTerm]);
 
+  // Fetch grouped operations
+  const fetchGroupedOperations = useCallback(async () => {
+    setGroupedLoading(true);
+    try {
+      const params = new URLSearchParams();
+      if (startDate) params.set('startDate', startDate);
+      if (endDate) params.set('endDate', endDate);
+      if (selectedSource !== 'ALL') params.set('sources', selectedSource);
+      if (selectedLevels.length > 0) params.set('levels', selectedLevels.join(','));
+      if (selectedEventType !== 'ALL') params.set('eventTypes', selectedEventType);
+      if (searchTerm.trim()) params.set('search', searchTerm.trim());
+
+      const token = localStorage.getItem('token') || '';
+      const res = await fetch(`${API_BASE_URL}/api/admin/serilog/grouped-operations?${params.toString()}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'x-auth-token': token
+        }
+      });
+      const data = await res.json();
+      if (data.success) {
+        setGroupedOperations(data.groups || []);
+        setServicesSummary(data.services || []);
+      }
+    } catch (err: any) {
+      console.error('Error loading grouped operations:', err);
+    } finally {
+      setGroupedLoading(false);
+    }
+  }, [startDate, endDate, selectedSource, selectedLevels, selectedEventType, searchTerm]);
+
   useEffect(() => {
     fetchLogs();
   }, [fetchLogs]);
+
+  useEffect(() => {
+    if (activeTab === 1 || activeTab === 2) {
+      fetchGroupedOperations();
+    }
+  }, [activeTab, fetchGroupedOperations]);
 
   // Auto-refresh interval effect
   useEffect(() => {
     if (autoRefreshInterval <= 0) return;
     const timer = setInterval(() => {
       fetchLogs();
+      if (activeTab === 1 || activeTab === 2) {
+        fetchGroupedOperations();
+      }
     }, autoRefreshInterval * 1000);
     return () => clearInterval(timer);
-  }, [autoRefreshInterval, fetchLogs]);
+  }, [autoRefreshInterval, fetchLogs, fetchGroupedOperations, activeTab]);
 
   // Reset all filters
   const handleResetFilters = () => {
@@ -359,6 +587,22 @@ export default function SerilogAnalytics() {
     setSelectedLevels([]);
     setSelectedEventType('ALL');
     setDatePreset('7days');
+    setPaginationModel({ page: 0, pageSize: 25 });
+  };
+
+  // Jump from grouped operation to filtered flat logs
+  const handleDrilldownToLogs = (sourceContext: string, eventType: string) => {
+    setSelectedSource(sourceContext);
+    setSelectedEventType(eventType);
+    setActiveTab(0);
+    setPaginationModel({ page: 0, pageSize: 25 });
+  };
+
+  // Jump from service card to filtered flat logs
+  const handleDrilldownToService = (sourceContext: string) => {
+    setSelectedSource(sourceContext);
+    setSelectedEventType('ALL');
+    setActiveTab(0);
     setPaginationModel({ page: 0, pageSize: 25 });
   };
 
@@ -400,6 +644,7 @@ export default function SerilogAnalytics() {
         });
         setPurgeDialogOpen(false);
         fetchLogs();
+        fetchGroupedOperations();
       } else {
         throw new Error(data.error);
       }
@@ -424,7 +669,7 @@ export default function SerilogAnalytics() {
     });
   };
 
-  // Column level chip helper
+  // Level chip renderer
   const renderLevelChip = (level: string) => {
     const lvl = (level || '').toLowerCase();
     if (lvl === 'fatal') {
@@ -442,7 +687,7 @@ export default function SerilogAnalytics() {
     return <Chip size="small" label="INFO" sx={{ bgcolor: '#E0F2FE', color: '#0284C7', fontWeight: 600 }} />;
   };
 
-  // Columns definition (complying with grid-improvements)
+  // Columns for Tab 0: Flat Logs (Full Serilog Information)
   const columns: GridColDef[] = useMemo(() => [
     {
       field: 'id',
@@ -472,54 +717,54 @@ export default function SerilogAnalytics() {
     },
     {
       field: 'source_context',
-      headerName: 'Служба / Источник',
-      flex: 1.2,
-      minWidth: 150,
+      headerName: 'Служба / Контекст',
+      flex: 1.4,
+      minWidth: 170,
       renderCell: (params: GridRenderCellParams) => {
         const src = params.value || 'OrthoERP';
-        let color = '#475569';
-        let bg = '#F1F5F9';
-        if (src.includes('Fiscal')) { color = '#0284C7'; bg = '#E0F2FE'; }
-        else if (src.includes('MedFlex')) { color = '#4F46E5'; bg = '#EEF2FF'; }
-        else if (src.includes('POS')) { color = '#D97706'; bg = '#FEF3C7'; }
-        else if (src.includes('Auth') || src.includes('Users')) { color = '#059669'; bg = '#D1FAE5'; }
-        else if (src.includes('Workstation')) { color = '#0F3C64'; bg = '#E2E8F0'; }
+        const svcInfo = getServiceReadable(src);
 
         return (
-          <Chip
-            size="small"
-            label={src.replace('OrthoErp.', '')}
-            sx={{
-              bgcolor: bg,
-              color,
-              fontWeight: 600,
-              fontSize: '0.75rem',
-              maxWidth: '100%'
-            }}
-          />
+          <Tooltip title={`Технический контекст: ${src}`}>
+            <Box sx={{ whiteSpace: 'normal', lineHeight: 1.2 }}>
+              <Chip
+                size="small"
+                label={svcInfo.title}
+                sx={{
+                  bgcolor: svcInfo.bg,
+                  color: svcInfo.color,
+                  fontWeight: 600,
+                  fontSize: '0.75rem',
+                  maxWidth: '100%'
+                }}
+              />
+              <Typography variant="caption" sx={{ color: '#94A3B8', display: 'block', fontSize: '0.675rem', mt: 0.2 }}>
+                {src.replace('OrthoErp.', '')}
+              </Typography>
+            </Box>
+          </Tooltip>
         );
       }
     },
     {
       field: 'event_type',
-      headerName: 'Тип события',
-      flex: 1.2,
-      minWidth: 160,
-      renderCell: (params: GridRenderCellParams) => (
-        <Typography
-          variant="body2"
-          sx={{
-            fontFamily: 'monospace',
-            fontSize: '0.75rem',
-            color: '#334155',
-            fontWeight: 600,
-            whiteSpace: 'normal',
-            wordBreak: 'break-all'
-          }}
-        >
-          {params.value || '—'}
-        </Typography>
-      )
+      headerName: 'Операция / Событие',
+      flex: 1.5,
+      minWidth: 180,
+      renderCell: (params: GridRenderCellParams) => {
+        const evt = params.value || '—';
+        const readable = getEventReadable(evt);
+        return (
+          <Box sx={{ whiteSpace: 'normal', lineHeight: 1.25 }}>
+            <Typography variant="body2" sx={{ fontWeight: 600, color: '#1E293B', fontSize: '0.8rem' }}>
+              {readable}
+            </Typography>
+            <Typography variant="caption" sx={{ fontFamily: 'monospace', color: '#64748B', fontSize: '0.7rem' }}>
+              {evt}
+            </Typography>
+          </Box>
+        );
+      }
     },
     {
       field: 'username',
@@ -539,6 +784,30 @@ export default function SerilogAnalytics() {
                 {ip}
               </Typography>
             )}
+          </Box>
+        );
+      }
+    },
+    {
+      field: 'context_links',
+      headerName: 'Контекст',
+      width: 140,
+      sortable: false,
+      renderCell: (params: GridRenderCellParams) => {
+        const r = params.row;
+        const badges = [];
+        if (r.patient_id) badges.push(`Пациент #${r.patient_id}`);
+        if (r.doctor_id) badges.push(`Врач #${r.doctor_id}`);
+        if (r.protocol_id) badges.push(`Протокол #${r.protocol_id}`);
+        if (r.appointment_id) badges.push(`Прием #${r.appointment_id}`);
+
+        if (badges.length === 0) return <Typography variant="caption" sx={{ color: '#94A3B8' }}>—</Typography>;
+
+        return (
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.3 }}>
+            {badges.slice(0, 2).map((b, i) => (
+              <Chip key={i} size="small" label={b} sx={{ height: 18, fontSize: '0.675rem', bgcolor: '#F1F5F9', color: '#334155' }} />
+            ))}
           </Box>
         );
       }
@@ -584,7 +853,7 @@ export default function SerilogAnalytics() {
       width: 75,
       sortable: false,
       renderCell: (params: GridRenderCellParams) => (
-        <Tooltip title="Инспекция CLEF JSON и стек-трейса">
+        <Tooltip title="Инспекция CLEF JSON, параметров и стек-трейса">
           <IconButton
             size="small"
             color="primary"
@@ -600,12 +869,180 @@ export default function SerilogAnalytics() {
     }
   ], []);
 
-  // Filter toolbar callback
+  // Columns for Tab 1: Grouped Operations DataGrid
+  const groupedColumns: GridColDef[] = useMemo(() => {
+    const maxCount = groupedOperations.reduce((max, g) => Math.max(max, g.total_count), 1);
+
+    return [
+      {
+        field: 'source_context',
+        headerName: 'Служба бэкенда',
+        flex: 1.3,
+        minWidth: 170,
+        renderCell: (params: GridRenderCellParams) => {
+          const svcInfo = getServiceReadable(params.value);
+          return (
+            <Box sx={{ whiteSpace: 'normal', lineHeight: 1.2 }}>
+              <Chip
+                size="small"
+                label={svcInfo.title}
+                sx={{ bgcolor: svcInfo.bg, color: svcInfo.color, fontWeight: 700, fontSize: '0.75rem' }}
+              />
+              <Typography variant="caption" sx={{ color: '#94A3B8', display: 'block', fontSize: '0.675rem', mt: 0.2 }}>
+                {params.value}
+              </Typography>
+            </Box>
+          );
+        }
+      },
+      {
+        field: 'event_type',
+        headerName: 'Операция / Событие',
+        flex: 1.8,
+        minWidth: 220,
+        renderCell: (params: GridRenderCellParams) => {
+          const readable = getEventReadable(params.value);
+          return (
+            <Box sx={{ whiteSpace: 'normal', lineHeight: 1.25 }}>
+              <Typography variant="body2" sx={{ fontWeight: 700, color: '#0F172A', fontSize: '0.825rem' }}>
+                {readable}
+              </Typography>
+              <Typography variant="caption" sx={{ fontFamily: 'monospace', color: '#64748B', fontSize: '0.7rem' }}>
+                {params.value}
+              </Typography>
+            </Box>
+          );
+        }
+      },
+      {
+        field: 'total_count',
+        headerName: 'Вызовов',
+        width: 140,
+        sortable: true,
+        renderCell: (params: GridRenderCellParams) => {
+          const count = params.value as number;
+          const pct = Math.round((count / maxCount) * 100);
+          return (
+            <Box sx={{ width: '100%', pr: 1 }}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                <Typography variant="body2" sx={{ fontWeight: 700, color: '#0F172A' }}>
+                  {count.toLocaleString('ru-RU')}
+                </Typography>
+                <Typography variant="caption" sx={{ color: '#64748B' }}>
+                  {pct}%
+                </Typography>
+              </Box>
+              <LinearProgress variant="determinate" value={pct} sx={{ height: 6, borderRadius: 3, bgcolor: '#E2E8F0' }} />
+            </Box>
+          );
+        }
+      },
+      {
+        field: 'status_breakdown',
+        headerName: 'Статусы (Инфо / Варн / Ошибки)',
+        width: 210,
+        sortable: false,
+        renderCell: (params: GridRenderCellParams) => {
+          const row = params.row as GroupedOperationItem;
+          return (
+            <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', alignItems: 'center' }}>
+              <Chip
+                size="small"
+                label={row.info_count}
+                sx={{ height: 20, fontSize: '0.7rem', bgcolor: '#EFF6FF', color: '#1D4ED8', fontWeight: 600 }}
+              />
+              {row.warn_count > 0 && (
+                <Chip
+                  size="small"
+                  label={row.warn_count}
+                  sx={{ height: 20, fontSize: '0.7rem', bgcolor: '#FFFBEB', color: '#B45309', fontWeight: 700 }}
+                />
+              )}
+              {row.error_count > 0 && (
+                <Chip
+                  size="small"
+                  label={row.error_count}
+                  sx={{ height: 20, fontSize: '0.7rem', bgcolor: '#FEF2F2', color: '#DC2626', fontWeight: 700 }}
+                />
+              )}
+            </Box>
+          );
+        }
+      },
+      {
+        field: 'avg_duration_ms',
+        headerName: 'Средн. время',
+        width: 120,
+        sortable: true,
+        renderCell: (params: GridRenderCellParams) => {
+          const ms = params.value as number | null;
+          if (!ms) return <Typography variant="caption" sx={{ color: '#94A3B8' }}>—</Typography>;
+          return (
+            <Typography variant="body2" sx={{ fontWeight: 600, color: ms > 500 ? '#DC2626' : '#1E293B' }}>
+              {ms} мс
+            </Typography>
+          );
+        }
+      },
+      {
+        field: 'last_seen',
+        headerName: 'Последняя активность',
+        width: 160,
+        sortable: true,
+        renderCell: (params: GridRenderCellParams) => (
+          <Typography variant="caption" sx={{ color: '#475569', fontWeight: 500 }}>
+            {params.value}
+          </Typography>
+        )
+      },
+      {
+        field: 'users_list',
+        headerName: 'Пользователи',
+        flex: 1.1,
+        minWidth: 140,
+        renderCell: (params: GridRenderCellParams) => {
+          const users = params.value ? String(params.value).split(',').filter(Boolean) : [];
+          if (users.length === 0) return <Typography variant="caption" sx={{ color: '#94A3B8' }}>system / auto</Typography>;
+          return (
+            <Box sx={{ display: 'flex', gap: 0.3, flexWrap: 'wrap' }}>
+              {users.slice(0, 3).map((u, i) => (
+                <Chip key={i} size="small" label={`@${u}`} sx={{ height: 18, fontSize: '0.675rem', bgcolor: '#F1F5F9' }} />
+              ))}
+              {users.length > 3 && (
+                <Typography variant="caption" sx={{ color: '#64748B' }}>+{users.length - 3}</Typography>
+              )}
+            </Box>
+          );
+        }
+      },
+      {
+        field: 'drilldown',
+        headerName: 'Действие',
+        width: 130,
+        sortable: false,
+        renderCell: (params: GridRenderCellParams) => {
+          const row = params.row as GroupedOperationItem;
+          return (
+            <Button
+              size="small"
+              variant="outlined"
+              endIcon={<ArrowForwardIcon sx={{ fontSize: 14 }} />}
+              onClick={() => handleDrilldownToLogs(row.source_context, row.event_type)}
+              sx={{ textTransform: 'none', fontSize: '0.75rem', py: 0.25 }}
+            >
+              События
+            </Button>
+          );
+        }
+      }
+    ];
+  }, [groupedOperations]);
+
+  // Custom toolbars and footers
   const customToolbar = useCallback(() => (
     <SerilogGridToolbar onResetFilters={handleResetFilters} />
   ), []);
 
-  // Footer totals callback
   const customFooter = useCallback(() => (
     <SerilogGridFooter
       totalCount={totalRows}
@@ -616,7 +1053,7 @@ export default function SerilogAnalytics() {
     />
   ), [totalRows, summary]);
 
-  // Parsed JSON properties for drawer
+  // Drawer Parsed JSON
   const parsedDrawerProps = useMemo(() => {
     if (!selectedLog || !selectedLog.properties_json) return null;
     try {
@@ -638,12 +1075,12 @@ export default function SerilogAnalytics() {
             </Typography>
             <Chip
               size="small"
-              label="Центральный аудит"
+              label="Центральный аудит бэкенда"
               sx={{ bgcolor: '#0284C7', color: '#FFFFFF', fontWeight: 600, fontSize: '0.75rem' }}
             />
           </Box>
           <Typography variant="body2" sx={{ color: '#64748B', mt: 0.5 }}>
-            Сквозной сбор телеметрии бэкенда (Node.js, .NET Fiscal, MedFlex, POS) и тотальный аудит действий пользователей
+            Сквозной сбор телеметрии бэкенда (Node.js, .NET Fiscal, MedFlex, POS, Выплаты, Склад) и группировка операций
           </Typography>
         </Box>
 
@@ -668,9 +1105,12 @@ export default function SerilogAnalytics() {
             <Button
               variant="outlined"
               size="medium"
-              startIcon={loading ? <CircularProgress size={16} /> : <RefreshIcon />}
-              onClick={fetchLogs}
-              disabled={loading}
+              startIcon={loading || groupedLoading ? <CircularProgress size={16} /> : <RefreshIcon />}
+              onClick={() => {
+                fetchLogs();
+                if (activeTab === 1 || activeTab === 2) fetchGroupedOperations();
+              }}
+              disabled={loading || groupedLoading}
               sx={{ textTransform: 'none', fontWeight: 600 }}
             >
               Обновить
@@ -722,6 +1162,7 @@ export default function SerilogAnalytics() {
           }}
           onClick={() => {
             setSelectedLevels([]);
+            setActiveTab(0);
             setPaginationModel({ page: 0, pageSize: 25 });
           }}
         >
@@ -753,6 +1194,7 @@ export default function SerilogAnalytics() {
           }}
           onClick={() => {
             setSelectedLevels(['Error', 'Fatal']);
+            setActiveTab(0);
             setPaginationModel({ page: 0, pageSize: 25 });
           }}
         >
@@ -784,6 +1226,7 @@ export default function SerilogAnalytics() {
           }}
           onClick={() => {
             setSelectedLevels(['Warning']);
+            setActiveTab(0);
             setPaginationModel({ page: 0, pageSize: 25 });
           }}
         >
@@ -814,22 +1257,21 @@ export default function SerilogAnalytics() {
             '&:hover': { transform: 'translateY(-2px)' }
           }}
           onClick={() => {
-            setSelectedSource('OrthoErp.Auth');
-            setPaginationModel({ page: 0, pageSize: 25 });
+            setActiveTab(1);
           }}
         >
           <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <Typography variant="caption" sx={{ fontWeight: 600, color: '#4F46E5', textTransform: 'uppercase' }}>
-                Аудит действий
+                Группы операций
               </Typography>
-              <PersonIcon sx={{ color: '#4F46E5', fontSize: 22 }} />
+              <AccountTreeIcon sx={{ color: '#4F46E5', fontSize: 22 }} />
             </Box>
             <Typography variant="h5" sx={{ fontWeight: 700, color: '#4F46E5', mt: 1 }}>
-              {summary.totalUserActions.toLocaleString('ru-RU')}
+              {groupedOperations.length || summary.topEvents.length}
             </Typography>
             <Typography variant="caption" sx={{ color: '#4F46E5' }}>
-              Входы, протоколы, роли, касса
+              Нажмите для группировки операций
             </Typography>
           </CardContent>
         </Card>
@@ -883,6 +1325,7 @@ export default function SerilogAnalytics() {
               if (e.key === 'Enter') {
                 setPaginationModel({ page: 0, pageSize: 25 });
                 fetchLogs();
+                if (activeTab === 1 || activeTab === 2) fetchGroupedOperations();
               }
             }}
           />
@@ -899,9 +1342,14 @@ export default function SerilogAnalytics() {
               }}
             >
               <MenuItem value="ALL">Все службы (Unified)</MenuItem>
-              {sourceOptions.map(src => (
-                <MenuItem key={src} value={src}>{src}</MenuItem>
-              ))}
+              {sourceOptions.map(src => {
+                const sInfo = getServiceReadable(src);
+                return (
+                  <MenuItem key={src} value={src}>
+                    {sInfo.title} ({src.replace('OrthoErp.', '')})
+                  </MenuItem>
+                );
+              })}
             </Select>
           </FormControl>
 
@@ -918,7 +1366,9 @@ export default function SerilogAnalytics() {
             >
               <MenuItem value="ALL">Все типы событий</MenuItem>
               {eventTypeOptions.map(evt => (
-                <MenuItem key={evt} value={evt}>{evt}</MenuItem>
+                <MenuItem key={evt} value={evt}>
+                  {getEventReadable(evt)} ({evt})
+                </MenuItem>
               ))}
             </Select>
           </FormControl>
@@ -952,60 +1402,249 @@ export default function SerilogAnalytics() {
         </Box>
       </Paper>
 
-      {/* 4. MUI X DataGrid (Strict grid-improvements standard) */}
-      <Paper sx={{ border: '1px solid #E2E8F0', borderRadius: 2, overflow: 'hidden' }}>
-        <DataGrid
-          showToolbar
-          autoHeight
-          getRowHeight={() => 'auto'}
-          rows={logs}
-          columns={columns}
-          loading={loading}
-          rowCount={totalRows}
-          paginationMode="server"
-          paginationModel={paginationModel}
-          onPaginationModelChange={setPaginationModel}
-          pageSizeOptions={[10, 25, 50, 100]}
-          slots={{
-            toolbar: customToolbar,
-            footer: customFooter
-          }}
+      {/* 4. Tabs Header for Analyzing Modes */}
+      <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 2.5 }}>
+        <Tabs
+          value={activeTab}
+          onChange={(_, val) => setActiveTab(val)}
           sx={{
-            width: '100%',
-            border: 'none',
-            '& .MuiDataGrid-virtualScroller': {
-              overflowX: 'hidden'
-            },
-            '& .MuiDataGrid-columnHeaders': {
-              position: 'sticky',
-              top: 0,
-              zIndex: 1,
-              bgcolor: '#F8FAFC',
-              borderBottom: '1px solid #E2E8F0',
-              fontWeight: 700
-            },
-            '& .MuiDataGrid-row': {
-              borderBottom: '1px solid #F1F5F9',
-              '&:hover': {
-                bgcolor: '#F8FAFC'
-              }
-            },
-            '& .MuiDataGrid-cell': {
-              py: 1,
-              alignItems: 'center'
+            '& .MuiTab-root': {
+              textTransform: 'none',
+              fontWeight: 700,
+              fontSize: '0.95rem',
+              minHeight: 48,
+              py: 1
             }
           }}
-        />
-      </Paper>
+        >
+          <Tab
+            icon={<TableRowsIcon sx={{ fontSize: 20 }} />}
+            iconPosition="start"
+            label={
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <span>Все события Serilog</span>
+                <Chip size="small" label={totalRows.toLocaleString('ru-RU')} sx={{ height: 20, fontSize: '0.7rem', bgcolor: '#E0F2FE', color: '#0284C7' }} />
+              </Box>
+            }
+          />
+          <Tab
+            icon={<AccountTreeIcon sx={{ fontSize: 20 }} />}
+            iconPosition="start"
+            label={
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <span>Группировка по операциям</span>
+                <Chip size="small" label={groupedOperations.length} sx={{ height: 20, fontSize: '0.7rem', bgcolor: '#EEF2FF', color: '#4F46E5' }} />
+              </Box>
+            }
+          />
+          <Tab
+            icon={<HubIcon sx={{ fontSize: 20 }} />}
+            iconPosition="start"
+            label={
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <span>Службы бэкенда</span>
+                <Chip size="small" label={servicesSummary.length || sourceOptions.length} sx={{ height: 20, fontSize: '0.7rem', bgcolor: '#F1F5F9', color: '#475569' }} />
+              </Box>
+            }
+          />
+        </Tabs>
+      </Box>
 
-      {/* 5. Slide-Over Detail Drawer (CLEF & Exception Inspector) */}
+      {/* TAB 0: Flat Logs (Full Serilog Information & DataGrid) */}
+      {activeTab === 0 && (
+        <Paper sx={{ border: '1px solid #E2E8F0', borderRadius: 2, overflow: 'hidden' }}>
+          <DataGrid
+            showToolbar
+            autoHeight
+            getRowHeight={() => 'auto'}
+            rows={logs}
+            columns={columns}
+            loading={loading}
+            rowCount={totalRows}
+            paginationMode="server"
+            paginationModel={paginationModel}
+            onPaginationModelChange={setPaginationModel}
+            pageSizeOptions={[10, 25, 50, 100]}
+            slots={{
+              toolbar: customToolbar,
+              footer: customFooter
+            }}
+            sx={{
+              width: '100%',
+              border: 'none',
+              '& .MuiDataGrid-virtualScroller': {
+                overflowX: 'hidden'
+              },
+              '& .MuiDataGrid-columnHeaders': {
+                position: 'sticky',
+                top: 0,
+                zIndex: 1,
+                bgcolor: '#F8FAFC',
+                borderBottom: '1px solid #E2E8F0',
+                fontWeight: 700
+              },
+              '& .MuiDataGrid-row': {
+                borderBottom: '1px solid #F1F5F9',
+                '&:hover': {
+                  bgcolor: '#F8FAFC'
+                }
+              },
+              '& .MuiDataGrid-cell': {
+                py: 1,
+                alignItems: 'center'
+              }
+            }}
+          />
+        </Paper>
+      )}
+
+      {/* TAB 1: Grouped Operations DataGrid */}
+      {activeTab === 1 && (
+        <Paper sx={{ border: '1px solid #E2E8F0', borderRadius: 2, overflow: 'hidden' }}>
+          <Box sx={{ p: 2, bgcolor: '#F8FAFC', borderBottom: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 1 }}>
+            <Typography variant="subtitle2" sx={{ fontWeight: 700, color: '#0F172A' }}>
+              Сводная группировка по операциям и службам бэкенда ({groupedOperations.length} уникальных операций)
+            </Typography>
+            <Typography variant="caption" sx={{ color: '#64748B' }}>
+              Нажмите кнопку «События» напротив любой операции для мгновенного перехода в реестр
+            </Typography>
+          </Box>
+          <DataGrid
+            autoHeight
+            getRowHeight={() => 'auto'}
+            rows={groupedOperations.map((g, idx) => ({ id: `${g.source_context}_${g.event_type}_${idx}`, ...g }))}
+            columns={groupedColumns}
+            loading={groupedLoading}
+            pageSizeOptions={[10, 25, 50, 100]}
+            initialState={{
+              pagination: { paginationModel: { pageSize: 25 } }
+            }}
+            sx={{
+              width: '100%',
+              border: 'none',
+              '& .MuiDataGrid-virtualScroller': {
+                overflowX: 'hidden'
+              },
+              '& .MuiDataGrid-columnHeaders': {
+                position: 'sticky',
+                top: 0,
+                zIndex: 1,
+                bgcolor: '#F8FAFC',
+                borderBottom: '1px solid #E2E8F0',
+                fontWeight: 700
+              },
+              '& .MuiDataGrid-row': {
+                borderBottom: '1px solid #F1F5F9',
+                '&:hover': {
+                  bgcolor: '#F8FAFC'
+                }
+              },
+              '& .MuiDataGrid-cell': {
+                py: 1,
+                alignItems: 'center'
+              }
+            }}
+          />
+        </Paper>
+      )}
+
+      {/* TAB 2: Backend Services Overview & Monitoring Cards */}
+      {activeTab === 2 && (
+        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr', md: 'repeat(3, 1fr)' }, gap: 2.5 }}>
+          {servicesSummary.map((svc) => {
+            const svcInfo = getServiceReadable(svc.source_context);
+            const hasErrors = svc.error_count > 0;
+
+            return (
+              <Card
+                key={svc.source_context}
+                sx={{
+                  border: `1px solid ${hasErrors ? '#FECACA' : '#E2E8F0'}`,
+                  borderRadius: 2,
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+                  transition: 'all 0.2s',
+                  '&:hover': {
+                    transform: 'translateY(-2px)',
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.08)'
+                  }
+                }}
+              >
+                <CardContent sx={{ p: 2.5 }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
+                    <Chip
+                      size="small"
+                      label={svcInfo.title}
+                      sx={{ bgcolor: svcInfo.bg, color: svcInfo.color, fontWeight: 700, fontSize: '0.8rem' }}
+                    />
+                    {hasErrors ? (
+                      <Chip
+                        size="small"
+                        icon={<ErrorIcon sx={{ fontSize: 14 }} />}
+                        label={`${svc.error_count} сбоев`}
+                        sx={{ bgcolor: '#FEF2F2', color: '#DC2626', fontWeight: 700 }}
+                      />
+                    ) : (
+                      <Chip
+                        size="small"
+                        icon={<CheckCircleIcon sx={{ fontSize: 14 }} />}
+                        label="Штатно"
+                        sx={{ bgcolor: '#ECFDF5', color: '#059669', fontWeight: 600 }}
+                      />
+                    )}
+                  </Box>
+
+                  <Typography variant="body2" sx={{ fontFamily: 'monospace', color: '#64748B', fontSize: '0.75rem', mb: 2 }}>
+                    {svc.source_context}
+                  </Typography>
+
+                  <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5, p: 1.5, bgcolor: '#F8FAFC', borderRadius: 1.5, mb: 2 }}>
+                    <Box>
+                      <Typography variant="caption" sx={{ color: '#64748B', fontWeight: 600 }}>Всего событий</Typography>
+                      <Typography variant="h6" sx={{ fontWeight: 700, color: '#0F172A' }}>{svc.total_events.toLocaleString('ru-RU')}</Typography>
+                    </Box>
+                    <Box>
+                      <Typography variant="caption" sx={{ color: '#64748B', fontWeight: 600 }}>Операций</Typography>
+                      <Typography variant="h6" sx={{ fontWeight: 700, color: '#0284C7' }}>{svc.operations_count}</Typography>
+                    </Box>
+                    <Box>
+                      <Typography variant="caption" sx={{ color: '#64748B', fontWeight: 600 }}>Среднее время</Typography>
+                      <Typography variant="body2" sx={{ fontWeight: 700, color: '#1E293B', mt: 0.5 }}>
+                        {svc.avg_duration_ms ? `${svc.avg_duration_ms} мс` : '—'}
+                      </Typography>
+                    </Box>
+                    <Box>
+                      <Typography variant="caption" sx={{ color: '#64748B', fontWeight: 600 }}>Последний лог</Typography>
+                      <Typography variant="caption" sx={{ display: 'block', color: '#475569', fontWeight: 600, mt: 0.5 }}>
+                        {svc.last_seen ? svc.last_seen.slice(11, 19) : '—'}
+                      </Typography>
+                    </Box>
+                  </Box>
+
+                  <Button
+                    fullWidth
+                    variant="outlined"
+                    size="small"
+                    endIcon={<ArrowForwardIcon sx={{ fontSize: 14 }} />}
+                    onClick={() => handleDrilldownToService(svc.source_context)}
+                    sx={{ textTransform: 'none', fontWeight: 600 }}
+                  >
+                    Показать журнал службы
+                  </Button>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </Box>
+      )}
+
+      {/* 5. Slide-Over Detail Drawer (Full CLEF & Exception Inspector) */}
       <Drawer
         anchor="right"
         open={drawerOpen}
         onClose={() => setDrawerOpen(false)}
         slotProps={{
           paper: {
-            sx: { width: { xs: '100%', sm: 540, md: 620 }, p: 3, bgcolor: '#FFFFFF' }
+            sx: { width: { xs: '100%', sm: 540, md: 640 }, p: 3, bgcolor: '#FFFFFF' }
           }
         }}
       >
@@ -1013,7 +1652,7 @@ export default function SerilogAnalytics() {
           <Box>
             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <ManageSearchIcon sx={{ color: '#0284C7', fontSize: 24 }} />
+                <ManageSearchIcon sx={{ color: '#0284C7', fontSize: 26 }} />
                 <Typography variant="h6" sx={{ fontWeight: 700, color: '#0F172A' }}>
                   Инспекция CLEF #{selectedLog.id}
                 </Typography>
@@ -1038,14 +1677,41 @@ export default function SerilogAnalytics() {
               <Paper sx={{ p: 1.5, bgcolor: '#F8FAFC', border: '1px solid #E2E8F0' }}>
                 <Typography variant="caption" sx={{ color: '#64748B', fontWeight: 600 }}>Служба бэкенда</Typography>
                 <Typography variant="body2" sx={{ fontWeight: 700, color: '#0F3C64' }}>{selectedLog.source_context}</Typography>
+                <Typography variant="caption" sx={{ color: '#64748B' }}>{getServiceReadable(selectedLog.source_context).title}</Typography>
+              </Paper>
+              <Paper sx={{ p: 1.5, bgcolor: '#F8FAFC', border: '1px solid #E2E8F0' }}>
+                <Typography variant="caption" sx={{ color: '#64748B', fontWeight: 600 }}>Операция</Typography>
+                <Typography variant="body2" sx={{ fontWeight: 700, color: '#0F172A' }}>{getEventReadable(selectedLog.event_type)}</Typography>
+                <Typography variant="caption" sx={{ color: '#64748B', fontFamily: 'monospace' }}>{selectedLog.event_type}</Typography>
               </Paper>
               <Paper sx={{ p: 1.5, bgcolor: '#F8FAFC', border: '1px solid #E2E8F0' }}>
                 <Typography variant="caption" sx={{ color: '#64748B', fontWeight: 600 }}>Пользователь / IP</Typography>
                 <Typography variant="body2" sx={{ fontWeight: 700, color: '#0F172A' }}>
-                  {selectedLog.username ? `@${selectedLog.username}` : 'system'} ({selectedLog.client_ip || 'local'})
+                  {selectedLog.username ? `@${selectedLog.username}` : 'system'} ({selectedLog.client_ip || '127.0.0.1'})
+                </Typography>
+              </Paper>
+              <Paper sx={{ p: 1.5, bgcolor: '#F8FAFC', border: '1px solid #E2E8F0' }}>
+                <Typography variant="caption" sx={{ color: '#64748B', fontWeight: 600 }}>Длительность</Typography>
+                <Typography variant="body2" sx={{ fontWeight: 700, color: '#059669' }}>
+                  {selectedLog.duration_ms > 0 ? `${selectedLog.duration_ms} мс` : '—'}
                 </Typography>
               </Paper>
             </Box>
+
+            {/* Context IDs */}
+            {(selectedLog.patient_id || selectedLog.doctor_id || selectedLog.protocol_id || selectedLog.appointment_id) && (
+              <Box sx={{ mb: 2.5 }}>
+                <Typography variant="caption" sx={{ fontWeight: 700, color: '#475569', textTransform: 'uppercase' }}>
+                  Идентификаторы клинического контекста
+                </Typography>
+                <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mt: 0.5 }}>
+                  {selectedLog.patient_id && <Chip label={`Пациент ID: ${selectedLog.patient_id}`} size="small" sx={{ bgcolor: '#E0F2FE', color: '#0369A1', fontWeight: 600 }} />}
+                  {selectedLog.doctor_id && <Chip label={`Врач / Сотрудник ID: ${selectedLog.doctor_id}`} size="small" sx={{ bgcolor: '#EEF2FF', color: '#4338CA', fontWeight: 600 }} />}
+                  {selectedLog.protocol_id && <Chip label={`Протокол ID: ${selectedLog.protocol_id}`} size="small" sx={{ bgcolor: '#F3E8FF', color: '#7E22CE', fontWeight: 600 }} />}
+                  {selectedLog.appointment_id && <Chip label={`Прием ID: ${selectedLog.appointment_id}`} size="small" sx={{ bgcolor: '#ECFDF5', color: '#047857', fontWeight: 600 }} />}
+                </Box>
+              </Box>
+            )}
 
             {/* Message Box */}
             <Box sx={{ mb: 2.5 }}>
@@ -1083,7 +1749,7 @@ export default function SerilogAnalytics() {
                   color: '#38BDF8',
                   fontFamily: 'Consolas, monospace',
                   fontSize: '0.8rem',
-                  maxHeight: 260,
+                  maxHeight: 280,
                   overflowY: 'auto',
                   border: '1px solid #334155',
                   borderRadius: 1
@@ -1119,9 +1785,9 @@ export default function SerilogAnalytics() {
                     color: '#FCA5A5',
                     fontFamily: 'Consolas, monospace',
                     fontSize: '0.75rem',
-                    maxHeight: 220,
+                    maxHeight: 240,
                     overflowY: 'auto',
-                    border: '1px solid #7F1D1D',
+                    border: '1px solid #991B1B',
                     borderRadius: 1
                   }}
                 >
@@ -1129,29 +1795,6 @@ export default function SerilogAnalytics() {
                     {selectedLog.exception}
                   </pre>
                 </Paper>
-              </Box>
-            )}
-
-            {/* Entity links */}
-            {(selectedLog.protocol_id || selectedLog.appointment_id || selectedLog.patient_id || selectedLog.doctor_id) && (
-              <Box sx={{ mt: 2, p: 1.5, bgcolor: '#F8FAFC', borderRadius: 1.5, border: '1px solid #E2E8F0' }}>
-                <Typography variant="caption" sx={{ fontWeight: 700, color: '#475569', display: 'block', mb: 1 }}>
-                  Связанные клинические сущности
-                </Typography>
-                <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-                  {selectedLog.protocol_id && (
-                    <Chip size="small" label={`Протокол #${selectedLog.protocol_id}`} color="primary" variant="outlined" />
-                  )}
-                  {selectedLog.appointment_id && (
-                    <Chip size="small" label={`Прием #${selectedLog.appointment_id}`} color="secondary" variant="outlined" />
-                  )}
-                  {selectedLog.patient_id && (
-                    <Chip size="small" label={`Пациент #${selectedLog.patient_id}`} variant="outlined" />
-                  )}
-                  {selectedLog.doctor_id && (
-                    <Chip size="small" label={`Врач #${selectedLog.doctor_id}`} variant="outlined" />
-                  )}
-                </Box>
               </Box>
             )}
           </Box>
@@ -1164,42 +1807,51 @@ export default function SerilogAnalytics() {
           Очистка журналов Serilog
         </DialogTitle>
         <DialogContent>
-          <Alert severity="warning" sx={{ mb: 2 }}>
-            Удаление логов освобождает место в базе данных SQLite. Данные rolling CLEF файлов на диске при этом сохраняются.
-          </Alert>
-          <TextField
-            label="Удалить записи старше (дней)"
-            type="number"
-            fullWidth
-            value={purgeDays}
-            onChange={(e) => setPurgeDays(Math.max(7, parseInt(e.target.value, 10) || 7))}
-            helperText="Минимальный безопасный интервал хранения: 7 дней"
-          />
+          <Typography variant="body2" sx={{ color: '#475569', mb: 2 }}>
+            Удаление устаревших записей логов из локальной базы данных SQLite для поддержания оптимального размера и быстродействия FTS5.
+          </Typography>
+          <FormControl fullWidth size="small">
+            <InputLabel>Срок хранения</InputLabel>
+            <Select
+              value={purgeDays}
+              label="Срок хранения"
+              onChange={(e) => setPurgeDays(Number(e.target.value))}
+            >
+              <MenuItem value={30}>Удалить старше 30 дней</MenuItem>
+              <MenuItem value={60}>Удалить старше 60 дней</MenuItem>
+              <MenuItem value={90}>Удалить старше 90 дней</MenuItem>
+              <MenuItem value={180}>Удалить старше 180 дней (По умолчанию)</MenuItem>
+              <MenuItem value={365}>Удалить старше 1 года</MenuItem>
+            </Select>
+          </FormControl>
         </DialogContent>
-        <DialogActions sx={{ p: 2 }}>
-          <Button onClick={() => setPurgeDialogOpen(false)} disabled={purgeLoading}>Отмена</Button>
+        <DialogActions sx={{ p: 2, pt: 0 }}>
+          <Button onClick={() => setPurgeDialogOpen(false)} sx={{ textTransform: 'none' }}>
+            Отмена
+          </Button>
           <Button
             variant="contained"
             color="error"
             onClick={handleExecutePurge}
             disabled={purgeLoading}
             startIcon={purgeLoading ? <CircularProgress size={16} /> : <DeleteSweepIcon />}
+            sx={{ textTransform: 'none', fontWeight: 600 }}
           >
-            {purgeLoading ? 'Очистка...' : 'Подтвердить удаление'}
+            Очистить логи
           </Button>
         </DialogActions>
       </Dialog>
 
-      {/* 7. Snackbar Notification */}
+      {/* 7. Toast Snackbar */}
       <Snackbar
         open={toast.open}
         autoHideDuration={4000}
         onClose={() => setToast(prev => ({ ...prev, open: false }))}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
       >
         <Alert
-          severity={toast.severity}
           onClose={() => setToast(prev => ({ ...prev, open: false }))}
+          severity={toast.severity}
           sx={{ width: '100%', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
         >
           {toast.message}
@@ -1208,4 +1860,3 @@ export default function SerilogAnalytics() {
     </Box>
   );
 }
-

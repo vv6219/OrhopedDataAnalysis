@@ -7,7 +7,7 @@ const swaggerUi = require('swagger-ui-express');
 const swaggerJsdoc = require('swagger-jsdoc');
 const db = require('./database');
 const { getAppSettings, saveAppSettings, getSqliteDbPath, getFirebirdConfig, getSqliteConfig, getBackupConfig } = require('./config');
-const { logUserAction, UserActionEvents, LogLevels, getClientIp } = require('./userActionAuditLogger');
+const { logUserAction, UserActionEvents, LogLevels, getClientIp, getUserContext } = require('./userActionAuditLogger');
 
 const app = express();
 app.use(cors());
@@ -526,11 +526,33 @@ app.get('/api/materials/analytics-overview', async (req, res) => {
  *         description: Ошибка создания материала
  */
 app.post('/api/materials', (req, res) => {
+  const startTime = Date.now();
+  const user = getUserContext(req);
+  const clientIp = getClientIp(req);
   const { material_name, unit_of_measure, current_unit_cost, package_cost } = req.body;
   const stmt = db.prepare("INSERT INTO materials_catalog (material_name, unit_of_measure, current_unit_cost, package_cost) VALUES (?, ?, ?, ?)");
   stmt.run(material_name, unit_of_measure, current_unit_cost, package_cost || 0, function (err) {
     if (err) return res.status(500).json({ error: err.message });
-    res.json({ id: this.lastID, material_name, unit_of_measure, current_unit_cost, package_cost });
+    const newId = this.lastID;
+
+    logUserAction({
+      eventType: UserActionEvents.INVENTORY_ITEM_CREATED,
+      sourceContext: 'OrthoErp.Warehouse',
+      message: `Создан складской материал «${material_name}» (${unit_of_measure}, себестоимость: ${current_unit_cost} ₽)`,
+      userId: user.userId,
+      username: user.username,
+      clientIp,
+      durationMs: Date.now() - startTime,
+      properties: {
+        materialId: newId,
+        materialName: material_name,
+        unitOfMeasure: unit_of_measure,
+        currentUnitCost: current_unit_cost,
+        packageCost: package_cost
+      }
+    });
+
+    res.json({ id: newId, material_name, unit_of_measure, current_unit_cost, package_cost });
   });
   stmt.finalize();
 });
@@ -562,11 +584,32 @@ app.post('/api/materials', (req, res) => {
  *         description: Ошибка обновления
  */
 app.put('/api/materials/:id', (req, res) => {
+  const startTime = Date.now();
+  const user = getUserContext(req);
+  const clientIp = getClientIp(req);
   const { id } = req.params;
   const { material_name, unit_of_measure, current_unit_cost, package_cost } = req.body;
   const stmt = db.prepare("UPDATE materials_catalog SET material_name = ?, unit_of_measure = ?, current_unit_cost = ?, package_cost = ? WHERE id = ?");
   stmt.run(material_name, unit_of_measure, current_unit_cost, package_cost || 0, id, function (err) {
     if (err) return res.status(500).json({ error: err.message });
+
+    logUserAction({
+      eventType: UserActionEvents.INVENTORY_ITEM_UPDATED,
+      sourceContext: 'OrthoErp.Warehouse',
+      message: `Обновлен складской материал ID #${id} («${material_name}», ${unit_of_measure}, ${current_unit_cost} ₽)`,
+      userId: user.userId,
+      username: user.username,
+      clientIp,
+      durationMs: Date.now() - startTime,
+      properties: {
+        materialId: id,
+        materialName: material_name,
+        unitOfMeasure: unit_of_measure,
+        currentUnitCost: current_unit_cost,
+        packageCost: package_cost
+      }
+    });
+
     res.json({ id, material_name, unit_of_measure, current_unit_cost, package_cost });
   });
   stmt.finalize();
@@ -591,9 +634,24 @@ app.put('/api/materials/:id', (req, res) => {
  *         description: Ошибка базы данных
  */
 app.delete('/api/materials/:id', (req, res) => {
+  const startTime = Date.now();
+  const user = getUserContext(req);
+  const clientIp = getClientIp(req);
   const { id } = req.params;
   db.run("DELETE FROM materials_catalog WHERE id = ?", id, function (err) {
     if (err) return res.status(500).json({ error: err.message });
+
+    logUserAction({
+      eventType: UserActionEvents.INVENTORY_ITEM_DELETED,
+      sourceContext: 'OrthoErp.Warehouse',
+      message: `Удален со склада материал ID #${id}`,
+      userId: user.userId,
+      username: user.username,
+      clientIp,
+      durationMs: Date.now() - startTime,
+      properties: { materialId: id }
+    });
+
     res.json({ success: true, deletedID: id });
   });
 });
@@ -1452,11 +1510,31 @@ app.get('/api/operations/analytics-overview', async (req, res) => {
  *         description: Операция создана
  */
 app.post('/api/operations', (req, res) => {
+  const startTime = Date.now();
+  const user = getUserContext(req);
+  const clientIp = getClientIp(req);
   const { name, price } = req.body;
   const stmt = db.prepare("INSERT INTO operations (name, price) VALUES (?, ?)");
   stmt.run(name, price, function (err) {
     if (err) return res.status(500).json({ error: err.message });
-    res.json({ id: this.lastID, name, price });
+    const newId = this.lastID;
+
+    logUserAction({
+      eventType: UserActionEvents.OPERATION_CREATED,
+      sourceContext: 'OrthoErp.Operations',
+      message: `Создана медицинская услуга в прейскуранте «${name}» (цена: ${price} ₽)`,
+      userId: user.userId,
+      username: user.username,
+      clientIp,
+      durationMs: Date.now() - startTime,
+      properties: {
+        operationId: newId,
+        name,
+        price
+      }
+    });
+
+    res.json({ id: newId, name, price });
   });
   stmt.finalize();
 });
@@ -1484,11 +1562,30 @@ app.post('/api/operations', (req, res) => {
  *         description: Операция обновлена
  */
 app.put('/api/operations/:id', (req, res) => {
+  const startTime = Date.now();
+  const user = getUserContext(req);
+  const clientIp = getClientIp(req);
   const { id } = req.params;
   const { name, price } = req.body;
   const stmt = db.prepare("UPDATE operations SET name = ?, price = ? WHERE id = ?");
   stmt.run(name, price, id, function (err) {
     if (err) return res.status(500).json({ error: err.message });
+
+    logUserAction({
+      eventType: UserActionEvents.OPERATION_UPDATED,
+      sourceContext: 'OrthoErp.Operations',
+      message: `Обновлена медицинская услуга ID #${id} («${name}», цена: ${price} ₽)`,
+      userId: user.userId,
+      username: user.username,
+      clientIp,
+      durationMs: Date.now() - startTime,
+      properties: {
+        operationId: id,
+        name,
+        price
+      }
+    });
+
     res.json({ id, name, price });
   });
   stmt.finalize();
@@ -1511,9 +1608,24 @@ app.put('/api/operations/:id', (req, res) => {
  *         description: Операция удалена
  */
 app.delete('/api/operations/:id', (req, res) => {
+  const startTime = Date.now();
+  const user = getUserContext(req);
+  const clientIp = getClientIp(req);
   const { id } = req.params;
   db.run("DELETE FROM operations WHERE id = ?", id, function (err) {
     if (err) return res.status(500).json({ error: err.message });
+
+    logUserAction({
+      eventType: UserActionEvents.OPERATION_DELETED,
+      sourceContext: 'OrthoErp.Operations',
+      message: `Удалена медицинская услуга ID #${id} из каталога`,
+      userId: user.userId,
+      username: user.username,
+      clientIp,
+      durationMs: Date.now() - startTime,
+      properties: { operationId: id }
+    });
+
     res.json({ success: true, deletedID: id });
   });
 });
@@ -1618,12 +1730,34 @@ app.get('/api/operations/:id/materials', (req, res) => {
  *         description: Материал успешно привязан
  */
 app.post('/api/operations/:id/materials', (req, res) => {
+  const startTime = Date.now();
+  const user = getUserContext(req);
+  const clientIp = getClientIp(req);
   const { id } = req.params;
   const { material_id, quantity } = req.body;
   const stmt = db.prepare("INSERT INTO operation_materials (operation_id, material_id, quantity) VALUES (?, ?, ?)");
   stmt.run(id, material_id, quantity, function (err) {
     if (err) return res.status(500).json({ error: err.message });
-    res.json({ id: this.lastID, operation_id: id, material_id, quantity });
+    const newOmId = this.lastID;
+
+    logUserAction({
+      eventType: UserActionEvents.OPERATION_BOM_UPDATED,
+      sourceContext: 'OrthoErp.Operations',
+      message: `В технологическую карту (BOM) услуги #${id} добавлен материал #${material_id} (норма: ${quantity})`,
+      userId: user.userId,
+      username: user.username,
+      clientIp,
+      durationMs: Date.now() - startTime,
+      properties: {
+        action: 'add_bom_material',
+        bomId: newOmId,
+        operationId: id,
+        materialId: material_id,
+        quantity
+      }
+    });
+
+    res.json({ id: newOmId, operation_id: id, material_id, quantity });
   });
   stmt.finalize();
 });
@@ -1661,11 +1795,31 @@ app.post('/api/operations/:id/materials', (req, res) => {
  *         description: Норма расхода обновлена
  */
 app.put('/api/operations/:id/materials/:omId', (req, res) => {
-  const { omId } = req.params;
+  const startTime = Date.now();
+  const user = getUserContext(req);
+  const clientIp = getClientIp(req);
+  const { id, omId } = req.params;
   const { quantity } = req.body;
   const stmt = db.prepare("UPDATE operation_materials SET quantity = ? WHERE id = ?");
   stmt.run(quantity, omId, function (err) {
     if (err) return res.status(500).json({ error: err.message });
+
+    logUserAction({
+      eventType: UserActionEvents.OPERATION_BOM_UPDATED,
+      sourceContext: 'OrthoErp.Operations',
+      message: `Обновлена норма расхода в BOM услуги #${id} (материал BOM #${omId}, новая норма: ${quantity})`,
+      userId: user.userId,
+      username: user.username,
+      clientIp,
+      durationMs: Date.now() - startTime,
+      properties: {
+        action: 'update_bom_material',
+        bomId: omId,
+        operationId: id,
+        quantity
+      }
+    });
+
     res.json({ id: omId, quantity });
   });
   stmt.finalize();
@@ -1693,9 +1847,28 @@ app.put('/api/operations/:id/materials/:omId', (req, res) => {
  *         description: Привязка удалена
  */
 app.delete('/api/operations/:id/materials/:omId', (req, res) => {
-  const { omId } = req.params;
+  const startTime = Date.now();
+  const user = getUserContext(req);
+  const clientIp = getClientIp(req);
+  const { id, omId } = req.params;
   db.run("DELETE FROM operation_materials WHERE id = ?", omId, function (err) {
     if (err) return res.status(500).json({ error: err.message });
+
+    logUserAction({
+      eventType: UserActionEvents.OPERATION_BOM_UPDATED,
+      sourceContext: 'OrthoErp.Operations',
+      message: `Удален расходный материал из BOM услуги #${id} (BOM #${omId})`,
+      userId: user.userId,
+      username: user.username,
+      clientIp,
+      durationMs: Date.now() - startTime,
+      properties: {
+        action: 'delete_bom_material',
+        bomId: omId,
+        operationId: id
+      }
+    });
+
     res.json({ success: true, deletedID: omId });
   });
 });
@@ -3313,10 +3486,28 @@ app.get('/api/parameters-admin', (req, res) => {
  *         description: Параметр успешно создан
  */
 app.post('/api/parameters-admin', (req, res) => {
+  const startTime = Date.now();
+  const user = getUserContext(req);
+  const clientIp = getClientIp(req);
   const { param_name, param_value } = req.body;
   const stmt = db.prepare("INSERT INTO calculation_parameters (param_name, param_value) VALUES (?, ?)");
   stmt.run(param_name, param_value, function (err) {
     if (err) return res.status(500).json({ error: err.message });
+
+    logUserAction({
+      eventType: UserActionEvents.CALCULATION_PARAMETER_UPDATED,
+      sourceContext: 'OrthoErp.CalculationParams',
+      message: `Создан системный параметр расчетов «${param_name}» = ${param_value}`,
+      userId: user.userId,
+      username: user.username,
+      clientIp,
+      durationMs: Date.now() - startTime,
+      properties: {
+        paramName: param_name,
+        paramValue: param_value
+      }
+    });
+
     res.json({ id: param_name, param_name, param_value });
   });
   stmt.finalize();
@@ -3351,6 +3542,9 @@ app.post('/api/parameters-admin', (req, res) => {
  *         description: Значение обновлено
  */
 app.put('/api/parameters-admin/:id', (req, res) => {
+  const startTime = Date.now();
+  const user = getUserContext(req);
+  const clientIp = getClientIp(req);
   const { id } = req.params;
   const { param_value } = req.body;
   const stmt = db.prepare("UPDATE calculation_parameters SET param_value = ? WHERE param_name = ?");
@@ -3369,6 +3563,20 @@ app.put('/api/parameters-admin/:id', (req, res) => {
         heartbeatWorker.updateIntervals({ scheduleSyncIntervalMin: Number(param_value) });
       } catch (e) {}
     }
+
+    logUserAction({
+      eventType: UserActionEvents.CALCULATION_PARAMETER_UPDATED,
+      sourceContext: 'OrthoErp.CalculationParams',
+      message: `Изменен системный параметр расчетов «${id}» = ${param_value}`,
+      userId: user.userId,
+      username: user.username,
+      clientIp,
+      durationMs: Date.now() - startTime,
+      properties: {
+        paramName: id,
+        paramValue: param_value
+      }
+    });
 
     res.json({ id, param_name: id, param_value });
   });
@@ -3392,9 +3600,24 @@ app.put('/api/parameters-admin/:id', (req, res) => {
  *         description: Параметр удален
  */
 app.delete('/api/parameters-admin/:id', (req, res) => {
+  const startTime = Date.now();
+  const user = getUserContext(req);
+  const clientIp = getClientIp(req);
   const { id } = req.params;
   db.run("DELETE FROM calculation_parameters WHERE param_name = ?", id, function (err) {
     if (err) return res.status(500).json({ error: err.message });
+
+    logUserAction({
+      eventType: UserActionEvents.CALCULATION_PARAMETER_DELETED,
+      sourceContext: 'OrthoErp.CalculationParams',
+      message: `Удален системный параметр расчетов «${id}»`,
+      userId: user.userId,
+      username: user.username,
+      clientIp,
+      durationMs: Date.now() - startTime,
+      properties: { paramName: id }
+    });
+
     res.json({ success: true, deletedID: id });
   });
 });

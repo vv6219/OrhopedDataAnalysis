@@ -3,7 +3,7 @@ const router = express.Router();
 const db = require('./database');
 const fiscalService = require('./fiscalService');
 const { logFiscalAudit, LogLevels, EventTypes } = require('./fiscalAuditLogger');
-const { logUserAction, UserActionEvents, LogLevels: SerilogLogLevels, getClientIp } = require('./userActionAuditLogger');
+const { logUserAction, UserActionEvents, LogLevels: SerilogLogLevels, getClientIp, getUserContext } = require('./userActionAuditLogger');
 
 /**
  * GET /api/fiscal/status
@@ -169,13 +169,19 @@ router.post('/settings', async (req, res) => {
     ], function (err) {
       if (err) return res.status(500).json({ error: err.message });
       const createdId = this.lastID;
+      const user = getUserContext(req);
+      const clientIp = getClientIp(req);
 
       // Serilog audit logging
       logFiscalAudit({
         level: LogLevels.INFO,
         message: `Создан новый профиль настроек ККТ: "${profile_name}" [ID: ${createdId}]`,
         eventType: EventTypes.SETTINGS_CREATED,
+        sourceContext: 'OrthoErp.FiscalSettings',
         devicePort: port,
+        userId: user.userId,
+        username: user.username || updated_by,
+        clientIp,
         properties: {
           profileId: createdId,
           profileName: profile_name,
@@ -306,11 +312,17 @@ router.put('/settings/:id', (req, res) => {
 
         // Serilog audit logging
         const logLevel = (diff.is_mock_mode || diff.port) ? LogLevels.WARN : LogLevels.INFO;
+        const user = getUserContext(req);
+        const clientIp = getClientIp(req);
         logFiscalAudit({
           level: logLevel,
           message: `Изменение параметров ККТ [${newValues.profile_name}]: ${changedFields.length > 0 ? changedFields.join(', ') : 'без изменений'}`,
           eventType: EventTypes.SETTINGS_UPDATED,
+          sourceContext: 'OrthoErp.FiscalSettings',
           devicePort: newValues.port,
+          userId: user.userId,
+          username: user.username || newValues.updated_by,
+          clientIp,
           properties: {
             profileId,
             profileName: newValues.profile_name,
@@ -358,11 +370,18 @@ router.post('/settings/:id/activate', (req, res) => {
         async function (actErr) {
           if (actErr) return res.status(500).json({ error: actErr.message });
 
+          const user = getUserContext(req);
+          const clientIp = getClientIp(req);
+
           logFiscalAudit({
             level: LogLevels.INFO,
             message: `Активирован профиль параметров ККТ: "${row.profile_name}" (${row.port}, mock=${row.is_mock_mode})`,
             eventType: EventTypes.SETTINGS_ACTIVATED,
+            sourceContext: 'OrthoErp.FiscalSettings',
             devicePort: row.port,
+            userId: user.userId,
+            username: user.username || req.body.updated_by || 'Администратор',
+            clientIp,
             properties: {
               profileId,
               profileName: row.profile_name,
@@ -400,11 +419,18 @@ router.delete('/settings/:id', (req, res) => {
     db.run('DELETE FROM fiscal_device_settings WHERE id = ?', [profileId], function (delErr) {
       if (delErr) return res.status(500).json({ error: delErr.message });
 
+      const user = getUserContext(req);
+      const clientIp = getClientIp(req);
+
       logFiscalAudit({
         level: LogLevels.WARN,
         message: `Удален профиль параметров ККТ: "${row.profile_name}" [ID: ${profileId}]`,
         eventType: EventTypes.SETTINGS_DELETED,
+        sourceContext: 'OrthoErp.FiscalSettings',
         devicePort: row.port,
+        userId: user.userId,
+        username: user.username || req.body.deleted_by || 'Администратор',
+        clientIp,
         properties: {
           profileId,
           profileName: row.profile_name,
@@ -538,11 +564,43 @@ router.post('/repeat-print', async (req, res) => {
  * Tests connection to Atol 91F (supports Mock or Real Hardware via External Daemon / COM port).
  */
 router.all('/test-connection', async (req, res) => {
+  const startTime = Date.now();
+  const user = getUserContext(req);
+  const clientIp = getClientIp(req);
   try {
     const profileId = (req.body && req.body.profile_id) || req.query.profile_id || null;
     const result = await fiscalService.testConnection(profileId ? Number(profileId) : null);
+
+    logFiscalAudit({
+      level: result.success ? LogLevels.INFO : LogLevels.WARN,
+      message: `Проверка связи с ККТ «АТОЛ 91Ф» (${result.success ? 'Успешно' : 'Ошибка'}: ${result.message || '—'})`,
+      eventType: EventTypes.DEVICE_STATUS,
+      sourceContext: 'OrthoErp.FiscalSettings',
+      devicePort: result.port || 'COM3',
+      userId: user.userId,
+      username: user.username,
+      clientIp,
+      durationMs: Date.now() - startTime,
+      properties: {
+        profileId,
+        testResult: result
+      }
+    });
+
     res.json(result);
   } catch (err) {
+    logFiscalAudit({
+      level: LogLevels.ERROR,
+      message: `Исключение при проверке связи с ККТ «АТОЛ 91Ф»: ${err.message}`,
+      eventType: EventTypes.DEVICE_ERROR,
+      sourceContext: 'OrthoErp.FiscalSettings',
+      userId: user.userId,
+      username: user.username,
+      clientIp,
+      durationMs: Date.now() - startTime,
+      exception: err
+    });
+
     res.status(500).json({
       success: false,
       error: err.message,
@@ -556,12 +614,32 @@ router.all('/test-connection', async (req, res) => {
  * Instant switch between Mock / Emulator and Real Hardware connection across the active profile.
  */
 router.post('/mode', async (req, res) => {
+  const startTime = Date.now();
+  const user = getUserContext(req);
+  const clientIp = getClientIp(req);
   try {
     const { is_mock_mode, updated_by, profile_id } = req.body;
     if (is_mock_mode === undefined) {
       return res.status(400).json({ error: 'Параметр is_mock_mode обязателен' });
     }
-    const result = await fiscalService.setMockMode(Boolean(is_mock_mode), updated_by || 'Администратор', profile_id || null);
+    const result = await fiscalService.setMockMode(Boolean(is_mock_mode), updated_by || user.username || 'Администратор', profile_id || null);
+
+    logFiscalAudit({
+      level: LogLevels.WARN,
+      message: `Переключение режима работы ККТ: ${Boolean(is_mock_mode) ? 'ЭМУЛЯТОР (Mock)' : 'РЕАЛЬНОЕ ОБОРУДОВАНИЕ (COM/Daemon)'}`,
+      eventType: EventTypes.MODE_CHANGED,
+      sourceContext: 'OrthoErp.FiscalSettings',
+      userId: user.userId,
+      username: user.username || updated_by,
+      clientIp,
+      durationMs: Date.now() - startTime,
+      properties: {
+        isMockMode: Boolean(is_mock_mode),
+        profileId,
+        updatedBy: updated_by
+      }
+    });
+
     res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });

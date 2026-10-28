@@ -60,9 +60,8 @@ Write-Host "  -> NSSM:           $nssmExe" -ForegroundColor Gray
 
 # 3. Исправление конфигурации службы OrthopedClinicBackend
 Write-Host "`n[2/5] Проверка и исправление системной службы OrthopedClinicBackend..." -ForegroundColor Yellow
-$serviceInstalled = Test-Path "HKLM:\SYSTEM\CurrentControlSet\Services\OrthopedClinicBackend"
 
-if ($serviceInstalled -and (Test-Path $nssmExe)) {
+if ((Test-Path "HKLM:\SYSTEM\CurrentControlSet\Services\OrthopedClinicBackend") -and (Test-Path $nssmExe)) {
     Write-Host "  -> Служба обнаружена в системе. Остановка перед настройкой..." -ForegroundColor Gray
     & $nssmExe stop OrthopedClinicBackend 2>$null
 
@@ -81,7 +80,7 @@ if ($serviceInstalled -and (Test-Path $nssmExe)) {
     & $nssmExe start OrthopedClinicBackend
     Start-Sleep -Seconds 2
     Write-Host "  [OK] Параметры службы успешно обновлены и служба запущена!" -ForegroundColor Green
-} elseif (-not $serviceInstalled) {
+} else {
     Write-Host "  -> Служба OrthopedClinicBackend не найдена. Создание через NSSM..." -ForegroundColor Gray
     if (Test-Path $nssmExe) {
         & $nssmExe install OrthopedClinicBackend "$nodeExe" "index.js"

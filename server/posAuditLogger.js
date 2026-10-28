@@ -91,13 +91,18 @@ function logPosAudit({
   devicePort = 'COM4',
   durationMs = 0,
   properties = {},
-  exception = null
+  exception = null,
+  userId = null,
+  username = null,
+  clientIp = '127.0.0.1'
 }) {
   const serilogCfg = getSerilogConfig();
 
   const exceptionDetails = exception instanceof Error 
     ? `${exception.name}: ${exception.message}\n${exception.stack}` 
     : (exception ? String(exception) : null);
+
+  const cleanIp = (clientIp || '127.0.0.1').replace(/^::ffff:/, '');
 
   // Dynamic Serilog enrichments from appsettings.json
   const enrichedProps = {
@@ -110,6 +115,7 @@ function logPosAudit({
     EnvironmentUserName: (function() {
       try { return os.userInfo()?.username || process.env.USERNAME || ''; } catch (e) { return ''; }
     })(),
+    SourceContext: 'OrthoErp.AlfaPos',
     TerminalId: terminalId,
     TransactionUuid: transactionUuid,
     Amount: amount,
@@ -117,6 +123,9 @@ function logPosAudit({
     AuthCode: authCode,
     DevicePort: devicePort,
     DurationMs: durationMs,
+    UserId: userId,
+    Username: username,
+    ClientIp: cleanIp,
     ...properties,
     level,
     eventType,
@@ -157,15 +166,18 @@ function logPosAudit({
   db.run(`
     INSERT INTO serilog (
       timestamp, level, event_type, source_context, message, properties_json,
-      duration_ms, client_ip, exception
-    ) VALUES (datetime('now', 'localtime'), ?, ?, 'OrthoErp.AlfaPos', ?, ?, ?, '127.0.0.1', ?)
+      duration_ms, client_ip, exception, user_id, username
+    ) VALUES (datetime('now', 'localtime'), ?, ?, 'OrthoErp.AlfaPos', ?, ?, ?, ?, ?, ?, ?)
   `, [
     level,
     eventType,
     message,
     payloadJson,
     Math.round(durationMs || 0),
-    exceptionDetails
+    cleanIp,
+    exceptionDetails,
+    userId,
+    username
   ], () => {});
 
   // Rolling CLEF file sink

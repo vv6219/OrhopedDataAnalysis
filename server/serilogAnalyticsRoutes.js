@@ -211,6 +211,73 @@ router.get('/logs', requireAuth, async (req, res) => {
 });
 
 /**
+ * GET /api/admin/serilog/grouped-operations
+ * Aggregated analytics grouped by service (source_context) and operation (event_type)
+ */
+router.get('/grouped-operations', requireAuth, async (req, res) => {
+  try {
+    const { conditions, params, useFts, ftsSearchTerm } = buildFilterQuery(req.query);
+
+    let fromClause = 'FROM serilog s';
+    if (useFts) {
+      fromClause = 'FROM serilog s JOIN serilog_fts f ON s.id = f.rowid';
+      conditions.unshift('serilog_fts MATCH ?');
+      params.unshift(ftsSearchTerm);
+    }
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+    // 1. Grouped by service and event_type
+    const groupsSql = `
+      SELECT 
+        s.source_context,
+        s.event_type,
+        COUNT(*) as total_count,
+        SUM(CASE WHEN s.level IN ('Error', 'Fatal') THEN 1 ELSE 0 END) as error_count,
+        SUM(CASE WHEN s.level = 'Warning' THEN 1 ELSE 0 END) as warn_count,
+        SUM(CASE WHEN s.level = 'Information' THEN 1 ELSE 0 END) as info_count,
+        ROUND(AVG(CASE WHEN s.duration_ms > 0 THEN s.duration_ms ELSE NULL END), 1) as avg_duration_ms,
+        MAX(s.duration_ms) as max_duration_ms,
+        MAX(s.timestamp) as last_seen,
+        COUNT(DISTINCT s.username) as active_users_count,
+        GROUP_CONCAT(DISTINCT s.username) as users_list
+      ${fromClause}
+      ${whereClause}
+      GROUP BY s.source_context, s.event_type
+      ORDER BY total_count DESC
+    `;
+    const groups = await allAsync(groupsSql, params);
+
+    // 2. Service-level summary
+    const servicesSql = `
+      SELECT 
+        s.source_context,
+        COUNT(DISTINCT s.event_type) as operations_count,
+        COUNT(*) as total_events,
+        SUM(CASE WHEN s.level IN ('Error', 'Fatal') THEN 1 ELSE 0 END) as error_count,
+        SUM(CASE WHEN s.level = 'Warning' THEN 1 ELSE 0 END) as warn_count,
+        ROUND(AVG(CASE WHEN s.duration_ms > 0 THEN s.duration_ms ELSE NULL END), 1) as avg_duration_ms,
+        MAX(s.timestamp) as last_seen
+      ${fromClause}
+      ${whereClause}
+      GROUP BY s.source_context
+      ORDER BY total_events DESC
+    `;
+    const services = await allAsync(servicesSql, params);
+
+    res.json({
+      success: true,
+      groups,
+      services,
+      totalGroups: groups.length,
+      totalServices: services.length
+    });
+  } catch (err) {
+    console.error('[SerilogAnalytics API] Grouped operations query error:', err);
+    res.status(500).json({ success: false, error: 'Ошибка группировки операций Serilog: ' + err.message });
+  }
+});
+
+/**
  * GET /api/admin/serilog/summary
  * KPI summary metrics (total logs, error/warn breakdown, timeline, top events)
  */

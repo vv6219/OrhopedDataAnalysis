@@ -6,6 +6,7 @@ const crypto = require('crypto');
 const multer = require('multer');
 const db = require('./database');
 const { logOrthoAudit, LogLevels, EventTypes } = require('./orthoAuditLogger');
+const { getClientIp } = require('./userActionAuditLogger');
 const { resolveItemProtocol, getRuleBasedProtocol, migrateExistingReferralItems, getItemPreparation, getAggregatedPreparation } = require('./clinicalProtocolHelper');
 const medflexSyncService = require('./medflex/medflexSyncService');
 
@@ -599,9 +600,13 @@ router.post('/protocols/:id/grant-access', (req, res) => {
 
       logOrthoAudit({
         eventType: EventTypes.PROTOCOL_ACCESS_GRANTED,
+        sourceContext: 'OrthoErp.Clinical',
         level: LogLevels.INFO,
         protocolId,
         doctorId,
+        userId: user?.userId || null,
+        username: user?.username || user?.user || null,
+        clientIp: getClientIp(req),
         message: `Администратор ${user.user} предоставил доступ к протоколу #${protocolId} врачу ${targetDoctor.full_name}. Обоснование: "${grantReason}"`,
         properties: {
           ProtocolId: protocolId,
@@ -654,9 +659,13 @@ router.delete('/protocols/:id/grant-access/:doctorId', (req, res) => {
 
     logOrthoAudit({
       eventType: EventTypes.PROTOCOL_ACCESS_REVOKED,
+      sourceContext: 'OrthoErp.Clinical',
       level: LogLevels.WARN,
       protocolId,
       doctorId,
+      userId: user?.userId || null,
+      username: user?.username || user?.user || null,
+      clientIp: getClientIp(req),
       message: `Администратор ${user.user} отозвал доступ к протоколу #${protocolId} у врача ID ${doctorId}`
     });
 
@@ -724,8 +733,12 @@ router.delete('/protocols/:id', (req, res) => {
 
         logOrthoAudit({
           eventType: EventTypes.PROTOCOL_DELETED,
+          sourceContext: 'OrthoErp.Clinical',
           level: LogLevels.WARN,
           protocolId,
+          userId: user?.userId || null,
+          username: user?.username || user?.user || null,
+          clientIp: getClientIp(req),
           message: `Протокол #${protocolId} аннулирован пользователем ${user?.user || 'Администратор'}`
         });
 
@@ -781,8 +794,12 @@ router.post('/protocols/:id/log-print', (req, res) => {
 
   logOrthoAudit({
     eventType: EventTypes.PROTOCOL_PRINTED,
+    sourceContext: 'OrthoErp.Clinical',
     level: LogLevels.INFO,
     protocolId,
+    userId: user?.userId || null,
+    username: user?.username || user?.user || null,
+    clientIp: getClientIp(req),
     message: `Печать протокола #${protocolId} ${withReferrals ? 'с направлениями' : ''} пользователем ${user?.user || 'Врач'}`,
     properties: { ProtocolId: protocolId, WithReferrals: withReferrals, PrintedBy: user?.user }
   });
@@ -1398,13 +1415,23 @@ router.get(['/context', '/context/:identifier'], (req, res) => {
 
                         fetchCurrentPrescriptions((currentPrescriptions) => {
                           const durationMs = performance.now() - t0;
+                          const userCtx = getUserContext(req);
                           logOrthoAudit({
                             eventType: EventTypes.VISIT_INITIATED,
+                            sourceContext: 'OrthoErp.Workstation',
                             appointmentId: appointmentId ? Number(appointmentId) : null,
                             patientId,
                             doctorId: appointment ? appointment.doctor_id : 1,
+                            userId: userCtx?.userId || null,
+                            username: userCtx?.username || userCtx?.user || null,
+                            clientIp: getClientIp(req),
                             durationMs,
-                            message: `Открыт приём пациента ${patient.full_name} в АРМ Ортопеда`
+                            message: `Открыт приём пациента ${patient.full_name} в АРМ Ортопеда`,
+                            properties: {
+                              patientName: patient.full_name,
+                              mednum: patient.mednum,
+                              appointmentDate: appointment?.appointment_date || null
+                            }
                           });
 
                           res.json({
@@ -1772,14 +1799,29 @@ router.post('/save', (req, res) => {
       const durationMs = performance.now() - t0;
       logOrthoAudit({
         eventType: status === 'signed' ? EventTypes.PROTOCOL_SIGNED : EventTypes.EXAM_DRAFT_SAVED,
+        sourceContext: 'OrthoErp.Workstation',
         appointmentId,
         protocolId: savedProtocolId,
         patientId,
         doctorId,
+        userId: user?.userId || null,
+        username: user?.username || user?.user || null,
+        clientIp: getClientIp(req),
         durationMs,
         message: status === 'signed'
-          ? `Протокол осмотра #${savedProtocolId} успешно подписан ЭЦП (хэш: ${signatureHash ? signatureHash.slice(0, 10) : ''}...)`
-          : `Черновик протокола #${savedProtocolId} сохранён в SQLite`
+          ? `Протокол осмотра #${savedProtocolId} успешно подписан ЭЦП (хэш: ${signatureHash ? signatureHash.slice(0, 10) : ''}..., сустав: ${jointArea || 'knee'}, МКБ: ${diagnosis?.mkb_code || '—'})`
+          : `Черновик протокола #${savedProtocolId} сохранён в SQLite (сустав: ${jointArea || 'knee'}, ВАШ: ${vasScore})`,
+        properties: {
+          protocolId: savedProtocolId,
+          status,
+          jointArea: jointArea || 'knee',
+          side: side || 'right',
+          vasScore: Number(vasScore) || 0,
+          mkbCode: diagnosis?.mkb_code || null,
+          mkbName: diagnosis?.mkb_name || null,
+          prescriptionsCount: Array.isArray(prescriptions) ? prescriptions.length : 0,
+          signatureHash: signatureHash || null
+        }
       });
 
       res.json({
@@ -1861,9 +1903,17 @@ router.post('/revoke', (req, res) => {
 
       logOrthoAudit({
         eventType: EventTypes.PROTOCOL_REVOKED,
+        sourceContext: 'OrthoErp.Clinical',
         protocolId,
+        userId: user?.userId || null,
+        username: user?.username || user?.user || null,
+        clientIp: getClientIp(req),
         level: LogLevels.WARN,
-        message: `Протокол #${protocolId} аннулирован пользователем ${user?.user || 'Администратор'}. Причина: "${revocationReason}"`
+        message: `Протокол #${protocolId} аннулирован пользователем ${user?.user || 'Администратор'}. Причина: "${revocationReason}"`,
+        properties: {
+          revocationReason,
+          revokedBy: user?.user || 'Администратор'
+        }
       });
 
       res.json({
@@ -1918,10 +1968,14 @@ router.post('/return-to-draft', (req, res) => {
 
     logOrthoAudit({
       eventType: EventTypes.PROTOCOL_RETURNED_TO_DRAFT,
+      sourceContext: 'OrthoErp.Clinical',
       protocolId,
       appointmentId,
       patientId,
       doctorId,
+      userId: user?.userId || null,
+      username: user?.username || user?.user || null,
+      clientIp: getClientIp(req),
       level: LogLevels.WARN,
       message: `Системный администратор ${actingUser} вернул протокол #${protocolId} из статуса «Подписан ЭЦП» в статус «Черновик» (Причина: "${reason}")`,
       properties: {
@@ -2073,11 +2127,25 @@ router.post('/media/upload', upload.single('mediaFile'), (req, res) => {
     }
 
     const newMediaId = this.lastID;
+    const user = getUserContext(req);
     logOrthoAudit({
       eventType: EventTypes.MEDIA_UPLOADED,
+      sourceContext: 'OrthoErp.Workstation',
       patientId: Number(patientId),
       protocolId: protocolId ? Number(protocolId) : null,
-      message: `Загружен медиафайл "${req.file.originalname}" (${(req.file.size / 1024).toFixed(1)} КБ) категории ${mediaCategory}`
+      appointmentId: appointmentId ? Number(appointmentId) : null,
+      userId: user?.userId || null,
+      username: user?.username || user?.user || null,
+      clientIp: getClientIp(req),
+      message: `Загружен медиафайл "${req.file.originalname}" (${(req.file.size / 1024).toFixed(1)} КБ) категории ${mediaCategory}`,
+      properties: {
+        mediaId: newMediaId,
+        fileName: req.file.originalname,
+        fileSizeBytes: req.file.size,
+        mimeType: req.file.mimetype,
+        mediaCategory,
+        jointArea: jointArea || null
+      }
     });
 
     res.json({
@@ -2140,10 +2208,23 @@ router.delete('/media/:mediaId', (req, res) => {
         // ignore
       }
 
+      const user = getUserContext(req);
       logOrthoAudit({
         eventType: EventTypes.MEDIA_DELETED,
+        sourceContext: 'OrthoErp.Workstation',
         patientId: row.patient_id,
-        message: `Удален медиафайл #${mediaId} (${row.file_name})`
+        protocolId: row.protocol_id,
+        appointmentId: row.appointment_id,
+        userId: user?.userId || null,
+        username: user?.username || user?.user || null,
+        clientIp: getClientIp(req),
+        level: LogLevels.WARN,
+        message: `Удален медиафайл #${mediaId} (${row.file_name})`,
+        properties: {
+          mediaId: Number(mediaId),
+          fileName: row.file_name,
+          category: row.media_category
+        }
       });
 
       res.json({ success: true, message: 'Медиафайл удален' });
@@ -4494,6 +4575,31 @@ router.post('/referrals/issue', async (req, res) => {
                     })
                   ]);
 
+                  const userCtx = getUserContext(req);
+                  logOrthoAudit({
+                    level: LogLevels.INFO,
+                    eventType: EventTypes.REFERRAL_ISSUED,
+                    sourceContext: 'OrthoErp.Referrals',
+                    protocolId: protocol_id ? Number(protocol_id) : null,
+                    appointmentId: appointment_id ? Number(appointment_id) : null,
+                    patientId: Number(patient_id),
+                    userId: userCtx?.userId || null,
+                    username: userCtx?.username || userCtx?.user || doctor_name || null,
+                    clientIp: getClientIp(req),
+                    message: `Выписано клиническое направление №${refNum} для пациента #${patient_id} к исполнителю «${performer.name}» (${itemArr.length} поз., срок: ${effectiveValidDays} дн.)`,
+                    properties: {
+                      referralId,
+                      referralNumber: refNum,
+                      performerName: performer.name,
+                      isInternal: Boolean(performer.is_internal),
+                      icd10: icd10_code || 'M19.9',
+                      itemsCount: itemArr.length,
+                      validDays: effectiveValidDays,
+                      expiresAt: expires_at,
+                      doctorName: doctor_name
+                    }
+                  });
+
                   fetchReferralById(referralId, (fErr, fullReferral) => {
                     if (fErr) return reject(fErr);
                     resolve(fullReferral);
@@ -4635,6 +4741,7 @@ router.get('/referrals/:id', (req, res) => {
 router.post('/referrals/:id/audit-print', (req, res) => {
   const referralId = req.params.id;
   const { format = 'pdf', performed_by = 'Добрушкин А.М' } = req.body;
+  const user = getUserContext(req);
 
   db.run(
     'UPDATE ortho_referrals SET printed_count = printed_count + 1, updated_at = datetime("now", "localtime") WHERE id = ?',
@@ -4648,6 +4755,22 @@ router.post('/referrals/:id/audit-print', (req, res) => {
         [referralId, `PRINTED_${String(format).toUpperCase()}`, performed_by, JSON.stringify({ format, timestamp: new Date().toISOString() })],
         (logErr) => {
           if (logErr) return res.status(500).json({ success: false, error: logErr.message });
+
+          logOrthoAudit({
+            level: LogLevels.INFO,
+            eventType: EventTypes.REFERRAL_PRINTED,
+            sourceContext: 'OrthoErp.Referrals',
+            userId: user?.userId || null,
+            username: user?.username || user?.user || performed_by || null,
+            clientIp: getClientIp(req),
+            message: `Печать/экспорт (${String(format).toUpperCase()}) направления #${referralId} сотрудником ${performed_by}`,
+            properties: {
+              referralId: Number(referralId),
+              format,
+              performedBy: performed_by
+            }
+          });
+
           res.json({ success: true, message: 'Аудит печати зафиксирован' });
         }
       );
@@ -4674,6 +4797,23 @@ router.patch('/referrals/:id/status', (req, res) => {
         [referralId, performed_by, JSON.stringify({ new_status: status, reason, timestamp: new Date().toISOString() })],
         (logErr) => {
           if (logErr) return res.status(500).json({ success: false, error: logErr.message });
+
+          logOrthoAudit({
+            level: LogLevels.INFO,
+            eventType: EventTypes.REFERRAL_STATUS_CHANGED,
+            sourceContext: 'OrthoErp.Referrals',
+            userId: user?.userId || null,
+            username: user?.username || user?.user || performed_by || null,
+            clientIp: getClientIp(req),
+            message: `Статус направления #${referralId} изменен на «${status}» (Причина: "${reason || '—'}")`,
+            properties: {
+              referralId: Number(referralId),
+              newStatus: status,
+              reason,
+              performedBy: performed_by
+            }
+          });
+
           res.json({ success: true, message: `Статус направления обновлен на «${status}»` });
         }
       );
@@ -4742,6 +4882,10 @@ router.post('/patient-documents/issue', (req, res) => {
       logOrthoAudit({
         level: LogLevels.WARN,
         eventType: EventTypes.SECURITY_ACCESS_DENIED,
+        sourceContext: 'OrthoErp.Clinical',
+        userId: user?.userId || null,
+        username: user?.username || user?.user || null,
+        clientIp: getClientIp(req),
         message: `Отказ в доступе: пользователь ${user?.user || 'Аноним'} попытался оформить «Листок нетрудоспособности / Больничный лист» без прав sysadmin`,
         patientId: patient_id,
         properties: { User: user?.user, DocumentType: document_type, FormCode: form_code, Title: title }
@@ -4804,11 +4948,15 @@ router.post('/patient-documents/issue', (req, res) => {
           logOrthoAudit({
             level: LogLevels.INFO,
             eventType: EventTypes.PATIENT_DOCUMENT_ISSUED,
+            sourceContext: 'OrthoErp.Clinical',
             message: `Выдан официальный медицинский документ № ${document_number} (${title}) для пациента ${patient_name}`,
             patientId: patient_id,
             protocolId: protocol_id,
             appointmentId: appointment_id,
             doctorId: doctor_id,
+            userId: effectiveIssuedByUserId,
+            username: effectiveIssuedByName,
+            clientIp: getClientIp(req),
             properties: {
               DocumentId: issuedDocId,
               DocumentNumber: document_number,
@@ -4821,8 +4969,7 @@ router.post('/patient-documents/issue', (req, res) => {
               IssuedByName: effectiveIssuedByName,
               RecipientOrg: recipient_organization,
               VerificationHash: verification_hash
-            },
-            clientIp: req.ip || req.connection?.remoteAddress
+            }
           });
 
           res.json({
@@ -4997,11 +5144,15 @@ router.post('/patient-documents/:id/log-print', (req, res) => {
         logOrthoAudit({
           level: LogLevels.INFO,
           eventType: EventTypes.PATIENT_DOCUMENT_PRINTED,
+          sourceContext: 'OrthoErp.Clinical',
           message: `Печать документа ${doc.document_number} (${doc.title}), экз. №${newPrintedCount} для пациента ${doc.patient_name}`,
           patientId: doc.patient_id,
           protocolId: doc.protocol_id,
           appointmentId: doc.appointment_id,
           doctorId: doc.doctor_id,
+          userId: user?.userId || null,
+          username: user?.username || user?.user || 'Медицинский персонал',
+          clientIp: getClientIp(req),
           properties: {
             DocumentId: doc.id,
             DocumentNumber: doc.document_number,
@@ -5009,8 +5160,7 @@ router.post('/patient-documents/:id/log-print', (req, res) => {
             FormCode: doc.form_code,
             PrintedCount: newPrintedCount,
             PrintedByName: user?.user || 'Медицинский персонал'
-          },
-          clientIp: req.ip || req.connection?.remoteAddress
+          }
         });
 
         res.json({ success: true, printed_count: newPrintedCount });

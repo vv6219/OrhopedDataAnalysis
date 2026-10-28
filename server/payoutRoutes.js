@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const crypto = require('crypto');
 const db = require('./database');
+const { logUserAction, UserActionEvents, getClientIp, getUserContext } = require('./userActionAuditLogger');
 
 // Helper for Promisified DB queries
 const getAsync = (sql, params = []) => new Promise((resolve, reject) => {
@@ -51,6 +52,9 @@ router.get('/schemes', async (req, res) => {
 
 // POST /api/payouts/schemes - Create new payout scheme
 router.post('/schemes', async (req, res) => {
+  const startTime = Date.now();
+  const user = getUserContext(req);
+  const clientIp = getClientIp(req);
   const { scheme_name, description, default_rate_percent, revenue_basis_policy, max_brigade_pct_cap } = req.body;
   if (!scheme_name) {
     return res.status(400).json({ success: false, error: 'Название схемы обязательно' });
@@ -67,6 +71,24 @@ router.post('/schemes', async (req, res) => {
       revenue_basis_policy || 'from_actual_billed',
       max_brigade_pct_cap || 60.0
     ]);
+
+    logUserAction({
+      eventType: UserActionEvents.PAYOUT_SCHEME_CREATED,
+      sourceContext: 'OrthoErp.Payouts',
+      message: `Создана схема выплат «${scheme_name}» (Базовая ставка: ${default_rate_percent || 20}%, политика: ${revenue_basis_policy || 'from_actual_billed'})`,
+      userId: user.userId,
+      username: user.username,
+      clientIp,
+      durationMs: Date.now() - startTime,
+      properties: {
+        schemeId: result.lastID,
+        schemeName: scheme_name,
+        defaultRatePercent: default_rate_percent,
+        revenueBasisPolicy: revenue_basis_policy,
+        maxBrigadePctCap: max_brigade_pct_cap
+      }
+    });
+
     res.json({ success: true, schemeId: result.lastID });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -75,6 +97,9 @@ router.post('/schemes', async (req, res) => {
 
 // PUT /api/payouts/schemes/:id - Update scheme
 router.put('/schemes/:id', async (req, res) => {
+  const startTime = Date.now();
+  const user = getUserContext(req);
+  const clientIp = getClientIp(req);
   const { id } = req.params;
   const { scheme_name, description, default_rate_percent, revenue_basis_policy, max_brigade_pct_cap, is_active } = req.body;
   try {
@@ -89,6 +114,24 @@ router.put('/schemes/:id', async (req, res) => {
       WHERE id = ?
     `;
     await runAsync(sql, [scheme_name, description, default_rate_percent, revenue_basis_policy, max_brigade_pct_cap, is_active, id]);
+
+    logUserAction({
+      eventType: UserActionEvents.PAYOUT_SCHEME_UPDATED,
+      sourceContext: 'OrthoErp.Payouts',
+      message: `Обновлена схема выплат ID #${id} («${scheme_name || 'Схема'}», ставка: ${default_rate_percent || '—'}%)`,
+      userId: user.userId,
+      username: user.username,
+      clientIp,
+      durationMs: Date.now() - startTime,
+      properties: {
+        schemeId: id,
+        schemeName: scheme_name,
+        defaultRatePercent: default_rate_percent,
+        revenueBasisPolicy: revenue_basis_policy,
+        isActive: is_active
+      }
+    });
+
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -129,6 +172,9 @@ router.get('/staff-settings', async (req, res) => {
 
 // PUT /api/payouts/staff-settings/:staffId - Update staff payout settings
 router.put('/staff-settings/:staffId', async (req, res) => {
+  const startTime = Date.now();
+  const user = getUserContext(req);
+  const clientIp = getClientIp(req);
   const { staffId } = req.params;
   const { scheme_id, tax_rate_percent, fixed_base_salary, payout_account_info, notes } = req.body;
   try {
@@ -144,6 +190,24 @@ router.put('/staff-settings/:staffId', async (req, res) => {
         updated_at = datetime('now', 'localtime')
     `;
     await runAsync(sql, [staffId, scheme_id || null, tax_rate_percent || 0.0, fixed_base_salary || 0.0, payout_account_info || '', notes || '']);
+
+    logUserAction({
+      eventType: UserActionEvents.PAYOUT_STAFF_RATES_UPDATED,
+      sourceContext: 'OrthoErp.Payouts',
+      message: `Обновлены параметры выплат сотрудника ID #${staffId} (Схема: #${scheme_id || '—'}, налог: ${tax_rate_percent || 0}%, оклад: ${fixed_base_salary || 0} ₽)`,
+      userId: user.userId,
+      username: user.username,
+      doctorId: Number(staffId),
+      clientIp,
+      durationMs: Date.now() - startTime,
+      properties: {
+        staffId,
+        schemeId: scheme_id,
+        taxRatePercent: tax_rate_percent,
+        fixedBaseSalary: fixed_base_salary
+      }
+    });
+
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -181,6 +245,9 @@ router.get('/staff-rates/:staffId', async (req, res) => {
 
 // POST /api/payouts/staff-rates/bulk-set-min - Bulk set minimum guarantee for staff or all
 router.post('/staff-rates/bulk-set-min', async (req, res) => {
+  const startTime = Date.now();
+  const user = getUserContext(req);
+  const clientIp = getClientIp(req);
   const { staffId, min_value = 100, apply_to_all_staff = false } = req.body;
   try {
     const val = Number(min_value);
@@ -189,6 +256,23 @@ router.post('/staff-rates/bulk-set-min', async (req, res) => {
     } else if (staffId) {
       await runAsync("UPDATE staff_operation_rates SET fixed_min_payout = ? WHERE staff_id = ?", [val, staffId]);
     }
+
+    logUserAction({
+      eventType: UserActionEvents.PAYOUT_STAFF_RATES_UPDATED,
+      sourceContext: 'OrthoErp.Payouts',
+      message: `Массово установлена минимальная выплата ${val} ₽ (${apply_to_all_staff ? 'для всех сотрудников' : `для сотрудника #${staffId}`})`,
+      userId: user.userId,
+      username: user.username,
+      doctorId: staffId ? Number(staffId) : null,
+      clientIp,
+      durationMs: Date.now() - startTime,
+      properties: {
+        staffId,
+        minValue: val,
+        applyToAllStaff: apply_to_all_staff
+      }
+    });
+
     res.json({ success: true, min_value: val });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -197,6 +281,9 @@ router.post('/staff-rates/bulk-set-min', async (req, res) => {
 
 // PUT /api/payouts/staff-rates/:staffId - Batch save customized operation rates
 router.put('/staff-rates/:staffId', async (req, res) => {
+  const startTime = Date.now();
+  const user = getUserContext(req);
+  const clientIp = getClientIp(req);
   const { staffId } = req.params;
   const { rates } = req.body; // Array of { operation_id, role_in_procedure, payout_percent, fixed_min_payout, fixed_bonus, notes }
 
@@ -230,6 +317,21 @@ router.put('/staff-rates/:staffId', async (req, res) => {
         }
       });
       stmt.finalize();
+    });
+
+    logUserAction({
+      eventType: UserActionEvents.PAYOUT_STAFF_RATES_UPDATED,
+      sourceContext: 'OrthoErp.Payouts',
+      message: `Сохранены индивидуальные тарифы (${rates.length} услуг) для сотрудника ID #${staffId}`,
+      userId: user.userId,
+      username: user.username,
+      doctorId: Number(staffId),
+      clientIp,
+      durationMs: Date.now() - startTime,
+      properties: {
+        staffId,
+        ratesCount: rates.length
+      }
     });
 
     res.json({ success: true, count: rates.length });
@@ -286,13 +388,16 @@ router.get('/unbilled-services', async (req, res) => {
 
 // POST /api/payouts/lock-services - Acquire soft lock on services for wizard
 router.post('/lock-services', async (req, res) => {
+  const startTime = Date.now();
+  const user = getUserContext(req);
+  const clientIp = getClientIp(req);
   const { services, userName } = req.body; // Array of { source_type, source_id }
   if (!Array.isArray(services) || services.length === 0) {
     return res.status(400).json({ success: false, error: 'Services array is required' });
   }
 
   const lockToken = crypto.randomUUID();
-  const lockedBy = userName || 'Бухгалтер';
+  const lockedBy = userName || user.username || 'Бухгалтер';
   const expiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString().replace('T', ' ').slice(0, 19);
 
   try {
@@ -312,6 +417,22 @@ router.post('/lock-services', async (req, res) => {
       });
     });
 
+    logUserAction({
+      eventType: UserActionEvents.PAYOUT_SERVICES_LOCKED,
+      sourceContext: 'OrthoErp.Payouts',
+      message: `Заблокировано для расчета ${services.length} медицинских услуг (пользователь: ${lockedBy}, токен: ${lockToken.slice(0, 8)}...)`,
+      userId: user.userId,
+      username: user.username || lockedBy,
+      clientIp,
+      durationMs: Date.now() - startTime,
+      properties: {
+        servicesCount: services.length,
+        lockToken,
+        lockedBy,
+        expiresAt
+      }
+    });
+
     res.json({ success: true, lockToken, expiresAt });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -320,12 +441,25 @@ router.post('/lock-services', async (req, res) => {
 
 // POST /api/payouts/unlock-services - Release soft lock
 router.post('/unlock-services', async (req, res) => {
+  const user = getUserContext(req);
+  const clientIp = getClientIp(req);
   const { lockToken } = req.body;
   if (!lockToken) {
     return res.json({ success: true });
   }
   try {
     await runAsync("DELETE FROM service_calculation_locks WHERE lock_token = ?", [lockToken]);
+
+    logUserAction({
+      eventType: UserActionEvents.PAYOUT_SERVICES_UNLOCKED,
+      sourceContext: 'OrthoErp.Payouts',
+      message: `Снята блокировка услуг расчета (токен: ${lockToken.slice(0, 8)}...)`,
+      userId: user.userId,
+      username: user.username,
+      clientIp,
+      properties: { lockToken }
+    });
+
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -338,6 +472,9 @@ router.post('/unlock-services', async (req, res) => {
 
 // POST /api/payouts/preview-calculation - Interactive simulation of brigade payout
 router.post('/preview-calculation', async (req, res) => {
+  const startTime = Date.now();
+  const user = getUserContext(req);
+  const clientIp = getClientIp(req);
   const { services, brigade } = req.body;
   // services: Array of { source_type, source_id, operation_id, revenue, materials_cost, ... }
   // brigade: { primary_doctor_id, nurse_id, custom_doctor_pct, custom_nurse_pct }
@@ -467,6 +604,24 @@ router.post('/preview-calculation', async (req, res) => {
     const brigadePctCap = 60.0;
     const isExceedingCap = calculatedItems.some(i => i.brigade_total_pct > brigadePctCap);
 
+    logUserAction({
+      eventType: UserActionEvents.PAYOUT_PREVIEW_CALCULATED,
+      sourceContext: 'OrthoErp.Payouts',
+      message: `Рассчитан предварительный расчет выплат (${calculatedItems.length} услуг, ФОТ: ${Math.round(totalStaffPayouts)} ₽, выручка: ${Math.round(totalRevenue)} ₽)`,
+      userId: user.userId,
+      username: user.username,
+      doctorId: brigade?.primary_doctor_id ? Number(brigade.primary_doctor_id) : null,
+      clientIp,
+      durationMs: Date.now() - startTime,
+      properties: {
+        operationsCount: calculatedItems.length,
+        totalRevenue: Math.round(totalRevenue * 100) / 100,
+        totalStaffPayouts: Math.round(totalStaffPayouts * 100) / 100,
+        totalClinicProfit: Math.round(totalClinicProfit * 100) / 100,
+        isExceedingCap
+      }
+    });
+
     res.json({
       success: true,
       summary: {
@@ -491,6 +646,9 @@ router.post('/preview-calculation', async (req, res) => {
 
 // POST /api/payouts/commit-calculation - ACID transaction committing procedure records & accruals
 router.post('/commit-calculation', async (req, res) => {
+  const startTime = Date.now();
+  const user = getUserContext(req);
+  const clientIp = getClientIp(req);
   const { calculatedItems, lockToken, notes } = req.body;
 
   if (!Array.isArray(calculatedItems) || calculatedItems.length === 0) {
@@ -621,6 +779,23 @@ router.post('/commit-calculation', async (req, res) => {
             db.run("ROLLBACK;");
             return res.status(500).json({ success: false, error: 'Commit error: ' + commitErr.message });
           }
+
+          logUserAction({
+            eventType: UserActionEvents.PAYOUT_CALCULATION_COMMITTED,
+            sourceContext: 'OrthoErp.Payouts',
+            message: `Зафиксирован расчет выплат: проведено ${committedProceduresCount} процедур, создано ${createdAccrualIds.length} начислений`,
+            userId: user.userId,
+            username: user.username,
+            clientIp,
+            durationMs: Date.now() - startTime,
+            properties: {
+              committedProceduresCount,
+              createdAccrualsCount: createdAccrualIds.length,
+              accrualIds: createdAccrualIds,
+              notes
+            }
+          });
+
           res.json({
             success: true,
             committedProceduresCount: committedProceduresCount,
@@ -765,6 +940,9 @@ router.get('/accruals', async (req, res) => {
 
 // PUT /api/payouts/accruals/:id - Update single accrual (percentage, adjustment, notes, status)
 router.put('/accruals/:id', async (req, res) => {
+  const startTime = Date.now();
+  const user = getUserContext(req);
+  const clientIp = getClientIp(req);
   const { id } = req.params;
   const { payout_percent, manual_adjustment, status, notes } = req.body;
 
@@ -802,6 +980,27 @@ router.put('/accruals/:id', async (req, res) => {
       WHERE id = ?
     `, [current.procedure_record_id, current.procedure_record_id, current.procedure_record_id]);
 
+    logUserAction({
+      eventType: UserActionEvents.PAYOUT_ACCRUAL_UPDATED,
+      sourceContext: 'OrthoErp.Payouts',
+      message: `Отредактировано начисление #${id}: ставка ${newPct}%, ручная корректировка ${newAdj} ₽, итоговая выплата ${finalPayout} ₽ (статус: ${status || current.status})`,
+      userId: user.userId,
+      username: user.username,
+      doctorId: current.doctor_or_staff_id,
+      clientIp,
+      durationMs: Date.now() - startTime,
+      properties: {
+        accrualId: id,
+        staffId: current.doctor_or_staff_id,
+        procedureRecordId: current.procedure_record_id,
+        payoutPercent: newPct,
+        manualAdjustment: newAdj,
+        finalPayout,
+        status: status || current.status,
+        notes
+      }
+    });
+
     res.json({ success: true, updatedFinalPayout: finalPayout });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -810,6 +1009,9 @@ router.put('/accruals/:id', async (req, res) => {
 
 // DELETE /api/payouts/accruals/:id - Cancel/annul accrual (sets status to 'cancelled')
 router.delete('/accruals/:id', async (req, res) => {
+  const startTime = Date.now();
+  const user = getUserContext(req);
+  const clientIp = getClientIp(req);
   const { id } = req.params;
   const { hardDelete } = req.query;
   try {
@@ -850,6 +1052,24 @@ router.delete('/accruals/:id', async (req, res) => {
       WHERE id = ?
     `, [procId, procId, procId, procId]);
 
+    logUserAction({
+      eventType: UserActionEvents.PAYOUT_ACCRUAL_DELETED,
+      sourceContext: 'OrthoErp.Payouts',
+      message: `${hardDelete === 'true' ? 'Удалено' : 'Сторнировано'} начисление #${id} сотруднику #${current.doctor_or_staff_id} (статус: ${newStatus})`,
+      userId: user.userId,
+      username: user.username,
+      doctorId: current.doctor_or_staff_id,
+      clientIp,
+      durationMs: Date.now() - startTime,
+      properties: {
+        accrualId: id,
+        staffId: current.doctor_or_staff_id,
+        procedureRecordId: procId,
+        hardDelete: hardDelete === 'true',
+        newStatus
+      }
+    });
+
     res.json({ success: true, status: newStatus });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -858,6 +1078,9 @@ router.delete('/accruals/:id', async (req, res) => {
 
 // POST /api/payouts/accruals/bulk-annul - Mass annul accruals
 router.post('/accruals/bulk-annul', async (req, res) => {
+  const startTime = Date.now();
+  const user = getUserContext(req);
+  const clientIp = getClientIp(req);
   const { accrualIds } = req.body;
   if (!Array.isArray(accrualIds) || accrualIds.length === 0) {
     return res.status(400).json({ success: false, error: 'Accrual IDs are required' });
@@ -883,6 +1106,21 @@ router.post('/accruals/bulk-annul', async (req, res) => {
       `, [procId, procId, procId, procId]);
     }
 
+    logUserAction({
+      eventType: UserActionEvents.PAYOUT_ACCRUALS_BULK_ACTION,
+      sourceContext: 'OrthoErp.Payouts',
+      message: `Массовое сторнирование ${accrualIds.length} начислений`,
+      userId: user.userId,
+      username: user.username,
+      clientIp,
+      durationMs: Date.now() - startTime,
+      properties: {
+        action: 'bulk_annul',
+        count: accrualIds.length,
+        accrualIds
+      }
+    });
+
     res.json({ success: true, annulledCount: accrualIds.length });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -891,6 +1129,9 @@ router.post('/accruals/bulk-annul', async (req, res) => {
 
 // POST /api/payouts/accruals/bulk-approve - Mass approve accruals
 router.post('/accruals/bulk-approve', async (req, res) => {
+  const startTime = Date.now();
+  const user = getUserContext(req);
+  const clientIp = getClientIp(req);
   const { accrualIds } = req.body;
   if (!Array.isArray(accrualIds) || accrualIds.length === 0) {
     return res.status(400).json({ success: false, error: 'Accrual IDs are required' });
@@ -899,6 +1140,22 @@ router.post('/accruals/bulk-approve', async (req, res) => {
   try {
     const placeholders = accrualIds.map(() => '?').join(',');
     await runAsync(`UPDATE staff_payout_accruals SET status = 'approved' WHERE id IN (${placeholders}) AND status != 'paid'`, accrualIds);
+
+    logUserAction({
+      eventType: UserActionEvents.PAYOUT_ACCRUALS_BULK_ACTION,
+      sourceContext: 'OrthoErp.Payouts',
+      message: `Массовое утверждение ${accrualIds.length} начислений`,
+      userId: user.userId,
+      username: user.username,
+      clientIp,
+      durationMs: Date.now() - startTime,
+      properties: {
+        action: 'bulk_approve',
+        count: accrualIds.length,
+        accrualIds
+      }
+    });
+
     res.json({ success: true, approvedCount: accrualIds.length });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -907,6 +1164,9 @@ router.post('/accruals/bulk-approve', async (req, res) => {
 
 // POST /api/payouts/accruals/bulk-pay - Mass mark accruals as paid
 router.post('/accruals/bulk-pay', async (req, res) => {
+  const startTime = Date.now();
+  const user = getUserContext(req);
+  const clientIp = getClientIp(req);
   const { accrualIds } = req.body;
   if (!Array.isArray(accrualIds) || accrualIds.length === 0) {
     return res.status(400).json({ success: false, error: 'Accrual IDs are required' });
@@ -915,6 +1175,22 @@ router.post('/accruals/bulk-pay', async (req, res) => {
   try {
     const placeholders = accrualIds.map(() => '?').join(',');
     await runAsync(`UPDATE staff_payout_accruals SET status = 'paid' WHERE id IN (${placeholders}) AND status != 'storno'`, accrualIds);
+
+    logUserAction({
+      eventType: UserActionEvents.PAYOUT_ACCRUALS_BULK_ACTION,
+      sourceContext: 'OrthoErp.Payouts',
+      message: `Массовая выплата (${accrualIds.length} начислений отмечено как выплаченные)`,
+      userId: user.userId,
+      username: user.username,
+      clientIp,
+      durationMs: Date.now() - startTime,
+      properties: {
+        action: 'bulk_pay',
+        count: accrualIds.length,
+        accrualIds
+      }
+    });
+
     res.json({ success: true, paidCount: accrualIds.length });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -946,6 +1222,9 @@ router.get('/sheets', async (req, res) => {
 
 // POST /api/payouts/sheets - Create payout sheet from selected accruals (auto-groups per staff)
 router.post('/sheets', async (req, res) => {
+  const startTime = Date.now();
+  const user = getUserContext(req);
+  const clientIp = getClientIp(req);
   const { staff_id, period_start, period_end, accrual_ids, notes } = req.body;
 
   if (!period_start || !period_end || !Array.isArray(accrual_ids) || accrual_ids.length === 0) {
@@ -1008,6 +1287,22 @@ router.post('/sheets', async (req, res) => {
 
       createdSheets.push({ sheetId, sheetNumber: sheetNum, staffId: sid, count: staffAccruals.length });
     }
+
+    logUserAction({
+      eventType: UserActionEvents.PAYOUT_SHEET_CREATED,
+      sourceContext: 'OrthoErp.Payouts',
+      message: `Сформированы платежные ведомости (${createdSheets.map(s => s.sheetNumber).join(', ')}) на сумму начислений за период ${period_start} — ${period_end}`,
+      userId: user.userId,
+      username: user.username,
+      clientIp,
+      durationMs: Date.now() - startTime,
+      properties: {
+        createdSheets,
+        periodStart: period_start,
+        periodEnd: period_end,
+        totalAccrualsCount: accrual_ids.length
+      }
+    });
 
     res.json({
       success: true,
@@ -1075,6 +1370,9 @@ router.get('/sheets/:id', async (req, res) => {
 
 // PUT /api/payouts/sheets/:id/status - Update sheet status (draft -> approved -> paid)
 router.put('/sheets/:id/status', async (req, res) => {
+  const startTime = Date.now();
+  const user = getUserContext(req);
+  const clientIp = getClientIp(req);
   const { id } = req.params;
   const { status, approved_by, payment_order_number } = req.body;
 
@@ -1107,6 +1405,26 @@ router.put('/sheets/:id/status', async (req, res) => {
     // Update child accruals status to match sheet
     const accrualStatus = status === 'paid' ? 'paid' : (status === 'approved' ? 'approved' : 'in_sheet');
     await runAsync("UPDATE staff_payout_accruals SET status = ? WHERE sheet_id = ?", [accrualStatus, id]);
+
+    logUserAction({
+      eventType: UserActionEvents.PAYOUT_SHEET_STATUS_CHANGED,
+      sourceContext: 'OrthoErp.Payouts',
+      message: `Изменен статус платежной ведомости ${current.sheet_number} на «${status}» (сотрудник ID #${current.staff_id}, сумма: ${current.total_payout_amount} ₽, п/п: ${payment_order_number || '—'})`,
+      userId: user.userId,
+      username: user.username,
+      doctorId: current.staff_id,
+      clientIp,
+      durationMs: Date.now() - startTime,
+      properties: {
+        sheetId: id,
+        sheetNumber: current.sheet_number,
+        staffId: current.staff_id,
+        oldStatus: current.status,
+        newStatus: status,
+        totalPayoutAmount: current.total_payout_amount,
+        paymentOrderNumber: payment_order_number
+      }
+    });
 
     res.json({ success: true, status });
   } catch (err) {

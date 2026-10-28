@@ -40,6 +40,16 @@ const EventTypes = {
   PATIENT_DOCUMENT_ISSUED: 'patient_document_issued',
   PATIENT_DOCUMENT_PRINTED: 'patient_document_printed',
   PATIENT_DOCUMENT_REVOKED: 'patient_document_revoked',
+  REFERRAL_ISSUED: 'referral_issued',
+  REFERRAL_PRINTED: 'referral_printed',
+  REFERRAL_STATUS_CHANGED: 'referral_status_changed',
+  TEMPLATE_CREATED: 'template_created',
+  TEMPLATE_UPDATED: 'template_updated',
+  TEMPLATE_CLONED: 'template_cloned',
+  TEMPLATE_DELETED: 'template_deleted',
+  CATALOG_ITEM_CREATED: 'catalog_item_created',
+  CATALOG_ITEM_UPDATED: 'catalog_item_updated',
+  CATALOG_ITEM_ARCHIVED: 'catalog_item_archived',
   QUEUE_STATUS_CHANGED: 'queue_status_changed',
   SECURITY_ACCESS_DENIED: 'security_access_denied'
 };
@@ -166,6 +176,9 @@ function logOrthoAudit({
   protocolId = null,
   patientId = null,
   doctorId = null,
+  userId = null,
+  username = null,
+  sourceContext = 'OrthoErp.Workstation',
   durationMs = 0,
   properties = {},
   clientIp = '127.0.0.1',
@@ -179,6 +192,8 @@ function logOrthoAudit({
     ? `${exception.name}: ${exception.message}\n${exception.stack || ''}` 
     : (exception ? String(exception) : null);
 
+  const cleanIp = (clientIp || '127.0.0.1').replace(/^::ffff:/, '');
+
   // Dynamic Serilog enrichments from appsettings.json
   const enrichedProps = {
     Application: serilogCfg.Properties?.Application || 'OrthoERP.Workstation',
@@ -190,13 +205,16 @@ function logOrthoAudit({
     EnvironmentUserName: (function() {
       try { return os.userInfo()?.username || process.env.USERNAME || ''; } catch (e) { return ''; }
     })(),
+    SourceContext: sourceContext || 'OrthoErp.Workstation',
     Component: 'OrthoExam',
+    UserId: userId,
+    Username: username,
     AppointmentId: appointmentId,
     ProtocolId: protocolId,
     PatientId: patientId,
     DoctorId: doctorId,
     DurationMs: Math.round(durationMs),
-    ClientIp: clientIp,
+    ClientIp: cleanIp,
     ...properties
   };
 
@@ -217,7 +235,7 @@ function logOrthoAudit({
       Math.round(durationMs),
       message,
       propertiesJson,
-      clientIp,
+      cleanIp,
       exceptionDetails
     ],
     function(err) {
@@ -230,19 +248,22 @@ function logOrthoAudit({
   // 2. Write to unified Serilog table (with retention policy from appsettings)
   db.run(
     `INSERT INTO serilog (
-      timestamp, level, event_type, source_context, message, properties_json, protocol_id, appointment_id, patient_id, doctor_id, duration_ms, client_ip, exception
-    ) VALUES (datetime('now', 'localtime'), ?, ?, 'OrthoErp.Workstation', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      timestamp, level, event_type, source_context, message, properties_json, protocol_id, appointment_id, patient_id, doctor_id, user_id, username, duration_ms, client_ip, exception
+    ) VALUES (datetime('now', 'localtime'), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       level,
       eventType,
+      sourceContext || 'OrthoErp.Workstation',
       message,
       propertiesJson,
       protocolId,
       appointmentId,
       patientId,
       doctorId,
+      userId,
+      username,
       Math.round(durationMs),
-      clientIp,
+      cleanIp,
       exceptionDetails
     ],
     function(err) {

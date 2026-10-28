@@ -61,8 +61,24 @@ const UserActionEvents = {
   QUEUE_STATUS_CHANGED: 'queue_status_changed',
   PROTOCOL_SIGNED: 'protocol_signed',
   PROTOCOL_REVOKED: 'protocol_revoked',
+  PROTOCOL_PRINTED: 'protocol_printed',
+  PROTOCOL_DELETED: 'protocol_deleted',
+  PROTOCOL_ACCESS_GRANTED: 'protocol_access_granted',
+  PROTOCOL_ACCESS_REVOKED: 'protocol_access_revoked',
+  REFERRAL_ISSUED: 'referral_issued',
+  REFERRAL_PRINTED: 'referral_printed',
+  REFERRAL_STATUS_CHANGED: 'referral_status_changed',
   PATIENT_DOCUMENT_ISSUED: 'patient_document_issued',
   PATIENT_DOCUMENT_PRINTED: 'patient_document_printed',
+
+  // Clinical Templates & Catalogs 2.0
+  TEMPLATE_CREATED: 'template_created',
+  TEMPLATE_UPDATED: 'template_updated',
+  TEMPLATE_CLONED: 'template_cloned',
+  TEMPLATE_DELETED: 'template_deleted',
+  CATALOG_ITEM_CREATED: 'catalog_item_created',
+  CATALOG_ITEM_UPDATED: 'catalog_item_updated',
+  CATALOG_ITEM_ARCHIVED: 'catalog_item_archived',
 
   // Visit Checkout & Cashier
   VISIT_CHECKOUT_COMPLETED: 'visit_checkout_completed',
@@ -70,14 +86,71 @@ const UserActionEvents = {
   VISIT_MATERIALS_CONSUMED: 'visit_materials_consumed',
   VISIT_TRANSFERRED_TO_CHECKOUT: 'visit_transferred_to_checkout',
   VISIT_RECEIPT_REPEAT_PRINTED: 'visit_receipt_repeat_printed',
+
+  // Fiscal Shifts & Reports (АТОЛ 91Ф)
   FISCAL_SHIFT_OPENED: 'fiscal_shift_opened',
   FISCAL_SHIFT_CLOSED: 'fiscal_shift_closed',
+  FISCAL_X_REPORT_PRINTED: 'fiscal_x_report_printed',
+  FISCAL_Z_REPORT_PRINTED: 'fiscal_z_report_printed',
+  FISCAL_SHIFT_RECONCILED: 'fiscal_shift_reconciled',
+  FISCAL_SHIFT_AUDIT_EXPORT: 'fiscal_shift_audit_export',
+
+  // Fiscal Devices & Settings (АТОЛ 91Ф)
   FISCAL_RECEIPT_ISSUED: 'fiscal_receipt_issued',
   FISCAL_RECEIPT_FAILED: 'fiscal_receipt_failed',
   FISCAL_RECEIPT_REFUND: 'fiscal_receipt_refund',
+  FISCAL_SETTINGS_CREATED: 'fiscal_settings_created',
+  FISCAL_SETTINGS_UPDATED: 'fiscal_settings_updated',
+  FISCAL_SETTINGS_ACTIVATED: 'fiscal_settings_activated',
+  FISCAL_SETTINGS_DELETED: 'fiscal_settings_deleted',
+  FISCAL_MODE_CHANGED: 'fiscal_mode_changed',
+  FISCAL_TEST_CONNECTION: 'fiscal_test_connection',
+
+  // Staff Payouts & Payroll (Расчет выплат)
+  PAYOUT_SCHEME_CREATED: 'payout_scheme_created',
+  PAYOUT_SCHEME_UPDATED: 'payout_scheme_updated',
+  PAYOUT_STAFF_RATES_UPDATED: 'payout_staff_rates_updated',
+  PAYOUT_SERVICES_LOCKED: 'payout_services_locked',
+  PAYOUT_SERVICES_UNLOCKED: 'payout_services_unlocked',
+  PAYOUT_PREVIEW_CALCULATED: 'payout_preview_calculated',
+  PAYOUT_CALCULATION_COMMITTED: 'payout_calculation_committed',
+  PAYOUT_ACCRUAL_UPDATED: 'payout_accrual_updated',
+  PAYOUT_ACCRUAL_DELETED: 'payout_accrual_deleted',
+  PAYOUT_ACCRUALS_BULK_ACTION: 'payout_accruals_bulk_action',
+  PAYOUT_SHEET_CREATED: 'payout_sheet_created',
+  PAYOUT_SHEET_STATUS_CHANGED: 'payout_sheet_status_changed',
+  PAYOUT_SHEET_EXPORTED: 'payout_sheet_exported',
+
+  // Services & BOM (Каталог сервисов и технологических карт)
+  OPERATION_CREATED: 'operation_created',
+  OPERATION_UPDATED: 'operation_updated',
+  OPERATION_DELETED: 'operation_deleted',
+  OPERATION_BOM_UPDATED: 'operation_bom_updated',
+
+  // Warehouse & Inventory (Склад материалов и медикаментов)
+  INVENTORY_ITEM_CREATED: 'inventory_item_created',
+  INVENTORY_ITEM_UPDATED: 'inventory_item_updated',
+  INVENTORY_ITEM_DELETED: 'inventory_item_deleted',
+  INVENTORY_STOCK_ADJUSTED: 'inventory_stock_adjusted',
+
+  // Calculation Parameters (Параметры расчетов)
+  CALCULATION_PARAMETER_UPDATED: 'calculation_parameter_updated',
+  CALCULATION_PARAMETER_DELETED: 'calculation_parameter_deleted',
+
+  // POS Acquiring Terminal (Банковский POS-терминал эквайринга)
   POS_AUTH_SUCCESS: 'pos_auth_success',
   POS_AUTH_DECLINE: 'pos_auth_decline',
-  POS_SETTLEMENT_SUCCESS: 'pos_settlement_success'
+  POS_REVERSAL_SUCCESS: 'pos_reversal_success',
+  POS_REVERSAL_FAIL: 'pos_reversal_fail',
+  POS_SETTLEMENT_SUCCESS: 'pos_settlement_success',
+  POS_SETTLEMENT_FAIL: 'pos_settlement_fail',
+  POS_TEST_HOST: 'pos_test_host',
+  POS_SETTINGS_UPDATED: 'pos_settings_updated',
+  POS_SETTINGS_CREATED: 'pos_settings_created',
+  POS_SETTINGS_ACTIVATED: 'pos_settings_activated',
+  POS_SETTINGS_DELETED: 'pos_settings_deleted',
+  POS_MODE_CHANGED: 'pos_mode_changed',
+  POS_SERVICE_ACTION: 'pos_service_action'
 };
 
 /**
@@ -308,7 +381,8 @@ function logUserAction({
  * Express middleware helper to extract client IP
  */
 function getClientIp(req) {
-  const forwarded = req.headers['x-forwarded-for'];
+  if (!req) return '127.0.0.1';
+  const forwarded = req.headers && req.headers['x-forwarded-for'];
   if (forwarded) {
     const ips = forwarded.split(',').map(s => s.trim());
     return ips[0].replace(/^::ffff:/, '');
@@ -316,10 +390,52 @@ function getClientIp(req) {
   return (req.socket?.remoteAddress || req.connection?.remoteAddress || '127.0.0.1').replace(/^::ffff:/, '');
 }
 
+/**
+ * Extracts authenticated user context safely from request
+ */
+function getUserContext(req) {
+  if (!req) return { userId: null, username: null, user: null, role: null };
+  try {
+    const authHeader = req.headers?.authorization;
+    let token = null;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      token = authHeader.substring(7).trim();
+    } else if (req.query?.token) {
+      token = String(req.query.token).trim();
+    }
+
+    if (token) {
+      const parts = token.split('.');
+      if (parts.length === 2) {
+        const payload = JSON.parse(Buffer.from(parts[0], 'base64url').toString('utf-8'));
+        if (payload && (!payload.exp || payload.exp > Date.now())) {
+          return {
+            userId: payload.userId || null,
+            username: payload.username || payload.user || null,
+            user: payload.user || payload.username || null,
+            role: payload.role || null,
+            staffId: payload.staffId || null
+          };
+        }
+      }
+    }
+  } catch (e) {
+    // ignore
+  }
+  return {
+    userId: req.user?.id || req.userId || null,
+    username: req.user?.username || req.username || null,
+    user: req.user?.name || req.user?.user || null,
+    role: req.user?.role || null,
+    staffId: req.user?.staffId || null
+  };
+}
+
 module.exports = {
   LogLevels,
   UserActionEvents,
   logUserAction,
-  getClientIp
+  getClientIp,
+  getUserContext
 };
 
