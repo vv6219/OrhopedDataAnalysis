@@ -83,6 +83,7 @@ import MedicalServicesIcon from '@mui/icons-material/MedicalServices';
 import DescriptionIcon from '@mui/icons-material/Description';
 import AssignmentIcon from '@mui/icons-material/Assignment';
 import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
+import ManageSearchIcon from '@mui/icons-material/ManageSearch';
 
 // Карта компонентов иконок для живого предпросмотра
 const ICON_COMPONENT_MAP: Record<string, React.ComponentType<any>> = {
@@ -118,7 +119,8 @@ const ICON_COMPONENT_MAP: Record<string, React.ComponentType<any>> = {
   MedicalServices: MedicalServicesIcon,
   Description: DescriptionIcon,
   Assignment: AssignmentIcon,
-  CalendarMonth: CalendarMonthIcon
+  CalendarMonth: CalendarMonthIcon,
+  ManageSearch: ManageSearchIcon
 };
 
 const AVAILABLE_ICONS = Object.keys(ICON_COMPONENT_MAP);

@@ -8,6 +8,13 @@ echo ======================================================================
 echo  Центр Ортопедии Добрушкина — Остановка сервера
 echo ======================================================================
 
+:: Остановка системной службы Windows, если она запущена
+sc query OrthopedClinicBackend >nul 2>&1
+if %ERRORLEVEL% EQU 0 (
+    echo Остановка системной службы Windows (OrthopedClinicBackend)...
+    net stop OrthopedClinicBackend >nul 2>&1
+)
+
 echo Поиск и остановка процессов на порту 5000 (Сервер Express API)...
 powershell -NoProfile -Command "$conns = Get-NetTCPConnection -LocalPort 5000 -State Listen -ErrorAction SilentlyContinue; if ($conns) { $pids = $conns.OwningProcess | Select-Object -Unique; foreach ($p in $pids) { if ($p -gt 0) { Stop-Process -Id $p -Force -ErrorAction SilentlyContinue; Write-Host ('[УСПЕХ] Сервер успешно остановлен (PID: ' + $p + ').') } } } else { Write-Host '[ИНФОРМАЦИЯ] Работающий сервер на порту 5000 не обнаружен.' }"
 

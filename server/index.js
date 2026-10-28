@@ -7,6 +7,7 @@ const swaggerUi = require('swagger-ui-express');
 const swaggerJsdoc = require('swagger-jsdoc');
 const db = require('./database');
 const { getAppSettings, saveAppSettings, getSqliteDbPath, getFirebirdConfig, getSqliteConfig, getBackupConfig } = require('./config');
+const { logUserAction, UserActionEvents, LogLevels, getClientIp } = require('./userActionAuditLogger');
 
 const app = express();
 app.use(cors());
@@ -53,6 +54,9 @@ app.use('/api/permissions', permissionRoutes);
 
 const menuConfigRoutes = require('./menuConfigRoutes');
 app.use('/api/menu-permissions', menuConfigRoutes);
+
+const serilogAnalyticsRoutes = require('./serilogAnalyticsRoutes');
+app.use('/api/admin/serilog', serilogAnalyticsRoutes);
 
 // MedFlex Online Booking & Queue Provider Integration Routes
 const medflexWebhookRoutes = require('./medflex/medflexWebhookRoutes');
@@ -3658,6 +3662,18 @@ app.post('/api/db/query', (req, res) => {
         id: r.id !== undefined && r.id !== null ? r.id : (r._rowid !== undefined ? r._rowid : `row_${idx}`)
       }));
 
+      logUserAction({
+        level: LogLevels.INFO,
+        eventType: UserActionEvents.SQLITE_STUDIO_QUERY,
+        sourceContext: 'OrthoErp.Admin',
+        message: `[sqlite_studio_query] Выполнен запрос SELECT/PRAGMA: ${trimmedSql.slice(0, 100)}${trimmedSql.length > 100 ? '...' : ''}`,
+        userId: req.user?.userId || null,
+        username: req.user?.username || 'admin',
+        clientIp: getClientIp(req),
+        durationMs: executionTimeMs,
+        properties: { queryType: 'select', rowCount: formattedRows.length, sqlSnippet: trimmedSql.slice(0, 200) }
+      });
+
       res.json({
         type: 'select',
         rows: formattedRows,
@@ -3670,6 +3686,19 @@ app.post('/api/db/query', (req, res) => {
     db.run(trimmedSql, [], function(err) {
       const executionTimeMs = Date.now() - startTime;
       if (err) return res.status(400).json({ error: err.message, executionTimeMs });
+
+      logUserAction({
+        level: LogLevels.WARN,
+        eventType: UserActionEvents.SQLITE_STUDIO_QUERY,
+        sourceContext: 'OrthoErp.Admin',
+        message: `[sqlite_studio_query] Выполнена SQL-модификация (${this.changes} строк): ${trimmedSql.slice(0, 100)}${trimmedSql.length > 100 ? '...' : ''}`,
+        userId: req.user?.userId || null,
+        username: req.user?.username || 'admin',
+        clientIp: getClientIp(req),
+        durationMs: executionTimeMs,
+        properties: { queryType: 'mutation', changes: this.changes, lastID: this.lastID, sqlSnippet: trimmedSql.slice(0, 200) }
+      });
+
       res.json({
         type: 'mutation',
         changes: this.changes,

@@ -4,17 +4,40 @@ using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Absolute or relative path to database
-var defaultDbPath = Path.GetFullPath(Path.Combine(builder.Environment.ContentRootPath, "..", "..", "..", "db", "orthopedic_data_center.sqlite"));
-var connString = $"Data Source={defaultDbPath}";
+// Resolve SQLite database path dynamically with multi-level upward search
+var contentRoot = builder.Environment.ContentRootPath;
+var configuredDb = builder.Configuration.GetConnectionString("SqliteDb");
+string dbPath = "";
 
-// Configure Serilog with Console, Rolling File, and SQLite audit sink
+if (!string.IsNullOrWhiteSpace(configuredDb))
+{
+    var resolvedCfg = Path.IsPathRooted(configuredDb) ? configuredDb : Path.GetFullPath(Path.Combine(contentRoot, configuredDb));
+    if (File.Exists(resolvedCfg)) dbPath = resolvedCfg;
+}
+
+if (string.IsNullOrEmpty(dbPath))
+{
+    var searchDir = new DirectoryInfo(contentRoot);
+    while (searchDir != null)
+    {
+        var c1 = Path.Combine(searchDir.FullName, "DB", "orthopedic_data_center.sqlite");
+        if (File.Exists(c1)) { dbPath = c1; break; }
+        var c2 = Path.Combine(searchDir.FullName, "db", "orthopedic_data_center.sqlite");
+        if (File.Exists(c2)) { dbPath = c2; break; }
+        searchDir = searchDir.Parent;
+    }
+}
+
+if (string.IsNullOrEmpty(dbPath))
+{
+    dbPath = Path.GetFullPath(Path.Combine(contentRoot, "..", "..", "..", "DB", "orthopedic_data_center.sqlite"));
+}
+
+var connString = $"Data Source={dbPath}";
+
+// Configure Serilog completely from appsettings.json (enrichers, rollingInterval, sinks, levels)
 Log.Logger = new LoggerConfiguration()
-    .MinimumLevel.Debug()
-    .Enrich.FromLogContext()
-    .Enrich.WithProperty("Application", "OrthoErp.FiscalDaemon")
-    .WriteTo.Console(outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] [{EventType}] {Message:lj}{NewLine}{Exception}")
-    .WriteTo.File("logs/atol-fiscal-.log", rollingInterval: RollingInterval.Day)
+    .ReadFrom.Configuration(builder.Configuration)
     .WriteTo.Sink(new SqliteFiscalAuditSink(connString))
     .CreateLogger();
 
@@ -54,6 +77,6 @@ app.MapPost("/api/fiscal/receipt", async (FiscalReceiptRequest request, AtolFisc
 });
 
 Log.Information("[{EventType}] OrthoErp.FiscalDaemon запущен. База данных SQLite: {DbPath}", 
-    "service_started", defaultDbPath);
+    "service_started", dbPath);
 
 app.Run("http://localhost:5050");

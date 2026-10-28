@@ -1,5 +1,4 @@
 {
-  "$schema": "./menuPermissionsSchema.json",
   "version": "2.0.0",
   "description": "Единая централизованная конфигурация древовидного бокового меню (Sidebar), прав доступа (RBAC) и экранных элементов МИС «ОртоERP». Значение ['*'] разрешает доступ всем авторизованным пользователям. Массив прав ['sysadmin', 'doctor'] реализует мульти-доступ.",
   "rolesAndPermissions": [
@@ -451,6 +450,18 @@
           "permissions": [
             "sysadmin"
           ]
+        },
+        {
+          "id": "serilog_analytics",
+          "text": "Журнал и Аналитика Serilog",
+          "path": "/admin/serilog-analytics",
+          "icon": "ManageSearch",
+          "iconColor": "#0284C7",
+          "tooltip": "Централизованный анализ журналов Serilog всех служб бэкенда (Express, .NET Fiscal, MedFlex, POS) и аудит действий пользователей",
+          "permissions": [
+            "sysadmin",
+            "administrator"
+          ]
         }
       ]
     },
@@ -673,6 +684,19 @@
       ],
       "print_sick_leave": [
         "sysadmin"
+      ]
+    },
+    "serilog_analytics": {
+      "export_logs": [
+        "sysadmin",
+        "administrator"
+      ],
+      "purge_logs": [
+        "sysadmin"
+      ],
+      "view_payload": [
+        "sysadmin",
+        "administrator"
       ]
     }
   }

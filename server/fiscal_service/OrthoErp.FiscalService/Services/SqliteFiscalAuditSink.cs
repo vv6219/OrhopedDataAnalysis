@@ -72,6 +72,21 @@ public class SqliteFiscalAuditSink : ILogEventSink
             cmd.Parameters.AddWithValue("$ex", (object?)exceptionDetails ?? DBNull.Value);
 
             cmd.ExecuteNonQuery();
+
+            // Also insert into unified master serilog table
+            using var serilogCmd = connection.CreateCommand();
+            serilogCmd.CommandText = @"
+                INSERT INTO serilog (
+                    timestamp, level, event_type, source_context, message, properties_json,
+                    duration_ms, client_ip, exception
+                ) VALUES (datetime('now', 'localtime'), $lvl, $et, 'OrthoErp.FiscalDaemon', $msg, $props, $dur, '127.0.0.1', $ex)";
+            serilogCmd.Parameters.AddWithValue("$lvl", level);
+            serilogCmd.Parameters.AddWithValue("$et", eventType);
+            serilogCmd.Parameters.AddWithValue("$msg", message);
+            serilogCmd.Parameters.AddWithValue("$props", propertiesJson);
+            serilogCmd.Parameters.AddWithValue("$dur", durationMs);
+            serilogCmd.Parameters.AddWithValue("$ex", (object?)exceptionDetails ?? DBNull.Value);
+            serilogCmd.ExecuteNonQuery();
         }
         catch (Exception ex)
         {

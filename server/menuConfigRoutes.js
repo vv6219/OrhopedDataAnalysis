@@ -10,6 +10,7 @@ const fs = require('fs');
 const path = require('path');
 const { requireAuth } = require('./auth');
 const { validateMenuIntegrity } = require('./validators/menuIntegrityValidator');
+const { logUserAction, UserActionEvents, LogLevels, getClientIp } = require('./userActionAuditLogger');
 
 // Путь к центральному файлу конфигурации
 const CONFIG_FILE_PATH = path.resolve(__dirname, '../client/src/config/menuPermissionsConfig.json');
@@ -172,6 +173,17 @@ router.put('/config', requireSysadmin, async (req, res) => {
 
     console.log(`[MenuConfigRoutes] Конфигурация успешно обновлена пользователем ${req.user.user || req.user.username}. Создан бэкап: ${backupFileName}`);
 
+    logUserAction({
+      level: LogLevels.INFO,
+      eventType: UserActionEvents.MENU_CONFIG_UPDATED,
+      sourceContext: 'OrthoErp.Admin',
+      message: `[menu_config_updated] Конфигурация меню и прав обновлена пользователем «${req.user?.username || req.user?.user || 'admin'}»`,
+      userId: req.user?.userId || null,
+      username: req.user?.username || 'admin',
+      clientIp: getClientIp(req),
+      properties: { backupCreated: backupFileName, itemsCount: newConfig.menuGroups?.reduce((acc, g) => acc + (g.items?.length || 0), 0) }
+    });
+
     res.json({
       success: true,
       message: 'Конфигурация меню и прав успешно проверена и сохранена',
@@ -269,6 +281,17 @@ router.post('/restore-backup', requireSysadmin, async (req, res) => {
     const tmpFilePath = `${CONFIG_FILE_PATH}.tmp`;
     await fs.promises.writeFile(tmpFilePath, backupContent, 'utf-8');
     await fs.promises.rename(tmpFilePath, CONFIG_FILE_PATH);
+
+    logUserAction({
+      level: LogLevels.WARN,
+      eventType: UserActionEvents.MENU_BACKUP_RESTORED,
+      sourceContext: 'OrthoErp.Admin',
+      message: `[menu_backup_restored] Конфигурация меню восстановлена из резервной копии «${safeFilename}»`,
+      userId: req.user?.userId || null,
+      username: req.user?.username || 'admin',
+      clientIp: getClientIp(req),
+      properties: { restoredFrom: safeFilename }
+    });
 
     res.json({
       success: true,

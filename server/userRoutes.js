@@ -6,6 +6,7 @@ const {
   hashUserPassword,
   requireAuth
 } = require('./auth');
+const { logUserAction, UserActionEvents, LogLevels, getClientIp } = require('./userActionAuditLogger');
 
 /**
  * Helper to execute db.get as a Promise
@@ -275,6 +276,23 @@ router.post('/', requireAuth, async (req, res) => {
       );
     }
 
+    logUserAction({
+      level: LogLevels.INFO,
+      eventType: UserActionEvents.USER_CREATED,
+      sourceContext: 'OrthoErp.Users',
+      message: `[user_created] Создан пользователь «${cleanUsername}» (${cleanFullName}), роль: ${role}`,
+      userId: req.user?.userId || null,
+      username: req.user?.username || 'admin',
+      clientIp: getClientIp(req),
+      properties: {
+        createdUserId: newUserId,
+        createdUsername: cleanUsername,
+        role,
+        staffId: staff_id,
+        permissionsCount: finalPermIds.length
+      }
+    });
+
     res.status(201).json({
       success: true,
       message: `Пользователь «${cleanUsername}» успешно создан`,
@@ -403,6 +421,23 @@ router.put('/:id', requireAuth, async (req, res) => {
       }
     }
 
+    logUserAction({
+      level: LogLevels.INFO,
+      eventType: UserActionEvents.USER_UPDATED,
+      sourceContext: 'OrthoErp.Users',
+      message: `[user_updated] Обновлены данные пользователя «${updatedUsername}» (ID: ${userId})`,
+      userId: req.user?.userId || null,
+      username: req.user?.username || 'admin',
+      clientIp: getClientIp(req),
+      properties: {
+        targetUserId: userId,
+        targetUsername: updatedUsername,
+        role: updatedRole,
+        isActive: updatedIsActive,
+        passwordChanged: Boolean(password && password.trim().length >= 4)
+      }
+    });
+
     res.json({
       success: true,
       message: `Данные пользователя «${updatedUsername}» успешно обновлены`
@@ -447,6 +482,17 @@ router.post('/:id/toggle-status', requireAuth, async (req, res) => {
       [newStatus, userId]
     );
 
+    logUserAction({
+      level: LogLevels.INFO,
+      eventType: newStatus === 1 ? UserActionEvents.USER_UNLOCKED : UserActionEvents.USER_LOCKED,
+      sourceContext: 'OrthoErp.Users',
+      message: `[${newStatus === 1 ? 'user_unlocked' : 'user_locked'}] Статус пользователя «${user.username}» изменен на: ${newStatus === 1 ? 'Активен' : 'Заблокирован (152-ФЗ)'}`,
+      userId: req.user?.userId || null,
+      username: req.user?.username || 'admin',
+      clientIp: getClientIp(req),
+      properties: { targetUserId: userId, targetUsername: user.username, newStatus }
+    });
+
     res.json({
       success: true,
       isActive: newStatus === 1,
@@ -482,6 +528,17 @@ router.post('/:id/reset-password', requireAuth, async (req, res) => {
       `UPDATE users SET password_hash = ?, password_salt = ?, updated_at = datetime('now', 'localtime') WHERE id = ?`,
       [hash, salt, userId]
     );
+
+    logUserAction({
+      level: LogLevels.INFO,
+      eventType: UserActionEvents.USER_PASSWORD_CHANGED,
+      sourceContext: 'OrthoErp.Users',
+      message: `[user_password_changed] Сброшен пароль пользователя «${user.username}» (ID: ${userId})`,
+      userId: req.user?.userId || null,
+      username: req.user?.username || 'admin',
+      clientIp: getClientIp(req),
+      properties: { targetUserId: userId, targetUsername: user.username }
+    });
 
     res.json({
       success: true,
@@ -529,6 +586,17 @@ router.delete('/:id', requireAuth, async (req, res) => {
 
     // Delete user (user_permissions cascading delete)
     await runAsync(`DELETE FROM users WHERE id = ?`, [userId]);
+
+    logUserAction({
+      level: LogLevels.WARN,
+      eventType: UserActionEvents.USER_DELETED,
+      sourceContext: 'OrthoErp.Users',
+      message: `[user_deleted] Удален пользователь «${user.username}» (ID: ${userId}, Роль: ${user.role})`,
+      userId: req.user?.userId || null,
+      username: req.user?.username || 'admin',
+      clientIp: getClientIp(req),
+      properties: { deletedUserId: userId, deletedUsername: user.username, role: user.role }
+    });
 
     res.json({
       success: true,

@@ -42,6 +42,17 @@ if %ERRORLEVEL% EQU 0 (
 :: Отключение QuickEdit Mode консоли Windows во избежание зависания Node.js при клике мыши
 reg add "HKCU\Console" /v QuickEdit /t REG_DWORD /d 0 /f >nul 2>&1
 
+:: Проверка службы Windows OrthopedClinicBackend
+sc query OrthopedClinicBackend >nul 2>&1
+if %ERRORLEVEL% EQU 0 (
+    echo [СЛУЖБА] Обнаружена системная служба OrthopedClinicBackend.
+    sc query OrthopedClinicBackend | findstr /i "STATE" | findstr /i "RUNNING" >nul 2>&1
+    if %ERRORLEVEL% NEQ 0 (
+        echo [СЛУЖБА] Запуск службы OrthopedClinicBackend...
+        net start OrthopedClinicBackend >nul 2>&1
+    )
+)
+
 :: Проверка занятости порта 5000
 netstat -ano | findstr :5000 | findstr LISTENING >nul 2>&1
 if %ERRORLEVEL% EQU 0 (
@@ -52,13 +63,20 @@ if %ERRORLEVEL% EQU 0 (
     timeout /t 2 /nobreak >nul 2>&1 || ping -n 3 127.0.0.1 >nul
 )
 
+:: Определение целевого порта браузера (IIS 8080 или Direct 5000)
+set "APP_URL=http://localhost:5000"
+netstat -ano | findstr :8080 | findstr LISTENING >nul 2>&1
+if %ERRORLEVEL% EQU 0 (
+    set "APP_URL=http://localhost:8080"
+)
+
 :: Открытие веб-интерфейса в браузере
-echo [3/3] Открытие рабочего места в браузере...
-start http://localhost:5000
+echo [3/3] Открытие рабочего места в браузере (%APP_URL%)...
+start %APP_URL%
 
 echo ======================================================================
 echo  Система успешно запущена!
-echo  Адрес локального интерфейса: http://localhost:5000
+echo  Адрес интерфейса: %APP_URL%
 echo  Документация OpenAPI/Swagger: http://localhost:5000/api-docs
 echo ======================================================================
 timeout /t 5 >nul 2>&1 || ping -n 6 127.0.0.1 >nul

@@ -9,13 +9,13 @@ echo  Установка системных компонентов для чис
 echo ======================================================================
 
 net session >nul 2>&1
-if %ERRORLEVEL% NEQ 0 (
-    echo [ОШИБКА] Требуются права Администратора!
-    echo Щелкните правой кнопкой мыши по файлу и выберите "Запуск от имени администратора".
-    pause
-    exit /b 1
-)
+if %ERRORLEVEL% EQU 0 goto :run_prerequisites
 
+echo [ТРЕБУЮТСЯ ПРАВА АДМИНИСТРАТОРА] Запрос повышения привилегий UAC...
+powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Process cmd.exe -ArgumentList '/k `\"%~f0`\"' -Verb RunAs"
+exit /b
+
+:run_prerequisites
 :: 1. Microsoft Visual C++ 2015-2022 Redistributable
 if exist "%~dp0installers\vc_redist.x64.exe" (
     echo [1/3] Установка Microsoft Visual C++ Redistributable...
@@ -36,14 +36,19 @@ if %ERRORLEVEL% NEQ 0 (
 )
 
 :: 3. Модули Microsoft IIS (URL Rewrite и ARR)
-if exist "%~dp0installers\rewrite_amd64_ru-RU.msi" (
-    echo [3/3] Проверка и установка модулей IIS (URL Rewrite и ARR)...
-    msiexec.exe /i "%~dp0installers\rewrite_amd64_ru-RU.msi" /quiet /qn /norestart
-    if exist "%~dp0installers\requestRouter_amd64.msi" (
-        msiexec.exe /i "%~dp0installers\requestRouter_amd64.msi" /quiet /qn /norestart
-    )
-    echo  [OK] Модули IIS установлены.
+echo [3/3] Проверка и установка модулей IIS (URL Rewrite и ARR)...
+if exist "%~dp0installers\rewrite_amd64_en-US.msi" (
+    msiexec.exe /i "%~dp0installers\rewrite_amd64_en-US.msi" /quiet /qn /norestart
 )
+if not exist "%SystemRoot%\System32\inetsrv\rewrite.dll" (
+    if exist "%~dp0installers\rewrite_amd64_ru-RU.msi" (
+        msiexec.exe /i "%~dp0installers\rewrite_amd64_ru-RU.msi" /quiet /qn /norestart
+    )
+)
+if exist "%~dp0installers\requestRouter_amd64.msi" (
+    msiexec.exe /i "%~dp0installers\requestRouter_amd64.msi" /quiet /qn /norestart
+)
+echo  [OK] Модули IIS проверены.
 
 :: 4. INPAS DualConnector 2.x для эквайринга АО «Альфа-Банк»
 if exist "%~dp0install_inpas_dualconnector.bat" (

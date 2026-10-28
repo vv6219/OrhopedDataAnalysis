@@ -1,10 +1,12 @@
 /**
  * Serilog-compatible SQLite and File Audit Logger for Orthopedic Workstation operations.
- * Records structured telemetry to 'ortho_audit_logs' and rolling daily .clef files.
+ * Records structured telemetry to 'ortho_audit_logs' and rolling .clef files configured via appsettings.json.
  */
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 const db = require('./database');
+const { getSerilogConfig } = require('./config');
 
 const LogLevels = {
   DEBUG: 'Debug',
@@ -41,14 +43,45 @@ const EventTypes = {
   SECURITY_ACCESS_DENIED: 'security_access_denied'
 };
 
-// Ensure logs directory exists
-const logsDir = path.resolve(__dirname, '../logs');
-if (!fs.existsSync(logsDir)) {
-  try {
-    fs.mkdirSync(logsDir, { recursive: true });
-  } catch (e) {
-    // ignore
+/**
+ * Returns rolling interval file suffix based on appsettings.json Serilog.RollingInterval
+ * Options: 'Day', 'Hour', 'Month', 'Year', 'Infinite'
+ */
+function getRollingFileSuffix(interval) {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  const hour = String(now.getHours()).padStart(2, '0');
+
+  switch ((interval || 'Day').toLowerCase()) {
+    case 'hour':
+      return `${year}-${month}-${day}_${hour}`;
+    case 'month':
+      return `${year}-${month}`;
+    case 'year':
+      return `${year}`;
+    case 'infinite':
+      return 'rolling';
+    case 'day':
+    default:
+      return `${year}-${month}-${day}`;
   }
+}
+
+// Ensure logs directory exists from appsettings.json
+function getLogsDirectory() {
+  const cfg = getSerilogConfig();
+  const relOrAbs = cfg.LogsDirectory || '../logs';
+  const resolved = path.isAbsolute(relOrAbs) ? relOrAbs : path.resolve(__dirname, relOrAbs);
+  if (!fs.existsSync(resolved)) {
+    try {
+      fs.mkdirSync(resolved, { recursive: true });
+    } catch (e) {
+      // ignore
+    }
+  }
+  return resolved;
 }
 
 // Initialize serilog and protocol doctor access tables in SQLite
@@ -93,24 +126,26 @@ db.serialize(() => {
 });
 
 /**
- * Prune log records older than 6 months (180 days) from SQLite serilog and ortho_audit_logs tables
+ * Prune log records based on Serilog.RetentionDays in appsettings.json (default 180 days)
  */
 let lastPruneTime = 0;
 function pruneOldSerilogLogs() {
   const now = Date.now();
-  // Throttle pruning check to once per hour
   if (now - lastPruneTime < 3600 * 1000) return;
   lastPruneTime = now;
 
-  db.run(`DELETE FROM serilog WHERE timestamp < datetime('now', '-180 days', 'localtime')`, function(err) {
+  const serilogCfg = getSerilogConfig();
+  const retentionDays = Number(serilogCfg.RetentionDays || serilogCfg.Sinks?.SQLite?.RetentionDays || 180);
+
+  db.run(`DELETE FROM serilog WHERE timestamp < datetime('now', '-${retentionDays} days', 'localtime')`, function(err) {
     if (!err && this.changes > 0) {
-      console.log(`[Serilog 6-Month Retention] Purged ${this.changes} log entries older than 180 days from serilog table`);
+      console.log(`[Serilog ${retentionDays}-Day Retention] Purged ${this.changes} log entries from serilog table`);
     }
   });
 
-  db.run(`DELETE FROM ortho_audit_logs WHERE timestamp < datetime('now', '-180 days', 'localtime')`, function(err) {
+  db.run(`DELETE FROM ortho_audit_logs WHERE timestamp < datetime('now', '-${retentionDays} days', 'localtime')`, function(err) {
     if (!err && this.changes > 0) {
-      console.log(`[Serilog 6-Month Retention] Purged ${this.changes} log entries older than 180 days from ortho_audit_logs table`);
+      console.log(`[Serilog ${retentionDays}-Day Retention] Purged ${this.changes} log entries from ortho_audit_logs table`);
     }
   });
 }
@@ -137,18 +172,30 @@ function logOrthoAudit({
 }) {
   pruneOldSerilogLogs();
 
+  const serilogCfg = getSerilogConfig();
+
   const exceptionDetails = exception instanceof Error 
     ? `${exception.name}: ${exception.message}\n${exception.stack || ''}` 
     : (exception ? String(exception) : null);
 
+  // Dynamic Serilog enrichments from appsettings.json
   const enrichedProps = {
-    Application: 'OrthoErp.Workstation',
-    Component: 'OrthoExam',
+    Application: serilogCfg.Properties?.Application || 'OrthoERP.Workstation',
+    Environment: serilogCfg.Properties?.Environment || 'Production',
+    Version: serilogCfg.Properties?.Version || '2.0.1',
+    MachineName: os.hostname(),
+    ProcessId: process.pid,
     ThreadId: process.pid,
+    EnvironmentUserName: (function() {
+      try { return os.userInfo()?.username || process.env.USERNAME || ''; } catch (e) { return ''; }
+    })(),
+    Component: 'OrthoExam',
     AppointmentId: appointmentId,
     ProtocolId: protocolId,
     PatientId: patientId,
     DoctorId: doctorId,
+    DurationMs: Math.round(durationMs),
+    ClientIp: clientIp,
     ...properties
   };
 
@@ -179,7 +226,7 @@ function logOrthoAudit({
     }
   );
 
-  // 2. Write to unified Serilog table (with 6-month retention policy)
+  // 2. Write to unified Serilog table (with retention policy from appsettings)
   db.run(
     `INSERT INTO serilog (
       timestamp, level, event_type, source_context, message, properties_json, protocol_id, appointment_id, patient_id, doctor_id, duration_ms, client_ip, exception
@@ -204,45 +251,47 @@ function logOrthoAudit({
     }
   );
 
-  // 3. Write Serilog CLEF formatted line to rolling file
-  try {
-    const today = new Date().toISOString().slice(0, 10);
-    const clefFilePath = path.join(logsDir, `ortho_audit_${today}.clef`);
-    const clefRecord = {
-      "@t": new Date().toISOString(),
-      "@m": message,
-      "@l": level,
-      EventType: eventType,
-      AppointmentId: appointmentId,
-      ProtocolId: protocolId,
-      PatientId: patientId,
-      DoctorId: doctorId,
-      DurationMs: Math.round(durationMs),
-      ClientIp: clientIp,
-      ...enrichedProps
-    };
-    if (exceptionDetails) {
-      clefRecord["@x"] = exceptionDetails;
+  // 3. Write Serilog CLEF formatted line to rolling file based on appsettings.json RollingInterval
+  if (serilogCfg.Sinks?.File?.Enabled !== false) {
+    try {
+      const logsDir = getLogsDirectory();
+      const rollingInterval = serilogCfg.RollingInterval || serilogCfg.Sinks?.File?.RollingInterval || 'Day';
+      const suffix = getRollingFileSuffix(rollingInterval);
+      const clefFilePath = path.join(logsDir, `ortho_audit_${suffix}.clef`);
+
+      const clefRecord = {
+        "@t": new Date().toISOString(),
+        "@m": message,
+        "@l": level,
+        EventType: eventType,
+        ...enrichedProps
+      };
+      if (exceptionDetails) {
+        clefRecord["@x"] = exceptionDetails;
+      }
+      fs.appendFile(clefFilePath, JSON.stringify(clefRecord) + '\n', () => {});
+    } catch (fileErr) {
+      // Non-blocking file error
     }
-    fs.appendFile(clefFilePath, JSON.stringify(clefRecord) + '\n', () => {});
-  } catch (fileErr) {
-    // Non-blocking file error
   }
 
-  // 4. Colored Console Log
-  const timestamp = new Date().toLocaleTimeString('ru-RU');
-  const levelTag = level === LogLevels.ERROR || level === LogLevels.FATAL 
-    ? `\x1b[31m[${level.toUpperCase()}]\x1b[0m` 
-    : level === LogLevels.WARN 
-      ? `\x1b[33m[${level.toUpperCase()}]\x1b[0m` 
-      : `\x1b[36m[${level.toUpperCase()}]\x1b[0m`;
+  // 4. Colored Console Log if enabled in appsettings.json
+  if (serilogCfg.Sinks?.Console?.Enabled !== false) {
+    const timestamp = new Date().toLocaleTimeString('ru-RU');
+    const levelTag = level === LogLevels.ERROR || level === LogLevels.FATAL 
+      ? `\x1b[31m[${level.toUpperCase()}]\x1b[0m` 
+      : level === LogLevels.WARN 
+        ? `\x1b[33m[${level.toUpperCase()}]\x1b[0m` 
+        : `\x1b[36m[${level.toUpperCase()}]\x1b[0m`;
 
-  console.log(`[${timestamp}] ${levelTag} [ORTHO:${eventType}] ${message}`);
+    console.log(`[${timestamp}] ${levelTag} [ORTHO:${eventType}] [PID:${process.pid}] ${message}`);
+  }
 }
 
 module.exports = {
   logOrthoAudit,
   pruneOldSerilogLogs,
+  getRollingFileSuffix,
   LogLevels,
   EventTypes
 };

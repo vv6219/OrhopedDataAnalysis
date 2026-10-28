@@ -1,8 +1,12 @@
 /**
- * Serilog-compatible SQLite Audit Logger for Alfa-Bank POS Terminal (Arcus-2 / INPAS).
- * Records structured event telemetry to 'pos_audit_logs' matching the Serilog schema.
+ * Serilog-compatible SQLite and File Audit Logger for Alfa-Bank POS Terminal (Arcus-2 / INPAS).
+ * Records structured event telemetry to 'pos_audit_logs' and rolling .clef files configured via appsettings.json.
  */
+const fs = require('fs');
+const path = require('path');
+const os = require('os');
 const db = require('./database');
+const { getSerilogConfig } = require('./config');
 
 const PosLogLevels = {
   DEBUG: 'Debug',
@@ -33,20 +37,47 @@ const PosEventTypes = {
 };
 
 /**
- * Write a structured audit log entry to SQLite
+ * Returns rolling interval file suffix based on appsettings.json Serilog.RollingInterval
+ */
+function getRollingFileSuffix(interval) {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  const hour = String(now.getHours()).padStart(2, '0');
+
+  switch ((interval || 'Day').toLowerCase()) {
+    case 'hour':
+      return `${year}-${month}-${day}_${hour}`;
+    case 'month':
+      return `${year}-${month}`;
+    case 'year':
+      return `${year}`;
+    case 'infinite':
+      return 'rolling';
+    case 'day':
+    default:
+      return `${year}-${month}-${day}`;
+  }
+}
+
+function getLogsDirectory() {
+  const cfg = getSerilogConfig();
+  const relOrAbs = cfg.LogsDirectory || '../logs';
+  const resolved = path.isAbsolute(relOrAbs) ? relOrAbs : path.resolve(__dirname, relOrAbs);
+  if (!fs.existsSync(resolved)) {
+    try {
+      fs.mkdirSync(resolved, { recursive: true });
+    } catch (e) {
+      // ignore
+    }
+  }
+  return resolved;
+}
+
+/**
+ * Write a structured audit log entry to SQLite and rolling CLEF file
  * @param {Object} entry
- * @param {string} entry.level - Log level (Debug, Information, Warning, Error, Fatal)
- * @param {string} entry.message - Human-readable message
- * @param {string} entry.eventType - Event type constant
- * @param {string} [entry.terminalId='ALFA_770192'] - TID of terminal
- * @param {string} [entry.transactionUuid] - UUID of the transaction
- * @param {number} [entry.amount] - Transaction amount in rubles
- * @param {string} [entry.rrn] - Bank Retrieval Reference Number
- * @param {string} [entry.authCode] - Bank authorization code
- * @param {string} [entry.devicePort='COM4'] - Physical COM port or IP
- * @param {number} [entry.durationMs=0] - Elapsed duration in milliseconds
- * @param {Object} [entry.properties] - Additional structured context (JSON)
- * @param {string|Error} [entry.exception] - Exception message/stack trace
  */
 function logPosAudit({
   level = PosLogLevels.INFO,
@@ -62,16 +93,37 @@ function logPosAudit({
   properties = {},
   exception = null
 }) {
+  const serilogCfg = getSerilogConfig();
+
   const exceptionDetails = exception instanceof Error 
     ? `${exception.name}: ${exception.message}\n${exception.stack}` 
     : (exception ? String(exception) : null);
 
-  const payloadJson = JSON.stringify({
+  // Dynamic Serilog enrichments from appsettings.json
+  const enrichedProps = {
+    Application: serilogCfg.Properties?.Application || 'OrthoERP.AlfaPos',
+    Environment: serilogCfg.Properties?.Environment || 'Production',
+    Version: serilogCfg.Properties?.Version || '2.0.1',
+    MachineName: os.hostname(),
+    ProcessId: process.pid,
+    ThreadId: process.pid,
+    EnvironmentUserName: (function() {
+      try { return os.userInfo()?.username || process.env.USERNAME || ''; } catch (e) { return ''; }
+    })(),
+    TerminalId: terminalId,
+    TransactionUuid: transactionUuid,
+    Amount: amount,
+    Rrn: rrn,
+    AuthCode: authCode,
+    DevicePort: devicePort,
+    DurationMs: durationMs,
     ...properties,
     level,
     eventType,
     timestamp: new Date().toISOString()
-  });
+  };
+
+  const payloadJson = JSON.stringify(enrichedProps);
 
   const sql = `
     INSERT INTO pos_audit_logs (
@@ -100,6 +152,51 @@ function logPosAudit({
       console.error('[PosAuditLogger] Failed to write audit record:', err.message);
     }
   });
+
+  // Also write to unified master serilog table
+  db.run(`
+    INSERT INTO serilog (
+      timestamp, level, event_type, source_context, message, properties_json,
+      duration_ms, client_ip, exception
+    ) VALUES (datetime('now', 'localtime'), ?, ?, 'OrthoErp.AlfaPos', ?, ?, ?, '127.0.0.1', ?)
+  `, [
+    level,
+    eventType,
+    message,
+    payloadJson,
+    Math.round(durationMs || 0),
+    exceptionDetails
+  ], () => {});
+
+  // Rolling CLEF file sink
+  if (serilogCfg.Sinks?.File?.Enabled !== false) {
+    try {
+      const logsDir = getLogsDirectory();
+      const rollingInterval = serilogCfg.RollingInterval || serilogCfg.Sinks?.File?.RollingInterval || 'Day';
+      const suffix = getRollingFileSuffix(rollingInterval);
+      const clefFilePath = path.join(logsDir, `pos_audit_${suffix}.clef`);
+
+      const clefEntry = {
+        '@t': new Date().toISOString(),
+        '@m': message,
+        '@l': level,
+        EventType: eventType,
+        ...enrichedProps
+      };
+      if (exceptionDetails) {
+        clefEntry['@x'] = exceptionDetails;
+      }
+      fs.appendFile(clefFilePath, JSON.stringify(clefEntry) + '\n', () => {});
+    } catch (fsErr) {
+      // Non-blocking file error
+    }
+  }
+
+  // Console output if enabled
+  if (serilogCfg.Sinks?.Console?.Enabled !== false) {
+    const timestamp = new Date().toLocaleTimeString('ru-RU');
+    console.log(`[${timestamp}] [${level.toUpperCase()}] [POS:${eventType}] [PID:${process.pid}] ${message}`);
+  }
 }
 
 module.exports = {

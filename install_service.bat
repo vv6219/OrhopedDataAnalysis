@@ -9,15 +9,18 @@ echo  Установка бэкенда Клиники Добрушкина в �
 echo ======================================================================
 
 net session >nul 2>&1
-if %ERRORLEVEL% NEQ 0 (
-    echo [ОШИБКА] Требуются права Администратора! Запустите файл от имени Администратора.
-    pause
-    exit /b 1
-)
+if %ERRORLEVEL% EQU 0 goto :run_install
 
+echo [ТРЕБУЮТСЯ ПРАВА АДМИНИСТРАТОРА] Запрос повышения привилегий UAC...
+powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Process cmd.exe -ArgumentList '/k `\"%~f0`\"' -Verb RunAs"
+exit /b
+
+:run_install
 set SERVICE_NAME=OrthopedClinicBackend
 set "APP_DIR=%~dp0server"
 set "SCRIPT_JS=index.js"
+set "LOGS_DIR=%APP_DIR%\logs"
+if not exist "%LOGS_DIR%" mkdir "%LOGS_DIR%"
 
 :: Определение Node.js
 if exist "%~dp0tools\node\node.exe" (
@@ -38,10 +41,16 @@ if defined NSSM_EXE (
     echo Использование диспетчера служб NSSM...
     "%NSSM_EXE%" stop %SERVICE_NAME% >nul 2>&1
     "%NSSM_EXE%" remove %SERVICE_NAME% confirm >nul 2>&1
-    "%NSSM_EXE%" install %SERVICE_NAME% "%NODE_EXE%" "%APP_DIR%\%SCRIPT_JS%"
+    "%NSSM_EXE%" install %SERVICE_NAME% "%NODE_EXE%"
     "%NSSM_EXE%" set %SERVICE_NAME% AppDirectory "%APP_DIR%"
+    "%NSSM_EXE%" set %SERVICE_NAME% AppParameters "%SCRIPT_JS%"
     "%NSSM_EXE%" set %SERVICE_NAME% Description "Сервер автоматизации и REST API Центра Ортопедии Добрушкина"
     "%NSSM_EXE%" set %SERVICE_NAME% Start SERVICE_AUTO_START
+    "%NSSM_EXE%" set %SERVICE_NAME% AppStdout "%LOGS_DIR%\service_out.log"
+    "%NSSM_EXE%" set %SERVICE_NAME% AppStderr "%LOGS_DIR%\service_err.log"
+    "%NSSM_EXE%" set %SERVICE_NAME% AppRotateFiles 1
+    "%NSSM_EXE%" set %SERVICE_NAME% AppRotateOnline 1
+    "%NSSM_EXE%" set %SERVICE_NAME% AppRotateBytes 10485760
     "%NSSM_EXE%" start %SERVICE_NAME%
     echo [УСПЕХ] Служба %SERVICE_NAME% успешно зарегистрирована и запущена!
 ) else (

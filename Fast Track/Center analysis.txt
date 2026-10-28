@@ -331,7 +331,7 @@ adjust db structure with users table with all info required for autorization dat
 user name, encrypted password,active status, expiration date etc
 and link it to staff, 
 autorization with user name/password screen on enter
-create  screen for users table crud, link screen  to Администратор sidebar menu
+create  screen for users table crud, link screen  to Admin sidebar menu
 
 add to users permission type : sysadmin, administrator, doctor, nurse, accountant, default
 adjust db with table permissions
@@ -435,12 +435,21 @@ implement 2 tabs,
 переход на таб 1 на приемы 
 rename screen to "Реестр протоколов и печать документов для пациентов" 
 
-adjust plan with registration all issued for patient documents,adjust db structure, 
+adjust and improve  plan with 
+registration all issued for patient documents,adjust db structure, 
 serilog audit write info about each issued  document,
  issued user, date and time etc,
- strong inner document numeration, always  print inner number on issued document , tab 3 with statistics and kpi ,
-prepare template for all (each) document, dont miss and check doubled
+ strong inner document numeration, always  print inner number on issued document , 
+ tab 3 with statistics and kpi for  issued documents,
+prepare template for all (each) document, don't miss anything and check doubled 
  in docs\medical_forms_templates.docx, docs\medical_forms_templates-v3.docx , 
- develop GUI an UX for each document additional input, keep unified style of all documents ,  logo, issued organization etc
+ develop GUI an UX for each document additional input, keep unified style for all documents ,  logo, issued organization etc
+ 
+ 
+ -----------------------
+implement for Администратор sisdebar menu with admin permission well dessigned GUI, UX  screen 
+for analyze all Serilog log for all back end services data with advanced search, filtering , full text serach and output  
 
-
+add serilog audit write  for all operations for АРМ врача-ортопеда, 
+Реестр протоколов и печать документов для пациентов,
+ Реестр Протоколов и направлений пациентов, Справочник клинических шаблонов и протоколов 2.0

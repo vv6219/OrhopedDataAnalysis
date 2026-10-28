@@ -140,6 +140,54 @@ function getPosConfig() {
   };
 }
 
+/**
+ * Dynamically resolves Serilog configuration
+ */
+function getSerilogConfig() {
+  const settings = getAppSettings();
+  return settings?.Serilog || {
+    MinimumLevel: 'Information',
+    RollingInterval: 'Day',
+    RetentionDays: 180,
+    LogsDirectory: '../logs',
+    FileSizeLimitBytes: 10485760,
+    RetainedFileCountLimit: 31,
+    Enrich: [
+      'FromLogContext',
+      'WithMachineName',
+      'WithEnvironmentUserName',
+      'WithProcessId',
+      'WithThreadId',
+      'WithClientIp',
+      'WithApplicationVersion'
+    ],
+    Properties: {
+      Application: 'OrthoERP.ClinicServer',
+      Environment: 'Production',
+      Version: '2.0.1'
+    },
+    Sinks: {
+      Console: {
+        Enabled: true,
+        OutputTemplate: '[{Timestamp:HH:mm:ss}] [{Level}] [{EventType}] {Message}'
+      },
+      File: {
+        Enabled: true,
+        Path: '../logs/ortho_audit-.clef',
+        RollingInterval: 'Day',
+        RollOnFileSizeLimit: true,
+        FileSizeLimitBytes: 10485760,
+        RetainedFileCountLimit: 31
+      },
+      SQLite: {
+        Enabled: true,
+        TableName: 'serilog',
+        RetentionDays: 180
+      }
+    }
+  };
+}
+
 module.exports = {
   getAppSettings,
   saveAppSettings,
@@ -149,6 +197,7 @@ module.exports = {
   getBackupConfig,
   getFiscalConfig,
   getPosConfig,
+  getSerilogConfig,
   configPath
 };
 

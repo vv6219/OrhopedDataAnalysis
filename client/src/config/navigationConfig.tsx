@@ -35,6 +35,7 @@ import MedicalServicesIcon from '@mui/icons-material/MedicalServices';
 import DescriptionIcon from '@mui/icons-material/Description';
 import AssignmentIcon from '@mui/icons-material/Assignment';
 import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
+import ManageSearchIcon from '@mui/icons-material/ManageSearch';
 
 export interface NavItem {
   id?: string;
@@ -98,7 +99,8 @@ const iconMap: Record<string, React.ComponentType<any>> = {
   MedicalServices: MedicalServicesIcon,
   Description: DescriptionIcon,
   Assignment: AssignmentIcon,
-  CalendarMonth: CalendarMonthIcon
+  CalendarMonth: CalendarMonthIcon,
+  ManageSearch: ManageSearchIcon
 };
 
 function getIconElement(iconName?: string, iconColor?: string, defaultFontSize = 20): React.ReactElement {

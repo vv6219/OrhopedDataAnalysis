@@ -10,7 +10,7 @@ const SUPPORTED_ICONS = new Set([
   'AddCircle', 'DeleteForever', 'PlayCircleFilledWhite', 'MenuBook', 'QueryStats',
   'PointOfSale', 'ReceiptLong', 'Tune', 'Dns', 'Science', 'Usb', 'CreditCard',
   'MedicalServices', 'Description', 'Assignment', 'CalendarMonth', 'SettingsApplications',
-  'Security', 'Group', 'Lock', 'ViewList', 'TableChart', 'FilterList'
+  'Security', 'Group', 'Lock', 'ViewList', 'TableChart', 'FilterList', 'ManageSearch'
 ]);
 
 // Критические экраны и элементы, обязательные для стабильности МИС

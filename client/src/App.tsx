@@ -35,6 +35,7 @@ import UsersManager from './pages/UsersManager';
 import MenuPermissionsEditor from './pages/MenuPermissionsEditor';
 import ReceptionHistoryBi from './pages/ReceptionHistoryBi';
 import MedflexSyncCenter from './pages/MedflexSyncCenter';
+import SerilogAnalytics from './pages/SerilogAnalytics';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { FiscalProvider } from './context/FiscalContext';
 import { PosProvider } from './context/PosContext';
@@ -297,6 +298,8 @@ function AppContent() {
             <Route path="/users" element={<UsersManager />} />
             <Route path="/admin/menu-permissions" element={<MenuPermissionsEditor />} />
             <Route path="/menu-permissions" element={<MenuPermissionsEditor />} />
+            <Route path="/admin/serilog-analytics" element={<SerilogAnalytics />} />
+            <Route path="/serilog-analytics" element={<SerilogAnalytics />} />
             <Route path="/operations" element={<Operations />} />
             <Route path="/reports" element={<Operations />} />
             <Route path="/inventory" element={<Inventory />} />

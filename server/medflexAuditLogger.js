@@ -7,7 +7,9 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const os = require('os');
 const db = require('./database');
+const { getSerilogConfig } = require('./config');
 
 const LogLevels = {
   DEBUG: 'Debug',
@@ -116,10 +118,18 @@ function writeRawAudit({
     ? `${exception.name}: ${exception.message}\n${exception.stack || ''}`
     : (exception ? String(exception) : null);
 
+  const serilogCfg = getSerilogConfig();
+
   const enrichedProps = {
-    Application: 'OrthoErp.MedFlexSync',
-    Environment: isSimulation ? 'Sandbox' : 'Production',
+    Application: serilogCfg.Properties?.Application || 'OrthoERP.MedFlexSync',
+    Environment: isSimulation ? 'Sandbox' : (serilogCfg.Properties?.Environment || 'Production'),
+    Version: serilogCfg.Properties?.Version || '2.0.1',
+    MachineName: os.hostname(),
+    ProcessId: process.pid,
     ThreadId: process.pid,
+    EnvironmentUserName: (function() {
+      try { return os.userInfo()?.username || process.env.USERNAME || ''; } catch (e) { return ''; }
+    })(),
     EventType: eventType,
     Direction: direction,
     ClaimId: claimId,
@@ -134,22 +144,24 @@ function writeRawAudit({
     ...properties
   };
 
-  // 1. Write CLEF formatted line to rolling file: logs/medflex-sync-YYYY-MM-DD.clef
-  try {
-    const dateStr = timestamp.slice(0, 10);
-    const clefFilePath = path.join(logsDir, `medflex-sync-${dateStr}.clef`);
-    const clefEntry = {
-      '@t': timestamp,
-      '@mt': message,
-      '@l': level,
-      ...enrichedProps
-    };
-    if (exceptionDetails) {
-      clefEntry['@x'] = exceptionDetails;
+  // 1. Write CLEF formatted line to rolling file
+  if (serilogCfg.Sinks?.File?.Enabled !== false) {
+    try {
+      const dateStr = timestamp.slice(0, 10);
+      const clefFilePath = path.join(logsDir, `medflex-sync-${dateStr}.clef`);
+      const clefEntry = {
+        '@t': timestamp,
+        '@mt': message,
+        '@l': level,
+        ...enrichedProps
+      };
+      if (exceptionDetails) {
+        clefEntry['@x'] = exceptionDetails;
+      }
+      fs.appendFileSync(clefFilePath, JSON.stringify(clefEntry) + '\n', 'utf8');
+    } catch (fsErr) {
+      console.error('[medflexAuditLogger] CLEF file write error:', fsErr.message);
     }
-    fs.appendFileSync(clefFilePath, JSON.stringify(clefEntry) + '\n', 'utf8');
-  } catch (fsErr) {
-    console.error('[medflexAuditLogger] CLEF file write error:', fsErr.message);
   }
 
   // 2. Write to SQLite table 'medflex_audit_logs'
@@ -175,6 +187,23 @@ function writeRawAudit({
       }
     }
   );
+
+  // 3. Also write to unified master serilog table
+  db.run(`
+    INSERT INTO serilog (
+      timestamp, level, event_type, source_context, message, properties_json,
+      appointment_id, doctor_id, duration_ms, client_ip, exception
+    ) VALUES (datetime('now', 'localtime'), ?, ?, 'OrthoErp.MedFlexSync', ?, ?, ?, ?, ?, '127.0.0.1', ?)
+  `, [
+    level,
+    eventType,
+    message,
+    propsJson,
+    appointmentId,
+    doctorId,
+    Math.round(durationMs || 0),
+    exceptionDetails
+  ], () => {});
 }
 
 /**
