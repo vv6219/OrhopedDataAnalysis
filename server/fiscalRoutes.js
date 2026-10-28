@@ -3,6 +3,7 @@ const router = express.Router();
 const db = require('./database');
 const fiscalService = require('./fiscalService');
 const { logFiscalAudit, LogLevels, EventTypes } = require('./fiscalAuditLogger');
+const { logUserAction, UserActionEvents, LogLevels: SerilogLogLevels, getClientIp } = require('./userActionAuditLogger');
 
 /**
  * GET /api/fiscal/status
@@ -498,10 +499,35 @@ router.post('/repeat-print', async (req, res) => {
   const { receipt_id } = req.body;
   if (!receipt_id) return res.status(400).json({ error: 'Не указан receipt_id' });
 
+  const clientIp = getClientIp(req);
+  const username = req.user?.username || req.user?.user || req.headers['x-user-name'] || 'Администратор';
+  const userId = req.user?.id || null;
+
   try {
     const result = await fiscalService.repeatPrint(receipt_id);
+    logUserAction({
+      level: SerilogLogLevels.INFO,
+      eventType: UserActionEvents.VISIT_RECEIPT_REPEAT_PRINTED,
+      sourceContext: 'OrthoErp.Fiscal',
+      userId,
+      username,
+      clientIp,
+      message: `Повторная печать фискального чека #${receipt_id} из мастера оформления визита (CheckoutWizard)`,
+      properties: { receiptId: receipt_id, result }
+    });
     res.json(result);
   } catch (err) {
+    logUserAction({
+      level: SerilogLogLevels.ERROR,
+      eventType: UserActionEvents.VISIT_RECEIPT_REPEAT_PRINTED,
+      sourceContext: 'OrthoErp.Fiscal',
+      userId,
+      username,
+      clientIp,
+      message: `Ошибка повторной печати чека #${receipt_id}: ${err.message}`,
+      exception: err,
+      properties: { receiptId: receipt_id, error: err.message }
+    });
     res.status(500).json({ error: err.message });
   }
 });

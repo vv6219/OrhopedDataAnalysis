@@ -976,9 +976,25 @@ router.put('/queue/:id/status', (req, res) => {
       if (err) {
         return res.status(500).json({ success: false, error: err.message });
       }
-      if (status === 'cancelled' || status === 'no_show') {
-        db.get("SELECT * FROM appointments WHERE id = ?", [Number(id)], (errApp, app) => {
-          if (!errApp && app) {
+
+      db.get("SELECT * FROM appointments WHERE id = ?", [Number(id)], (errApp, app) => {
+        if (!errApp && app) {
+          logOrthoAudit({
+            eventType: EventTypes.QUEUE_STATUS_CHANGED,
+            appointmentId: Number(id),
+            patientId: app.patient_id,
+            doctorId: app.doctor_id,
+            level: (status === 'cancelled' || status === 'no_show') ? LogLevels.WARN : LogLevels.INFO,
+            message: `Статус в оперативной очереди врача изменен на "${status}" (запись #${id}, пациент #${app.patient_id}, врач #${app.doctor_id})`,
+            properties: {
+              appointmentId: Number(id),
+              previousStatus: app.status,
+              newStatus: status,
+              arrivalTime: effectiveArrival
+            }
+          });
+
+          if (status === 'cancelled' || status === 'no_show') {
             medflexSyncService.pushSlotStatus({
               doctorId: app.doctor_id,
               appointmentDate: app.appointment_date,
@@ -992,8 +1008,8 @@ router.put('/queue/:id/status', (req, res) => {
                 .catch((e) => console.warn('[OrthoProtocolRoutes] MedFlex cancel claim error:', e.message));
             }
           }
-        });
-      }
+        }
+      });
 
       res.json({
         success: true,

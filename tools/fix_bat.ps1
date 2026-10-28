@@ -1,4 +1,4 @@
-﻿#requires -Version 5.1
+#requires -Version 5.1
 <#
 .SYNOPSIS
     Комплексная диагностика и устранение проблем с запуском служб и IIS (HTTP 502).

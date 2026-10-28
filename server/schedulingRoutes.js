@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('./database');
 const medflexSyncService = require('./medflex/medflexSyncService');
+const { logUserAction, UserActionEvents, LogLevels, getClientIp } = require('./userActionAuditLogger');
 
 // Helper to calculate end time from start time and duration
 function calculateEndTime(startTime, durationMinutes) {
@@ -96,6 +97,25 @@ router.put('/clinic-info', (req, res) => {
         console.error('Error saving clinic parameters:', err);
         return res.status(500).json({ success: false, error: err.message });
       }
+
+      const clientIp = getClientIp(req);
+      const username = req.user?.username || req.user?.user || req.headers['x-user-name'] || 'Администратор';
+      const userId = req.user?.id || null;
+
+      logUserAction({
+        level: LogLevels.INFO,
+        eventType: UserActionEvents.CLINIC_SCHEDULE_CONFIG_UPDATED,
+        sourceContext: 'OrthoErp.Scheduling',
+        userId,
+        username,
+        clientIp,
+        message: `Пользователь ${username} обновил параметры расписания и реквизиты клиники (${updates.length} параметров)`,
+        properties: {
+          updatedFields: updates.map(u => u[0]),
+          updates: Object.fromEntries(updates)
+        }
+      });
+
       res.json({ success: true, message: 'Параметры клиники успешно сохранены' });
     });
   });
@@ -434,6 +454,30 @@ router.post('/patients/quick-create', (req, res) => {
         }
 
         const newPatientId = this.lastID;
+        const clientIp = getClientIp(req);
+        const username = req.user?.username || req.user?.user || req.headers['x-user-name'] || 'Администратор';
+        const userId = req.user?.id || null;
+
+        logUserAction({
+          level: LogLevels.INFO,
+          eventType: UserActionEvents.PATIENT_QUICK_CREATED,
+          sourceContext: 'OrthoErp.Scheduling',
+          patientId: newPatientId,
+          userId,
+          username,
+          clientIp,
+          message: `Быстрая регистрация пациента в расписании: ${full_name.trim()} (карта №${nextMednum}, тел: ${sphone || 'не указан'})`,
+          properties: {
+            patientId: newPatientId,
+            mednum: nextMednum,
+            fullName: full_name.trim(),
+            phone: sphone || '',
+            birthDate: bdate || '',
+            age: Number(age) || 0,
+            sex: sex_display || 'Мужской'
+          }
+        });
+
         res.json({
           success: true,
           patient: {
@@ -470,6 +514,10 @@ router.post('/appointments', (req, res) => {
     notification_channel = 'telegram'
   } = req.body;
 
+  const clientIp = getClientIp(req);
+  const username = req.user?.username || req.user?.user || req.headers['x-user-name'] || 'Администратор';
+  const userId = req.user?.id || null;
+
   if (!patient_id || !doctor_id || !appointment_date || !start_time) {
     return res.status(400).json({
       success: false,
@@ -493,6 +541,26 @@ router.post('/appointments', (req, res) => {
       return res.status(500).json({ success: false, error: err.message });
     }
     if (collisions && collisions.length > 0) {
+      logUserAction({
+        level: LogLevels.WARN,
+        eventType: UserActionEvents.APPOINTMENT_COLLISION_DETECTED,
+        sourceContext: 'OrthoErp.Scheduling',
+        doctorId: Number(doctor_id),
+        patientId: Number(patient_id),
+        userId,
+        username,
+        clientIp,
+        message: `Конфликт слота расписания: пациент #${patient_id} к врачу #${doctor_id} на ${appointment_date} ${start_time}-${end_time} (пересечение с записью #${collisions[0].id}: ${collisions[0].start_time}-${collisions[0].end_time})`,
+        properties: {
+          requestedDate: appointment_date,
+          requestedStart: start_time,
+          requestedEnd: end_time,
+          conflictingAppointmentId: collisions[0].id,
+          conflictingStart: collisions[0].start_time,
+          conflictingEnd: collisions[0].end_time
+        }
+      });
+
       return res.status(409).json({
         success: false,
         error: `Выбранное время пересекается с существующей записью (${collisions[0].start_time} - ${collisions[0].end_time})`
@@ -515,6 +583,19 @@ router.post('/appointments', (req, res) => {
       function (err2) {
         if (err2) {
           console.error('Error inserting appointment:', err2);
+          logUserAction({
+            level: LogLevels.ERROR,
+            eventType: UserActionEvents.APPOINTMENT_SCHEDULED,
+            sourceContext: 'OrthoErp.Scheduling',
+            doctorId: Number(doctor_id),
+            patientId: Number(patient_id),
+            userId,
+            username,
+            clientIp,
+            message: `Ошибка создания записи на приём: ${err2.message}`,
+            exception: err2,
+            properties: { error: err2.message, appointmentDate: appointment_date, startTime: start_time }
+          });
           return res.status(500).json({ success: false, error: err2.message });
         }
 
@@ -528,6 +609,34 @@ router.post('/appointments', (req, res) => {
           endTime: end_time,
           isFree: false
         }).catch((e) => console.warn('[SchedulingRoutes] MedFlex push slot error:', e.message));
+
+        logUserAction({
+          level: LogLevels.INFO,
+          eventType: UserActionEvents.APPOINTMENT_SCHEDULED,
+          sourceContext: 'OrthoErp.Scheduling',
+          appointmentId,
+          doctorId: Number(doctor_id),
+          patientId: Number(patient_id),
+          userId,
+          username,
+          clientIp,
+          message: `Создана запись на приём #${appointmentId}: пациент #${patient_id}, врач #${doctor_id}, дата ${appointment_date} в ${start_time}-${end_time} (${targetRoom}, сустав: ${joint_area || 'knee'}, срочность: ${urgency_level})`,
+          properties: {
+            appointmentId,
+            patientId: Number(patient_id),
+            doctorId: Number(doctor_id),
+            operationId: operation_id || null,
+            appointmentDate: appointment_date,
+            startTime: start_time,
+            endTime: end_time,
+            durationMinutes: duration_minutes,
+            roomNumber: targetRoom,
+            jointArea: joint_area || 'knee',
+            urgencyLevel: urgency_level,
+            notes: notes || '',
+            notificationChannel: notification_channel
+          }
+        });
 
         // Fetch patient and doctor info to build notification
         db.get(
@@ -657,6 +766,51 @@ router.put('/appointments/:id/status', (req, res) => {
         );
       }
 
+      const clientIp = getClientIp(req);
+      const username = req.user?.username || req.user?.user || req.headers['x-user-name'] || 'Администратор';
+      const userId = req.user?.id || null;
+
+      let eventType = UserActionEvents.APPOINTMENT_STATUS_CHANGED;
+      let level = LogLevels.INFO;
+      let message = `Статус записи #${id} (пациент #${app.patient_id}, врач #${app.doctor_id}) изменен с "${app.status}" на "${status}"`;
+
+      if (status === 'waiting') {
+        eventType = UserActionEvents.APPOINTMENT_PATIENT_ARRIVED;
+        message = `Пациент #${app.patient_id} прибыл в клинику по записи #${id} (явка зафиксирована в холле)`;
+      } else if (status === 'cancelled') {
+        eventType = UserActionEvents.APPOINTMENT_CANCELLED;
+        level = LogLevels.WARN;
+        message = `Отменена запись на приём #${id} (пациент #${app.patient_id}, врач #${app.doctor_id}, дата ${app.appointment_date} ${app.start_time}). Причина: "${cancellation_reason || 'Отменено пациентом'}"`;
+      } else if (status === 'no_show') {
+        eventType = UserActionEvents.APPOINTMENT_NO_SHOW;
+        level = LogLevels.WARN;
+        message = `Зафиксирована неявка пациента #${app.patient_id} по записи #${id} на дату ${app.appointment_date} ${app.start_time}`;
+      } else if (status === 'completed') {
+        message = `Приём по записи #${id} успешно завершён (пациент #${app.patient_id}, врач #${app.doctor_id})`;
+      }
+
+      logUserAction({
+        level,
+        eventType,
+        sourceContext: 'OrthoErp.Scheduling',
+        appointmentId: Number(id),
+        patientId: app.patient_id,
+        doctorId: app.doctor_id,
+        userId,
+        username,
+        clientIp,
+        message,
+        properties: {
+          appointmentId: Number(id),
+          previousStatus: app.status,
+          newStatus: status,
+          appointmentDate: app.appointment_date,
+          startTime: app.start_time,
+          endTime: app.end_time,
+          cancellationReason: status === 'cancelled' ? (cancellation_reason || 'Отменено пациентом') : null
+        }
+      });
+
       res.json({
         success: true,
         message: `Статус записи #${id} обновлён на "${status}"`
@@ -735,6 +889,28 @@ router.post('/notifications/:id/simulate-action', (req, res) => {
     }
 
     const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
+    const clientIp = getClientIp(req);
+    const username = req.user?.username || req.user?.user || req.headers['x-user-name'] || 'Пациент';
+    const userId = req.user?.id || null;
+
+    logUserAction({
+      level: LogLevels.INFO,
+      eventType: UserActionEvents.APPOINTMENT_NOTIFICATION_ACTION,
+      sourceContext: 'OrthoErp.Scheduling',
+      appointmentId: notif.appointment_id,
+      userId,
+      username,
+      clientIp,
+      message: `Интерактивное действие пациента по уведомлению #${id}: ${action.toUpperCase()} (Канал: ${notif.channel}, получатель: ${notif.recipient_name})`,
+      properties: {
+        notificationId: Number(id),
+        appointmentId: notif.appointment_id,
+        action,
+        channel: notif.channel,
+        recipientName: notif.recipient_name,
+        recipientContact: notif.recipient_contact
+      }
+    });
 
     if (action === 'confirm') {
       db.run(

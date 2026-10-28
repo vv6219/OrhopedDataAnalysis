@@ -1,4 +1,4 @@
-﻿#requires -Version 5.1
+#requires -Version 5.1
 <#
 .SYNOPSIS
     Создание и публикация веб-сайта клиники в Microsoft IIS в режиме Reverse Proxy (HTTP и HTTPS).

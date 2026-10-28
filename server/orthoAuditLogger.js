@@ -40,6 +40,7 @@ const EventTypes = {
   PATIENT_DOCUMENT_ISSUED: 'patient_document_issued',
   PATIENT_DOCUMENT_PRINTED: 'patient_document_printed',
   PATIENT_DOCUMENT_REVOKED: 'patient_document_revoked',
+  QUEUE_STATUS_CHANGED: 'queue_status_changed',
   SECURITY_ACCESS_DENIED: 'security_access_denied'
 };
 

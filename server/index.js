@@ -2058,7 +2058,31 @@ app.post('/api/transactions', (req, res) => {
   `);
 
   stmt.run(patient_id, primaryOperationId, transaction_date, billed_price || 0, calculated_cost || 0, net_profit || 0, notes || '', function(err) {
-    if (err) return res.status(500).json({ error: err.message });
+    const clientIp = getClientIp(req);
+    const username = req.user?.username || req.user?.user || req.headers['x-user-name'] || 'Администратор';
+    const userId = req.user?.id || null;
+
+    if (err) {
+      logUserAction({
+        level: LogLevels.ERROR,
+        eventType: UserActionEvents.VISIT_CHECKOUT_FAILED,
+        sourceContext: 'OrthoErp.Checkout',
+        patientId: patient_id ? Number(patient_id) : null,
+        doctorId: doctor_id ? Number(doctor_id) : null,
+        userId,
+        username,
+        clientIp,
+        message: `Ошибка оформления визита пациента #${patient_id}: ${err.message}`,
+        exception: err,
+        properties: {
+          patientId: patient_id,
+          doctorId: doctor_id,
+          billedPrice: billed_price,
+          error: err.message
+        }
+      });
+      return res.status(500).json({ error: err.message });
+    }
     const transactionId = this.lastID;
 
     // 1. Insert multiple operations into operation_transaction_items
@@ -2109,6 +2133,28 @@ app.post('/api/transactions', (req, res) => {
         }
       });
       matStmt.finalize();
+
+      logUserAction({
+        level: LogLevels.INFO,
+        eventType: UserActionEvents.VISIT_MATERIALS_CONSUMED,
+        sourceContext: 'OrthoErp.Checkout',
+        patientId: patient_id ? Number(patient_id) : null,
+        doctorId: doctor_id ? Number(doctor_id) : null,
+        userId,
+        username,
+        clientIp,
+        message: `Списаны расходные материалы по визиту #${transactionId} (${materials.length} поз.) для пациента #${patient_id}`,
+        properties: {
+          transactionId,
+          patientId: patient_id,
+          materialsCount: materials.length,
+          materials: materials.map(m => ({
+            materialId: m.material_id,
+            quantityUsed: m.quantity_used,
+            actualCost: m.actual_cost_at_time
+          }))
+        }
+      });
     }
 
     // Link POS transaction if acquiring authorization was performed
@@ -2127,6 +2173,41 @@ app.post('/api/transactions', (req, res) => {
       slipText: req.body.pos_slip_text || null
     } : null;
 
+    // Log complete visit checkout event to Serilog
+    logUserAction({
+      level: LogLevels.INFO,
+      eventType: UserActionEvents.VISIT_CHECKOUT_COMPLETED,
+      sourceContext: 'OrthoErp.Checkout',
+      patientId: patient_id ? Number(patient_id) : null,
+      doctorId: doctor_id ? Number(doctor_id) : null,
+      userId,
+      username,
+      clientIp,
+      message: `Оформлен визит пациента #${patient_id || 'N/A'} (Транзакция #${transactionId}): выручка ${billed_price || 0} ₽, себестоимость ${calculated_cost || 0} ₽, прибыль ${net_profit || 0} ₽, оплата: ${payment_type || 'card'}${req.body.pos_rrn ? ` (POS RRN: ${req.body.pos_rrn})` : ''}`,
+      properties: {
+        transactionId,
+        patientId: patient_id,
+        doctorId: doctor_id,
+        nurseId: nurse_id || null,
+        billedPrice: Number(billed_price) || 0,
+        calculatedCost: Number(calculated_cost) || 0,
+        netProfit: Number(net_profit) || 0,
+        paymentType: payment_type || 'card',
+        notes: notes || '',
+        operationsCount: opsList.length,
+        operations: opsList.map(o => ({
+          id: o.operation_id || o.id,
+          quantity: o.quantity || 1,
+          price: o.unit_price || o.price || 0,
+          subtotal: o.subtotal || 0,
+          title: o.notes || o.name || ''
+        })),
+        materialsCount: Array.isArray(materials) ? materials.length : 0,
+        fiscalize: Boolean(fiscalize),
+        posRrn: req.body.pos_rrn || null
+      }
+    });
+
     if (fiscalize) {
       try {
         const fiscalService = require('./fiscalService');
@@ -2143,6 +2224,24 @@ app.post('/api/transactions', (req, res) => {
           paymentType: payment_type || 'card',
           totalAmount: billed_price || 0
         }).then(fiscalRes => {
+          logUserAction({
+            level: LogLevels.INFO,
+            eventType: UserActionEvents.FISCAL_RECEIPT_ISSUED,
+            sourceContext: 'OrthoErp.Fiscal',
+            patientId: patient_id ? Number(patient_id) : null,
+            userId,
+            username,
+            clientIp,
+            message: `Фискализирован чек по визиту #${transactionId} на сумму ${billed_price || 0} ₽ (ФД: ${fiscalRes?.fiscalDocNumber || fiscalRes?.docNum || 'N/A'}, ФП: ${fiscalRes?.fiscalSign || 'N/A'})`,
+            properties: {
+              transactionId,
+              patientId: patient_id,
+              totalAmount: billed_price || 0,
+              paymentType: payment_type || 'card',
+              fiscalReceipt: fiscalRes
+            }
+          });
+
           return res.json({
             success: true,
             transactionId,
@@ -2152,6 +2251,24 @@ app.post('/api/transactions', (req, res) => {
           });
         }).catch(fErr => {
           console.error('[Transaction] Fiscalization error:', fErr.message);
+          logUserAction({
+            level: LogLevels.ERROR,
+            eventType: UserActionEvents.FISCAL_RECEIPT_FAILED,
+            sourceContext: 'OrthoErp.Fiscal',
+            patientId: patient_id ? Number(patient_id) : null,
+            userId,
+            username,
+            clientIp,
+            message: `Ошибка фискализации чека по визиту #${transactionId}: ${fErr.message}`,
+            exception: fErr,
+            properties: {
+              transactionId,
+              patientId: patient_id,
+              totalAmount: billed_price || 0,
+              error: fErr.message
+            }
+          });
+
           return res.json({
             success: true,
             transactionId,

@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('./database');
+const { logUserAction, UserActionEvents, LogLevels, getClientIp } = require('./userActionAuditLogger');
 
 // Helper mapping for joint areas
 const JOINT_LABELS = {
@@ -500,6 +501,25 @@ router.post('/seed-mock', (req, res) => {
         console.error('Error inserting mock appointments:', err);
         return res.status(500).json({ success: false, error: err.message });
       }
+
+      const clientIp = getClientIp(req);
+      const username = req.user?.username || req.user?.user || req.headers['x-user-name'] || 'Администратор';
+      const userId = req.user?.id || null;
+
+      logUserAction({
+        level: LogLevels.INFO,
+        eventType: UserActionEvents.APPOINTMENT_SCHEDULED,
+        sourceContext: 'OrthoErp.Scheduling',
+        userId,
+        username,
+        clientIp,
+        message: `Генерация тестового массива записей расписания (${seedAppointments.length} записей) для аналитики`,
+        properties: {
+          insertedCount: seedAppointments.length,
+          batchType: 'mock_seed'
+        }
+      });
+
       res.json({
         success: true,
         message: `Успешно сгенерировано и добавлено ${seedAppointments.length} тестовых приёмов для [TEST_DAEMON]`,
@@ -520,6 +540,24 @@ const cleanMockHandler = (req, res) => {
       return res.status(500).json({ success: false, error: err.message });
     }
     const deletedCount = this.changes || 0;
+    const clientIp = getClientIp(req);
+    const username = req.user?.username || req.user?.user || req.headers['x-user-name'] || 'Администратор';
+    const userId = req.user?.id || null;
+
+    logUserAction({
+      level: LogLevels.INFO,
+      eventType: UserActionEvents.APPOINTMENT_CANCELLED,
+      sourceContext: 'OrthoErp.Scheduling',
+      userId,
+      username,
+      clientIp,
+      message: `Очистка тестовых записей расписания (${deletedCount} записей удалено)`,
+      properties: {
+        deletedCount,
+        batchType: 'mock_clean'
+      }
+    });
+
     res.json({
       success: true,
       message: `Успешно удалено ${deletedCount} смоделированных тестовых записей [TEST_DAEMON]`,
