@@ -456,13 +456,23 @@ export default function SerilogAnalytics() {
     }
   }, [datePreset]);
 
+  // Helper to get authenticated headers
+  const getAuthHeaders = useCallback((): Record<string, string> => {
+    const token = localStorage.getItem('ortho_auth_token') || localStorage.getItem('token') || '';
+    const headers: Record<string, string> = {
+      'Accept': 'application/json'
+    };
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+      headers['x-auth-token'] = token;
+    }
+    return headers;
+  }, []);
+
   // Load sources and event types metadata on mount
   useEffect(() => {
     fetch(`${API_BASE_URL}/api/admin/serilog/sources-and-events`, {
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
-        'x-auth-token': localStorage.getItem('token') || ''
-      }
+      headers: getAuthHeaders()
     })
       .then(res => res.json())
       .then(data => {
@@ -472,7 +482,7 @@ export default function SerilogAnalytics() {
         }
       })
       .catch(err => console.error('Error fetching sources/events:', err));
-  }, []);
+  }, [getAuthHeaders]);
 
   // Fetch flat logs and summary
   const fetchLogs = useCallback(async () => {
@@ -489,11 +499,7 @@ export default function SerilogAnalytics() {
       if (selectedEventType !== 'ALL') params.set('eventTypes', selectedEventType);
       if (searchTerm.trim()) params.set('search', searchTerm.trim());
 
-      const token = localStorage.getItem('token') || '';
-      const headers = {
-        'Authorization': `Bearer ${token}`,
-        'x-auth-token': token
-      };
+      const headers = getAuthHeaders();
 
       // 1. Fetch Logs
       const logsPromise = fetch(`${API_BASE_URL}/api/admin/serilog/logs?${params.toString()}`, { headers })
@@ -508,6 +514,16 @@ export default function SerilogAnalytics() {
       if (logsData.success) {
         setLogs(logsData.items || []);
         setTotalRows(logsData.total || 0);
+      } else {
+        setLogs([]);
+        setTotalRows(0);
+        if (logsData.error) {
+          setToast({
+            open: true,
+            message: 'Ошибка при загрузке данных: ' + logsData.error,
+            severity: 'error'
+          });
+        }
       }
 
       if (summaryData.success) {
@@ -525,7 +541,7 @@ export default function SerilogAnalytics() {
     } finally {
       setLoading(false);
     }
-  }, [paginationModel, startDate, endDate, selectedSource, selectedLevels, selectedEventType, searchTerm]);
+  }, [paginationModel, startDate, endDate, selectedSource, selectedLevels, selectedEventType, searchTerm, getAuthHeaders]);
 
   // Fetch grouped operations
   const fetchGroupedOperations = useCallback(async () => {
@@ -539,12 +555,8 @@ export default function SerilogAnalytics() {
       if (selectedEventType !== 'ALL') params.set('eventTypes', selectedEventType);
       if (searchTerm.trim()) params.set('search', searchTerm.trim());
 
-      const token = localStorage.getItem('token') || '';
       const res = await fetch(`${API_BASE_URL}/api/admin/serilog/grouped-operations?${params.toString()}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'x-auth-token': token
-        }
+        headers: getAuthHeaders()
       });
       const data = await res.json();
       if (data.success) {
@@ -556,7 +568,7 @@ export default function SerilogAnalytics() {
     } finally {
       setGroupedLoading(false);
     }
-  }, [startDate, endDate, selectedSource, selectedLevels, selectedEventType, searchTerm]);
+  }, [startDate, endDate, selectedSource, selectedLevels, selectedEventType, searchTerm, getAuthHeaders]);
 
   useEffect(() => {
     fetchLogs();
@@ -617,8 +629,10 @@ export default function SerilogAnalytics() {
     if (searchTerm.trim()) params.set('search', searchTerm.trim());
     params.set('format', 'csv');
 
-    const token = localStorage.getItem('token') || '';
-    params.set('auth_token', token);
+    const token = localStorage.getItem('ortho_auth_token') || localStorage.getItem('token') || '';
+    if (token) {
+      params.set('auth_token', token);
+    }
 
     window.open(`${API_BASE_URL}/api/admin/serilog/export?${params.toString()}`, '_blank');
   };
@@ -627,12 +641,11 @@ export default function SerilogAnalytics() {
   const handleExecutePurge = async () => {
     setPurgeLoading(true);
     try {
-      const token = localStorage.getItem('token') || '';
       const res = await fetch(`${API_BASE_URL}/api/admin/serilog/purge?days=${purgeDays}`, {
         method: 'DELETE',
         headers: {
-          'Authorization': `Bearer ${token}`,
-          'x-auth-token': token
+          ...getAuthHeaders(),
+          'Content-Type': 'application/json'
         }
       });
       const data = await res.json();

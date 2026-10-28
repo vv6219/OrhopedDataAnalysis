@@ -137,13 +137,16 @@ function verifyToken(token) {
 function extractTokenFromReq(req) {
   const authHeader = req.headers['authorization'];
   if (authHeader && authHeader.startsWith('Bearer ')) {
-    return authHeader.substring(7).trim();
+    const val = authHeader.substring(7).trim();
+    if (val) return val;
   }
   if (req.headers['x-auth-token']) {
-    return req.headers['x-auth-token'];
+    const val = String(req.headers['x-auth-token']).trim();
+    if (val) return val;
   }
   if (req.query && req.query.auth_token) {
-    return req.query.auth_token;
+    const val = String(req.query.auth_token).trim();
+    if (val) return val;
   }
   return null;
 }
